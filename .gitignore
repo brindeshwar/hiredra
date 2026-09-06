@@ -15,6 +15,9 @@ dist/
 # Cloned source repos (harvested from, never committed)
 reference/
 
+# Graphify codebase-graph output (local navigation aid, not a deliverable)
+graphify-out/
+
 # Runtime & personal data — master profile, built graph, ledger.
 # Holds personal/application data and large files. Never commit contents;
 # keep the folder itself tracked via the .gitkeep exception below.
