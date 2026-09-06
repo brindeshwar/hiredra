@@ -1,0 +1,27 @@
+# Secrets
+.env
+
+# Virtual environment
+.venv/
+
+# Python caches / build
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+build/
+dist/
+
+# Cloned source repos (harvested from, never committed)
+reference/
+
+# Runtime & personal data — master profile, built graph, ledger.
+# Holds personal/application data and large files. Never commit contents;
+# keep the folder itself tracked via the .gitkeep exception below.
+data/*
+!data/.gitkeep
+
+# OS / editor cruft
+.DS_Store
+.idea/
+.vscode/
