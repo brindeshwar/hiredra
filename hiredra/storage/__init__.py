@@ -18,6 +18,7 @@ from hiredra.storage.db import (
     record_outcome,
     set_status,
     status_counts,
+    touch_job,
     upsert_job,
 )
 
@@ -36,5 +37,6 @@ __all__ = [
     "record_outcome",
     "set_status",
     "status_counts",
+    "touch_job",
     "upsert_job",
 ]

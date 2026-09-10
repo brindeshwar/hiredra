@@ -173,11 +173,7 @@ def upsert_job(conn: sqlite3.Connection, job: Mapping[str, Any]) -> str:
                 ) from err
             _add_event(conn, job_id, "seen", detail="first sighting", at=now)
         else:
-            conn.execute(
-                "UPDATE jobs SET last_seen_at = ?, updated_at = ? WHERE job_id = ?",
-                (now, now, job_id),
-            )
-            _add_event(conn, job_id, "seen", detail="re-sighted", at=now)
+            _touch(conn, job_id, detail="re-sighted", now=now)
 
     return job_id
 
@@ -255,6 +251,34 @@ def add_note(conn: sqlite3.Connection, job_id: str, text: str) -> None:
         if row is None:
             raise KeyError(f"no job with job_id {job_id!r}")
         _add_event(conn, job_id, "note", detail=text, at=_now())
+
+
+def touch_job(conn: sqlite3.Connection, job_id: str) -> None:
+    """Record a re-sighting (dedup's cross-run match).
+
+    Bumps ``last_seen_at``/``updated_at`` and appends a ``seen`` event. Does not
+    change ``status`` or any Job column. Raises ``KeyError`` if unknown. This is
+    ``upsert_job``'s re-sight path, exposed for dedup matches that don't carry
+    the stored ``job_id``.
+    """
+    now = _now()
+    with conn:
+        row = conn.execute(
+            "SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"no job with job_id {job_id!r}")
+        _touch(conn, job_id, detail="re-sighted (dedup match)", now=now)
+
+
+def _touch(
+    conn: sqlite3.Connection, job_id: str, *, detail: str, now: str
+) -> None:
+    conn.execute(
+        "UPDATE jobs SET last_seen_at = ?, updated_at = ? WHERE job_id = ?",
+        (now, now, job_id),
+    )
+    _add_event(conn, job_id, "seen", detail=detail, at=now)
 
 
 def _add_event(
