@@ -1,11 +1,12 @@
 """The provider contract (docs/sourcing.md sec. 3).
 
-Every fetch source -- each ATS provider, the JobSpy source, a future Path-4
-provider -- implements the ``Provider`` protocol. Ported from career-ops'
-``{id, detect(), fetch()}`` shape.
+Each ATS provider implements the ``Provider`` protocol below (ported from
+career-ops' ``{id, detect(), fetch()}`` shape) and is routed by the registry.
 
-``CompanyEntry`` is intentionally thin here: it firms up when the first real
-provider (Greenhouse, sub-slice 4) and the registry (sub-slice 5) are built.
+The JobSpy source is deliberately NOT a ``Provider``: it is company-agnostic
+(a search, not a per-company board), takes a search config rather than a
+``CompanyEntry``, and is not in the registry -- see
+``hiredra/sourcing/jobspy_source.py`` and docs/sourcing.md sec. 7.
 """
 
 from __future__ import annotations

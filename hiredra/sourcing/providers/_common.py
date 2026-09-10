@@ -7,7 +7,7 @@ timestamp normalization, or the remote heuristic. Providers stay tiny.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any
 from urllib.parse import urlsplit
 
@@ -38,12 +38,19 @@ def clean(value: Any) -> str | None:
 def iso_date(value: Any) -> str | None:
     """Normalize a source timestamp to ``YYYY-MM-DD``.
 
-    Accepts epoch-milliseconds (Lever ``createdAt``) or an ISO-8601 string
-    (Ashby ``publishedAt``, Greenhouse ``first_published``). ``None`` for
-    anything absent or unparseable.
+    Accepts epoch-milliseconds (Lever ``createdAt``), an ISO-8601 string
+    (Ashby ``publishedAt``, Greenhouse ``first_published``), or a
+    ``date``/``datetime``/``pandas.Timestamp`` (JobSpy ``date_posted``).
+    ``None`` for anything absent or unparseable.
     """
     if value is None or value == "" or isinstance(value, bool):
         return None
+    if str(value) in ("NaT", "nan", "NaN", "None"):  # pandas null sentinels
+        return None
+    if isinstance(value, datetime):
+        return value.date().isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
     if isinstance(value, (int, float)):
         try:
             return datetime.fromtimestamp(value / 1000, tz=timezone.utc).date().isoformat()

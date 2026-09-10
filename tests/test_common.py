@@ -29,6 +29,20 @@ def test_iso_date_bare_date():
     assert iso_date("2026-08-20") == "2026-08-20"
 
 
+def test_iso_date_date_and_datetime_objects():
+    import datetime as _dt
+
+    assert iso_date(_dt.date(2026, 8, 20)) == "2026-08-20"
+    assert iso_date(_dt.datetime(2026, 8, 20, 13, 30)) == "2026-08-20"
+
+
+def test_iso_date_pandas_timestamp_and_nat():
+    import pandas as pd
+
+    assert iso_date(pd.Timestamp("2026-08-20T09:00:00Z")) == "2026-08-20"
+    assert iso_date(pd.NaT) is None
+
+
 @pytest.mark.parametrize("value", [None, "", "not a date", True, False, [], {}, "2026-13-40"])
 def test_iso_date_unparseable_is_none(value):
     assert iso_date(value) is None
