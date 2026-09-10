@@ -246,8 +246,13 @@ class HttpClient:
         json: Any = None,
         cooldown_key: str | None = None,
         follow_redirects: bool | None = None,
+        timeout: float | None = None,
     ) -> httpx.Response:
-        """Guarded + retried request. Raises a ``FetchError`` subclass on failure."""
+        """Guarded + retried request. Raises a ``FetchError`` subclass on failure.
+
+        ``timeout`` overrides ``HttpConfig.timeout`` for this one request (Ashby
+        needs a longer one). Left ``None``, the config default applies.
+        """
         key = cooldown_key or urlsplit(url).netloc or url
         follow = (
             self.config.follow_redirects
@@ -257,16 +262,18 @@ class HttpClient:
 
         self.cooldowns.check(key, url=url)
 
+        req_kwargs: dict[str, Any] = {
+            "params": params,
+            "headers": headers,
+            "json": json,
+            "follow_redirects": follow,
+        }
+        if timeout is not None:
+            req_kwargs["timeout"] = timeout
+
         def _attempt() -> httpx.Response:
             try:
-                resp = self._client.request(
-                    method,
-                    url,
-                    params=params,
-                    headers=headers,
-                    json=json,
-                    follow_redirects=follow,
-                )
+                resp = self._client.request(method, url, **req_kwargs)
             except httpx.TransportError as err:
                 raise TransientError(
                     f"{method} {url}: {type(err).__name__}", url=url

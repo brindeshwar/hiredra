@@ -56,3 +56,76 @@ def greenhouse_payload() -> dict:
             },
         ]
     }
+
+
+@pytest.fixture()
+def lever_payload() -> list:
+    """A realistic Lever v0 postings response -- a bare array."""
+    return [
+        {
+            "id": "aaaa-1111",
+            "text": "Senior Backend Engineer",
+            "hostedUrl": "https://jobs.lever.co/acme/aaaa-1111",
+            "applyUrl": "https://jobs.lever.co/acme/aaaa-1111/apply",
+            "categories": {
+                "location": "Berlin",
+                "allLocations": ["Berlin", "Remote - EU"],
+                "commitment": "Full-time",
+            },
+            "descriptionPlain": "Build backend systems.",
+            "createdAt": 1_726_000_000_000,
+            "workplaceType": "hybrid",
+        },
+        {
+            "id": "bbbb-2222",
+            "text": "AI Engineer",
+            "hostedUrl": "https://jobs.lever.co/acme/bbbb-2222",
+            "categories": {"location": "New York", "commitment": "Full-time"},
+            "descriptionPlain": "LLMs and agents.",
+            "createdAt": 1_726_500_000_000,
+            "workplaceType": "remote",
+        },
+        {"id": "cccc-3333", "text": "Malformed (no hostedUrl)"},
+    ]
+
+
+@pytest.fixture()
+def ashby_payload() -> dict:
+    """A realistic Ashby posting-api response -- {jobs: [...]}."""
+    return {
+        "jobs": [
+            {
+                "id": "job_001",
+                "title": "Backend Engineer",
+                "jobUrl": "https://jobs.ashbyhq.com/acme/job_001",
+                "applyUrl": "https://jobs.ashbyhq.com/acme/job_001/application",
+                "location": "New York",
+                "secondaryLocations": [
+                    {"location": "Remote (US)"},
+                    {
+                        "address": {
+                            "postalAddress": {
+                                "addressLocality": "Austin",
+                                "addressCountry": "USA",
+                            }
+                        }
+                    },
+                ],
+                "descriptionPlain": "Backend work.",
+                "publishedAt": "2026-08-20T12:00:00.000Z",
+                "employmentType": "FullTime",
+                "workplaceType": "Onsite",
+                "compensation": {"compensationTierSummary": "$180K - $220K"},
+            },
+            {
+                "id": "job_002",
+                "title": "ML Engineer",
+                "jobUrl": "https://jobs.ashbyhq.com/acme/job_002",
+                "location": "Remote",
+                "descriptionPlain": "ML systems.",
+                "publishedAt": "2026-09-01T00:00:00Z",
+                "workplaceType": "Remote",
+            },
+            {"id": "job_003", "title": "Malformed (no jobUrl)"},
+        ]
+    }

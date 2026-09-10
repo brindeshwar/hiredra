@@ -13,14 +13,17 @@ from __future__ import annotations
 
 import logging
 import re
-from datetime import datetime
-from typing import Any
-from urllib.parse import urlsplit
 
 from hiredra.sourcing._html import html_to_text
 from hiredra.sourcing.http import FetchError
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
+from hiredra.sourcing.providers._common import (
+    assert_allowed_url,
+    clean,
+    infer_remote,
+    iso_date,
+)
 
 log = logging.getLogger("hiredra.sourcing.greenhouse")
 
@@ -34,41 +37,6 @@ _ALLOWED_HOSTS = frozenset(
 )
 _SLUG_RE = re.compile(r"(?:job-boards(?:\.eu)?|boards)\.greenhouse\.io/([^/?#]+)")
 _API = "https://boards-api.greenhouse.io/v1/boards/{slug}/jobs"
-# A CLEAR remote signal only. Absence stays unknown (None), never False.
-_REMOTE_RE = re.compile(r"\bremote\b|\banywhere\b|\bwork from home\b|\bwfh\b", re.I)
-
-
-def _assert_allowed(url: str) -> None:
-    parts = urlsplit(url)
-    if parts.scheme != "https":
-        raise FetchError(f"greenhouse: refusing non-HTTPS url {url!r}", url=url)
-    if parts.hostname not in _ALLOWED_HOSTS:
-        raise FetchError(
-            f"greenhouse: refusing untrusted host {parts.hostname!r} "
-            f"(allowed: {', '.join(sorted(_ALLOWED_HOSTS))})",
-            url=url,
-        )
-
-
-def _iso_date(value: Any) -> str | None:
-    """Normalize a Greenhouse timestamp to ``YYYY-MM-DD``; None if absent/unparseable."""
-    if not value or not isinstance(value, str):
-        return None
-    raw = value.strip()
-    try:
-        return datetime.fromisoformat(raw.replace("Z", "+00:00")).date().isoformat()
-    except ValueError:
-        try:
-            return datetime.strptime(raw[:10], "%Y-%m-%d").date().isoformat()
-        except ValueError:
-            return None
-
-
-def _infer_remote(location: str | None, title: str) -> bool | None:
-    """True on a clear remote signal; None otherwise. NEVER False -- absence is unknown."""
-    if _REMOTE_RE.search(f"{location or ''} {title}"):
-        return True
-    return None
 
 
 class GreenhouseProvider:
@@ -81,7 +49,7 @@ class GreenhouseProvider:
             return None
         if entry.api:
             try:
-                _assert_allowed(entry.api)
+                assert_allowed_url(entry.api, _ALLOWED_HOSTS, self.name)
             except FetchError:
                 return None
             return entry.api
@@ -99,7 +67,7 @@ class GreenhouseProvider:
         if base is None:
             raise FetchError(f"greenhouse: cannot resolve a board for {entry.name!r}")
         url = f"{base}{'&' if '?' in base else '?'}content=true"
-        _assert_allowed(url)
+        assert_allowed_url(url, _ALLOWED_HOSTS, self.name)
 
         payload = ctx.http.get_json(url)  # follow_redirects=False (the client default)
         raw_jobs = payload.get("jobs") if isinstance(payload, dict) else None
@@ -111,11 +79,11 @@ class GreenhouseProvider:
             if not isinstance(j, dict):
                 continue
             job_id, apply_url = j.get("id"), j.get("absolute_url")
-            title = (j.get("title") or "").strip()
+            title = clean(j.get("title"))
             if job_id is None or not apply_url or not title:
                 log.debug("greenhouse: skipping malformed posting %r", j.get("id"))
                 continue
-            location = ((j.get("location") or {}).get("name") or "").strip() or None
+            location = clean((j.get("location") or {}).get("name"))
             try:
                 jobs.append(
                     Job(
@@ -126,10 +94,10 @@ class GreenhouseProvider:
                         source=self.name,
                         description=html_to_text(j.get("content")) or None,
                         location=location,
-                        date_posted=_iso_date(
+                        date_posted=iso_date(
                             j.get("first_published") or j.get("updated_at")
                         ),
-                        is_remote=_infer_remote(location, title),
+                        is_remote=infer_remote(f"{location or ''} {title}"),
                     )
                 )
             except (ValueError, TypeError) as err:
