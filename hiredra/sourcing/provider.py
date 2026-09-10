@@ -4,9 +4,8 @@ Every fetch source -- each ATS provider, the JobSpy source, a future Path-4
 provider -- implements the ``Provider`` protocol. Ported from career-ops'
 ``{id, detect(), fetch()}`` shape.
 
-``CompanyEntry`` and ``FetchContext`` are intentionally thin here: their full
-shape firms up when the first real provider (Greenhouse, sub-slice 4) and the
-shared http layer (sub-slice 3) are built.
+``CompanyEntry`` is intentionally thin here: it firms up when the first real
+provider (Greenhouse, sub-slice 4) and the registry (sub-slice 5) are built.
 """
 
 from __future__ import annotations
@@ -15,6 +14,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
+from hiredra.sourcing.http import HttpClient
 from hiredra.sourcing.job import Job
 
 
@@ -35,16 +35,16 @@ class CompanyEntry:
     extra: Mapping[str, Any] = field(default_factory=dict)
 
 
-class FetchContext(Protocol):
+@dataclass(frozen=True, slots=True)
+class FetchContext:
     """Shared context handed to every ``Provider.fetch`` call.
 
-    Carries the machinery providers must not each re-implement: the http client
-    (retry / backoff / cooldown / proxy) and config knobs (results-per-run,
-    concurrency, delays). Fleshed out in sub-slice 3 -- for now only the http
-    client is named, loosely typed.
+    Carries the http client (retry / backoff / cooldown / proxy). Results-per-run,
+    concurrency and delay knobs are added here when a provider or the orchestrator
+    needs them (sub-slice 4+).
     """
 
-    http: Any
+    http: HttpClient
 
 
 @runtime_checkable
