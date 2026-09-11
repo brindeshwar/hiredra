@@ -25,6 +25,7 @@ from hiredra.storage import db
 @dataclass(frozen=True, slots=True)
 class RunHandle:
     run_id: str
+    started_at: str = ""
     companies_done: set[str] = field(default_factory=set)
     jobspy_done: bool = False
     resumed: bool = False
@@ -59,6 +60,7 @@ class SqliteRunStore:
                 progress = json.loads(row["detail"] or "{}")
                 return RunHandle(
                     run_id=row["run_id"],
+                    started_at=row["started_at"],
                     companies_done=set(progress.get("companies_done", [])),
                     jobspy_done=bool(progress.get("jobspy_done", False)),
                     resumed=True,
@@ -66,8 +68,8 @@ class SqliteRunStore:
         else:
             db.sweep_stale_runs(self._conn, kind, config_name)
         run_id = db.new_run_id()
-        db.open_run(self._conn, run_id, kind=kind, config_name=config_name)
-        return RunHandle(run_id=run_id)
+        started_at = db.open_run(self._conn, run_id, kind=kind, config_name=config_name)
+        return RunHandle(run_id=run_id, started_at=started_at)
 
     def checkpoint(
         self, run_id: str, *, companies_done: set[str], jobspy_done: bool

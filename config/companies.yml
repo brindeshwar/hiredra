@@ -9,7 +9,9 @@
 
 companies:
   - name: Stripe
-    careers_url: https://stripe.com/jobs/search?gh_jid
+    slug: stripe
+    provider: greenhouse       # Stripe's careers page is on stripe.com, not
+                               # *.greenhouse.io, so auto-detect can't fire
   - name: Ramp
     slug: ramp
     provider: ashby
@@ -19,3 +21,8 @@ companies:
   - name: Vercel
     slug: vercel
     provider: ashby
+  - name: OpenAI
+    slug: openai
+    provider: ashby
+  - name: Leverdemo
+    careers_url: https://jobs.lever.co/leverdemo

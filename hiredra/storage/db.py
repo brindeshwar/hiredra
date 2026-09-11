@@ -402,15 +402,18 @@ def status_counts(conn: sqlite3.Connection) -> dict[str, int]:
 # ─────────────────────────────────────────────────────────────────────────────
 def open_run(
     conn: sqlite3.Connection, run_id: str, *, kind: str, config_name: str | None
-) -> None:
+) -> str:
+    """Insert the ``running`` row. Returns ``started_at`` (the caller often wants it)."""
     if kind not in ("scoring", "backfill"):
         raise ValueError(f"unknown run kind {kind!r}")
+    now = _now()
     with conn:
         conn.execute(
             "INSERT INTO runs (run_id, kind, config_name, started_at, status) "
             "VALUES (?, ?, ?, ?, 'running')",
-            (run_id, kind, config_name, _now()),
+            (run_id, kind, config_name, now),
         )
+    return now
 
 
 def checkpoint_run(conn: sqlite3.Connection, run_id: str, *, detail: str) -> None:
