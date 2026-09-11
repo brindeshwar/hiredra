@@ -251,6 +251,27 @@ def set_status(
         )
 
 
+def set_years_required(
+    conn: sqlite3.Connection, job_id: str, years: int | None
+) -> None:
+    """Store the filter funnel's extracted years-required feature.
+
+    Not a status change and not an event — ``years_required`` is a stored
+    feature (docs/scoring.md §1), written once by the seniority gate regardless
+    of whether the gate then keeps or drops the job.
+    """
+    with conn:
+        row = conn.execute(
+            "SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"no job with job_id {job_id!r}")
+        conn.execute(
+            "UPDATE jobs SET years_required = ?, updated_at = ? WHERE job_id = ?",
+            (years, _now(), job_id),
+        )
+
+
 def record_outcome(
     conn: sqlite3.Connection,
     job_id: str,

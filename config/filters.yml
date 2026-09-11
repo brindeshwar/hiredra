@@ -1,0 +1,122 @@
+# config/filters.yml — sub-slice 2b filter funnel (seniority gate + role-type
+# filter). Owner-editable. Matching is whole-phrase, case-insensitive (not a
+# bare substring) — see hiredra/filter.py's _contains_term.
+
+# Role-type ALLOW: title keeps (the "target bucket" test — backend/agent/LLM/
+# data, CLAUDE.md sec 4). Track1's proven list (docs/repos.md sec 6), plus 7
+# additions found by reviewing the real title-neither bucket against the
+# actual 1,683-job DB (2026-09-11):
+#   research engineer / research scientist   — OpenAI's frontier-research titles
+#   applied scientist                        — standard ML-industry title
+#   forward deployed engineer                — real AI-industry eng title (OpenAI, Stripe)
+#   analytics engineer                       — modern coding-heavy data role
+#   product engineer                         — real generalist-IC title (Linear, Stripe)
+#   member of technical staff                — common AI-lab generic IC title
+# "data architect" was considered and dropped: "architect" is already a
+# senior term below, so the addition would be dead (seniority runs first).
+allow:
+  - ai engineer
+  - ai/ml
+  - ai ml
+  - machine learning
+  - ml engineer
+  - llm
+  - genai
+  - gen ai
+  - generative ai
+  - nlp
+  - agent
+  - agentic
+  - backend
+  - back end
+  - back-end
+  - python
+  - data scientist
+  - data science
+  - software engineer
+  - software developer
+  - software development
+  - sde
+  - full stack
+  - fullstack
+  - full-stack
+  - deep learning
+  - mlops
+  - data engineer
+  - artificial intelligence
+  - ai developer
+  - ai architect
+  - ai platform
+  - applied ai
+  - ai automation
+  - research engineer
+  - research scientist
+  - applied scientist
+  - forward deployed engineer
+  - analytics engineer
+  - product engineer
+  - member of technical staff
+
+# Role-type BLOCK: title rejects. Wins if a title also hits ALLOW.
+block:
+  - marketing
+  - content creator
+  - content writer
+  - seo
+  - fashion
+  - graphic
+  - sales
+  - recruiter
+  - recruitment
+  - coordinator
+  - customer service
+  - customer support
+  - brand
+  - social media
+  - video editor
+  - copywriter
+  - hr
+  - human resource
+  - accountant
+  - finance executive
+  - telecaller
+  - bpo
+  - data entry
+
+# Seniority anti-signal in the TITLE (docs/repos.md sec 6). "staff" is
+# deliberately narrow: hiredra/filter.py's has_senior_title_term() neutralizes
+# "Member of Technical Staff" / "MTS" before testing, so that title's
+# seniority is decided by the years regex + anti-signal phrases below, not by
+# this list — otherwise the "member of technical staff" ALLOW addition above
+# would never survive to be tested.
+senior_title_terms:
+  - senior
+  - sr.
+  - sr
+  - lead
+  - principal
+  - staff
+  - architect
+  - manager
+  - head of
+  - director
+  - vp
+  - avp
+  - ii
+  - iii
+  - iv
+
+# Seniority anti-signal PHRASES in the JD body — complements the years regex
+# for postings that describe a senior role without stating a year count.
+# Verified present in the real DB (2026-09-11).
+anti_signal_phrases:
+  - mentor junior engineers
+  - lead a team
+  - own the roadmap
+  - manage a team
+  - people management
+  - direct reports
+
+# Fresher/junior cutoff: keep years_required <= max_years or unknown (None);
+# drop above. Re-tuned at 2b weight calibration, not hardcoded.
+max_years: 2
