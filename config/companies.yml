@@ -1,0 +1,21 @@
+# config/companies.yml — the Path-1 company list (hand-edited, owner-controlled).
+# Each entry maps to a hiredra.sourcing.CompanyEntry. See docs/sourcing.md §7.5.
+#
+#   name         required — becomes Job.company verbatim (review batch / dashboard).
+#   careers_url   public board URL; the provider is auto-detected from it.
+#   slug / api    alternatives to careers_url (slug -> extra["slug"]).
+#   provider      pin a provider explicitly (skips detection): greenhouse|lever|ashby
+#   enabled       set false to skip an entry without deleting it.
+
+companies:
+  - name: Stripe
+    careers_url: https://stripe.com/jobs/search?gh_jid
+  - name: Ramp
+    slug: ramp
+    provider: ashby
+  - name: Linear
+    slug: linear
+    provider: ashby
+  - name: Vercel
+    slug: vercel
+    provider: ashby

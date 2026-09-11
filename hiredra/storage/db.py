@@ -20,7 +20,9 @@ Conventions
 
 from __future__ import annotations
 
+import secrets
 import sqlite3
+import time
 from collections.abc import Iterator, Mapping
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,7 +33,10 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB_PATH: Path = _REPO_ROOT / "data" / "hiredra.db"
 
 _SCHEMA_PATH = Path(__file__).with_name("schema.sql")
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
+
+#: run statuses (see schema `runs.status`).
+RUN_STATUSES: tuple[str, ...] = ("running", "ok", "partial", "failed")
 
 #: Ordered pipeline statuses plus the off-path ``dropped`` (funnel exit — kept in
 #: the DB so cross-run dedup never re-processes it).
@@ -86,6 +91,20 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def new_run_id() -> str:
+    """``<YYYYMMDDThhmmssZ>-<4hex>`` derived from ``_now()``.
+
+    Compact basic-format ISO (no colons → filename/URL safe), explicit ``Z``,
+    lexicographically sortable by start time, plus a random suffix so same-second
+    starts don't collide. Deterministic under a monkeypatched ``_now`` except the
+    hex.
+    """
+    compact = (
+        _now().replace("-", "").replace(":", "").replace("+0000", "Z").replace("+00:00", "Z")
+    )
+    return f"{compact}-{secrets.token_hex(2)}"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # connection / setup
 # ─────────────────────────────────────────────────────────────────────────────
@@ -107,25 +126,46 @@ def connect(path: Path | str = DEFAULT_DB_PATH) -> sqlite3.Connection:
 
 
 def init_db(conn: sqlite3.Connection) -> None:
-    """Apply ``schema.sql`` (idempotent) and stamp the schema version."""
+    """Apply ``schema.sql`` (idempotent) + any pending migrations; stamp the version.
+
+    A brand-new DB gets everything from ``schema.sql`` directly. An existing DB
+    at an older ``user_version`` is migrated with guarded ``ALTER TABLE``s (each
+    checks the column is actually absent, so re-running is harmless).
+    """
+    version = conn.execute("PRAGMA user_version").fetchone()[0]
     conn.executescript(_SCHEMA_PATH.read_text(encoding="utf-8"))
+    if version < 2:
+        _migrate_v2(conn)
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
     conn.commit()
+
+
+def _migrate_v2(conn: sqlite3.Connection) -> None:
+    """v1 → v2: add ``jobs.first_seen_run`` (``runs``/``cooldowns`` come from
+    ``schema.sql``'s ``CREATE TABLE IF NOT EXISTS``)."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
+    if "first_seen_run" not in cols:
+        conn.execute("ALTER TABLE jobs ADD COLUMN first_seen_run TEXT")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # writes
 # ─────────────────────────────────────────────────────────────────────────────
-def upsert_job(conn: sqlite3.Connection, job: Mapping[str, Any]) -> str:
+def upsert_job(
+    conn: sqlite3.Connection,
+    job: Mapping[str, Any],
+    *,
+    first_seen_run: str | None = None,
+) -> str:
     """Insert a new job, or re-sight an existing one. Returns the ``job_id``.
 
     ``job_id`` falls back to ``job["url"]`` when absent. ``url``, ``title``,
     ``company`` and ``source`` are required. ``years_required``, if given, must
     be an ``int`` (``0`` is valid; unknown is ``None``).
 
-    New row: every Job column written, ``status`` defaults to ``fetched``,
-    ``first_seen_at``/``last_seen_at``/``updated_at`` set, a ``seen`` event
-    appended.
+    New row: every Job column written, ``first_seen_run`` set (if given),
+    ``status`` defaults to ``fetched``, ``first_seen_at``/``last_seen_at``/
+    ``updated_at`` set, a ``seen`` event appended.
 
     Existing row (matched by ``job_id``): only ``last_seen_at``/``updated_at``
     are bumped and a ``seen`` event appended. Status, the scoring ledger, the
@@ -157,9 +197,9 @@ def upsert_job(conn: sqlite3.Connection, job: Mapping[str, Any]) -> str:
 
         if exists is None:
             cols = (*_JOB_COLUMNS, "status_changed_at", "first_seen_at",
-                    "last_seen_at", "updated_at")
+                    "last_seen_at", "updated_at", "first_seen_run")
             values = [job_id if c == "job_id" else job.get(c) for c in _JOB_COLUMNS]
-            values += [now, now, now, now]
+            values += [now, now, now, now, first_seen_run]
             placeholders = ", ".join("?" for _ in cols)
             try:
                 conn.execute(
@@ -253,22 +293,24 @@ def add_note(conn: sqlite3.Connection, job_id: str, text: str) -> None:
         _add_event(conn, job_id, "note", detail=text, at=_now())
 
 
-def touch_job(conn: sqlite3.Connection, job_id: str) -> None:
+def touch_job(
+    conn: sqlite3.Connection, job_id: str, *, run_id: str | None = None
+) -> None:
     """Record a re-sighting (dedup's cross-run match).
 
     Bumps ``last_seen_at``/``updated_at`` and appends a ``seen`` event. Does not
-    change ``status`` or any Job column. Raises ``KeyError`` if unknown. This is
-    ``upsert_job``'s re-sight path, exposed for dedup matches that don't carry
-    the stored ``job_id``.
+    change ``status``, ``first_seen_run``, or any Job column. Raises ``KeyError``
+    if unknown. ``run_id`` (when given) is noted in the event detail.
     """
     now = _now()
+    detail = "re-sighted (dedup match)" + (f" [{run_id}]" if run_id else "")
     with conn:
         row = conn.execute(
             "SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)
         ).fetchone()
         if row is None:
             raise KeyError(f"no job with job_id {job_id!r}")
-        _touch(conn, job_id, detail="re-sighted (dedup match)", now=now)
+        _touch(conn, job_id, detail=detail, now=now)
 
 
 def _touch(
@@ -353,3 +395,129 @@ def status_counts(conn: sqlite3.Connection) -> dict[str, int]:
     ):
         counts[row["status"]] = row["n"]
     return counts
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# runs (v2) — the orchestrator's run bookkeeping. See docs/sourcing.md §9-10.
+# ─────────────────────────────────────────────────────────────────────────────
+def open_run(
+    conn: sqlite3.Connection, run_id: str, *, kind: str, config_name: str | None
+) -> None:
+    if kind not in ("scoring", "backfill"):
+        raise ValueError(f"unknown run kind {kind!r}")
+    with conn:
+        conn.execute(
+            "INSERT INTO runs (run_id, kind, config_name, started_at, status) "
+            "VALUES (?, ?, ?, ?, 'running')",
+            (run_id, kind, config_name, _now()),
+        )
+
+
+def checkpoint_run(conn: sqlite3.Connection, run_id: str, *, detail: str) -> None:
+    """Update only ``detail`` (the JSON progress blob) — a mid-run checkpoint."""
+    with conn:
+        conn.execute("UPDATE runs SET detail = ? WHERE run_id = ?", (detail, run_id))
+
+
+def finish_run(
+    conn: sqlite3.Connection,
+    run_id: str,
+    *,
+    status: str,
+    fetched: int = 0,
+    collapsed_in_run: int = 0,
+    matched_in_store: int = 0,
+    persisted_new: int = 0,
+    touched: int = 0,
+    detail: str | None = None,
+) -> None:
+    if status not in RUN_STATUSES or status == "running":
+        raise ValueError(f"cannot finish a run with status {status!r}")
+    with conn:
+        conn.execute(
+            "UPDATE runs SET finished_at = ?, status = ?, fetched = ?, "
+            "collapsed_in_run = ?, matched_in_store = ?, persisted_new = ?, "
+            "touched = ?, detail = COALESCE(?, detail) WHERE run_id = ?",
+            (_now(), status, fetched, collapsed_in_run, matched_in_store,
+             persisted_new, touched, detail, run_id),
+        )
+
+
+def unfinished_run(
+    conn: sqlite3.Connection, kind: str, config_name: str | None
+) -> dict | None:
+    """Most recent ``running`` row for this (kind, config_name) — for ``--resume``."""
+    row = conn.execute(
+        "SELECT * FROM runs WHERE kind = ? AND config_name IS ? "
+        "AND finished_at IS NULL ORDER BY started_at DESC LIMIT 1",
+        (kind, config_name),
+    ).fetchone()
+    return dict(row) if row is not None else None
+
+
+def sweep_stale_runs(
+    conn: sqlite3.Connection, kind: str, config_name: str | None
+) -> int:
+    """Mark still-``running`` rows for this (kind, config_name) as ``failed``.
+
+    Called ONLY on a fresh (non-``--resume``) start, before ``open_run``. Scoped
+    to the same operation so a scoring start never fails an unfinished backfill.
+    Assumes at most one live run per (kind, config_name) — true for the manual
+    single-user CLI; add a lock/heartbeat if concurrent same-config runs appear.
+    Returns the count swept.
+    """
+    with conn:
+        cur = conn.execute(
+            "UPDATE runs SET status = 'failed', finished_at = ? "
+            "WHERE kind = ? AND config_name IS ? AND finished_at IS NULL",
+            (_now(), kind, config_name),
+        )
+        return cur.rowcount
+
+
+def list_runs(conn: sqlite3.Connection, *, limit: int = 20) -> list[dict]:
+    cur = conn.execute(
+        "SELECT * FROM runs ORDER BY started_at DESC LIMIT ?", (limit,)
+    )
+    return [dict(r) for r in cur]
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# cooldowns (v2) — cross-process durability for CooldownRegistry (docs §5).
+# ─────────────────────────────────────────────────────────────────────────────
+def load_cooldowns(conn: sqlite3.Connection) -> dict[str, float]:
+    """``{key: until}`` (epoch seconds) for cooldowns that haven't expired."""
+    now = time.time()
+    return {
+        r["key"]: r["until"]
+        for r in conn.execute("SELECT key, until FROM cooldowns")
+        if r["until"] > now
+    }
+
+
+def save_cooldown(
+    conn: sqlite3.Connection, key: str, until: float, reason: str | None = None
+) -> None:
+    """Write-through from ``CooldownRegistry.on_trip``. Extends, never shortens.
+
+    NOTE: called on the same thread as the ``trip()`` that produced ``until``.
+    When the fetch loop is parallelized (deferred), a worker thread must NOT call
+    this directly — marshal the save to the main thread. The single-connection /
+    main-thread rule is load-bearing.
+    """
+    with conn:
+        conn.execute(
+            "INSERT INTO cooldowns (key, until, tripped_at, reason) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT(key) DO UPDATE SET until = max(until, excluded.until), "
+            "tripped_at = excluded.tripped_at, reason = excluded.reason",
+            (key, until, _now(), reason),
+        )
+
+
+def clear_cooldown(conn: sqlite3.Connection, key: str | None = None) -> None:
+    """Drop one cooldown, or all of them (manual override)."""
+    with conn:
+        if key is None:
+            conn.execute("DELETE FROM cooldowns")
+        else:
+            conn.execute("DELETE FROM cooldowns WHERE key = ?", (key,))

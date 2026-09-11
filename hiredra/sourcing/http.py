@@ -22,6 +22,8 @@ from __future__ import annotations
 import datetime as _dt
 import logging
 import re
+import threading
+import time
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
@@ -159,41 +161,67 @@ def _parse_retry_after(value: str | None) -> float | None:
 
 # ── cooldown registry ──────────────────────────────────────────────────────
 class CooldownRegistry:
-    """Tracks ``{cooldown_key: until}`` for the life of a run. Clock is injectable."""
+    """Tracks ``{cooldown_key: until}``. Thread-safe.
 
-    def __init__(self, now: Callable[[], float]) -> None:
-        self._now = now
+    Clock is **wall-clock epoch seconds** (``time.time``), not monotonic:
+    ``until`` is persisted across processes (the ``cooldowns`` table), and
+    monotonic time is meaningless across a restart. Injectable for tests.
+
+    ``on_trip`` (default ``None``) is a ``(key, until, reason) -> None`` callback
+    fired after each ``trip`` (outside the lock) — the orchestrator wires it to
+    write the cooldown through to SQLite so a crash doesn't lose it.
+    """
+
+    def __init__(self, now: Callable[[], float] | None = None) -> None:
+        self._now = now if now is not None else time.time
         self._until: dict[str, float] = {}
+        self._lock = threading.Lock()
+        self.on_trip: Callable[[str, float, str | None], None] | None = None
 
     def check(self, key: str, *, url: str | None = None) -> None:
-        until = self._until.get(key)
-        if until is None:
-            return
-        remaining = until - self._now()
-        if remaining > 0:
-            raise Blocked(
-                f"{key} is in cooldown for another {remaining:.0f}s",
-                cooldown_key=key,
-                until=until,
-                url=url,
-            )
-        del self._until[key]
+        with self._lock:
+            until = self._until.get(key)
+            if until is None:
+                return
+            remaining = until - self._now()
+            if remaining <= 0:
+                del self._until[key]
+                return
+        raise Blocked(
+            f"{key} is in cooldown for another {remaining:.0f}s",
+            cooldown_key=key,
+            until=until,
+            url=url,
+        )
 
-    def trip(self, key: str, seconds: float) -> float:
+    def trip(self, key: str, seconds: float, *, reason: str | None = None) -> float:
         """Park ``key``. Extends an existing cooldown, never shortens it."""
-        until = max(self._now() + seconds, self._until.get(key, 0.0))
-        self._until[key] = until
+        with self._lock:
+            until = max(self._now() + seconds, self._until.get(key, 0.0))
+            self._until[key] = until
+        if self.on_trip is not None:
+            self.on_trip(key, until, reason)  # outside the lock — may do I/O
         return until
 
+    def load(self, entries: Mapping[str, float]) -> None:
+        """Merge persisted cooldowns in (non-expired only). Never shortens."""
+        with self._lock:
+            now = self._now()
+            for key, until in entries.items():
+                if until > now:
+                    self._until[key] = max(until, self._until.get(key, 0.0))
+
     def clear(self, key: str | None = None) -> None:
-        if key is None:
-            self._until.clear()
-        else:
-            self._until.pop(key, None)
+        with self._lock:
+            if key is None:
+                self._until.clear()
+            else:
+                self._until.pop(key, None)
 
     def active(self) -> dict[str, float]:
-        now = self._now()
-        return {k: v for k, v in self._until.items() if v > now}
+        with self._lock:
+            now = self._now()
+            return {k: v for k, v in self._until.items() if v > now}
 
 
 # ── the client ─────────────────────────────────────────────────────────────
@@ -208,11 +236,9 @@ class HttpClient:
         sleep: Callable[[float], Any] | None = None,
         now: Callable[[], float] | None = None,
     ) -> None:
-        import time
-
         self.config = config or HttpConfig()
         self._sleep = sleep if sleep is not None else time.sleep
-        self.cooldowns = CooldownRegistry(now if now is not None else time.monotonic)
+        self.cooldowns = CooldownRegistry(now)  # None → time.time (wall-clock epoch)
 
         kwargs: dict[str, Any] = {
             "timeout": self.config.timeout,
@@ -328,7 +354,7 @@ class HttpClient:
         if status in _BLOCK_STATUSES:
             retry_after = _parse_retry_after(resp.headers.get("retry-after"))
             seconds = self._cooldown_len(retry_after)
-            until = self.cooldowns.trip(key, seconds)
+            until = self.cooldowns.trip(key, seconds, reason=f"HTTP {status}")
             log.warning(
                 "http: %s blocked (HTTP %d) -- cooling down %.0fs", key, status, seconds
             )
@@ -356,7 +382,7 @@ class HttpClient:
 
         if self.config.sniff_challenges and _looks_like_challenge(resp):
             seconds = self._cooldown_len(None)
-            until = self.cooldowns.trip(key, seconds)
+            until = self.cooldowns.trip(key, seconds, reason="challenge page")
             log.warning(
                 "http: %s served a challenge page -- cooling down %.0fs", key, seconds
             )

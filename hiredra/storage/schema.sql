@@ -59,9 +59,10 @@ CREATE TABLE IF NOT EXISTS jobs (
     outcome_detail    TEXT,
 
     -- ingestion metadata
-    first_seen_at     TEXT NOT NULL,           -- first run that fetched this job_id
-    last_seen_at      TEXT NOT NULL,           -- most recent run that re-fetched it
-    updated_at        TEXT NOT NULL            -- last write of any kind
+    first_seen_at     TEXT NOT NULL,           -- first time this job_id was fetched (ISO-8601 UTC)
+    last_seen_at      TEXT NOT NULL,           -- most recent re-fetch
+    updated_at        TEXT NOT NULL,           -- last write of any kind
+    first_seen_run    TEXT                     -- runs.run_id of the run that first fetched it (v2)
 );
 
 CREATE INDEX IF NOT EXISTS idx_jobs_status        ON jobs (status);
@@ -90,3 +91,42 @@ CREATE TABLE IF NOT EXISTS job_events (
 CREATE INDEX IF NOT EXISTS idx_events_job  ON job_events (job_id);
 CREATE INDEX IF NOT EXISTS idx_events_at   ON job_events (at);
 CREATE INDEX IF NOT EXISTS idx_events_kind ON job_events (kind);
+
+-- ---------------------------------------------------------------
+-- runs (v2) -- one row per orchestrator run. Per-run rollups the
+-- dashboard/learning-loop need; job_events only has per-job history.
+-- run_id = <YYYYMMDDThhmmssZ>-<4hex>. started_at/finished_at are
+-- ordinary ISO-8601 UTC. detail = JSON RunReport (incl. the list of
+-- companies fetched so far, and jobspy_done, for --resume).
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS runs (
+    run_id           TEXT PRIMARY KEY,
+    kind             TEXT NOT NULL CHECK (kind IN ('scoring','backfill')),
+    config_name      TEXT,
+    started_at       TEXT NOT NULL,
+    finished_at      TEXT,                     -- NULL = crashed / still running
+    status           TEXT NOT NULL DEFAULT 'running'
+                         CHECK (status IN ('running','ok','partial','failed')),
+    fetched          INTEGER NOT NULL DEFAULT 0,
+    collapsed_in_run INTEGER NOT NULL DEFAULT 0,
+    matched_in_store INTEGER NOT NULL DEFAULT 0,
+    persisted_new    INTEGER NOT NULL DEFAULT 0,
+    touched          INTEGER NOT NULL DEFAULT 0,
+    detail           TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_runs_started ON runs (started_at);
+CREATE INDEX IF NOT EXISTS idx_runs_open    ON runs (kind, config_name, finished_at);
+
+-- ---------------------------------------------------------------
+-- cooldowns (v2) -- cross-process durability for CooldownRegistry.
+-- `until` is EPOCH SECONDS (deadline arithmetic wants a float, not
+-- an ISO string parsed on every request); `tripped_at` is ISO for
+-- the human. Key = a host or "jobspy-<site>".
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS cooldowns (
+    key        TEXT PRIMARY KEY,
+    until      REAL NOT NULL,
+    tripped_at TEXT NOT NULL,
+    reason     TEXT
+);

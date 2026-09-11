@@ -71,30 +71,16 @@ class SiteQuery:
     google_search_term: str | None = None  # when set, google scrapes once with it
 
 
-_DEFAULT_QUERY = SiteQuery(
-    search_terms=(
-        "AI Engineer",
-        "Machine Learning Engineer",
-        "LLM Engineer",
-        "Generative AI Engineer",
-        "Backend Engineer",
-        "Python Developer",
-        "Data Engineer",
-        "Software Engineer",
-    ),
-)
+# Minimal fallbacks only. The real, curated term lists live in
+# `config/scoring.yml` and are loaded into JobSpyConfig by the config loader.
+_DEFAULT_QUERY = SiteQuery(search_terms=("Software Engineer",))
 
 # LinkedIn caps at ~10 pages / a few hundred results before throttling, so it
-# gets a narrower query: fewer terms, full-time only, a tighter recency window.
+# gets its own tighter query in config/scoring.yml; this is only the fallback.
 _LINKEDIN_QUERY = SiteQuery(
-    search_terms=(
-        "AI Engineer",
-        "LLM Engineer",
-        "Machine Learning Engineer",
-        "Backend Engineer",
-    ),
+    search_terms=("Software Engineer",),
     job_type="fulltime",
-    hours_old=168,           # 7 days
+    hours_old=168,
     results_per_site=25,
 )
 
@@ -331,13 +317,13 @@ class JobSpySource:
             params["proxies"] = list(self.config.proxies)
         return params
 
-    def _trip(self, ctx: FetchContext, site: str) -> None:
+    def _trip(self, ctx: FetchContext, site: str, reason: str) -> None:
         seconds = (
             self.config.cooldown_long
             if site in _LONG_COOLDOWN_SITES
             else self.config.cooldown_short
         )
-        ctx.http.cooldowns.trip(f"jobspy-{site}", seconds)
+        ctx.http.cooldowns.trip(f"jobspy-{site}", seconds, reason=reason[:200])
         log.warning("jobspy: %s blocked -- cooling down %.0fs", site, seconds)
 
     def _scrape_site(
@@ -353,7 +339,7 @@ class JobSpySource:
                 except Exception as err:  # noqa: BLE001 -- fail-soft per sec. 5
                     text = f"{term}: {err}"
                     if _BLOCK_RE.search(str(err)):
-                        self._trip(ctx, site)
+                        self._trip(ctx, site, text)
                         jobs = _frames_to_jobs(frames, site)
                         return jobs, SiteOutcome(site, "blocked", len(jobs), text)
                     errors.append(text)
@@ -364,7 +350,7 @@ class JobSpySource:
 
             marker = _block_marker(cap.messages)
             if marker:
-                self._trip(ctx, site)
+                self._trip(ctx, site, marker)
                 jobs = _frames_to_jobs(frames, site)
                 return jobs, SiteOutcome(site, "blocked", len(jobs), marker)
 
