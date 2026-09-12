@@ -1,0 +1,3 @@
+# Discovery program only -- NOT part of hiredra/'s live pipeline requirements.
+# pip install -r discovery/requirements.txt (on top of the root requirements.txt)
+duckdb>=1.1
