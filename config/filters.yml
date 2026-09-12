@@ -83,6 +83,16 @@ block:
   - bpo
   - data entry
 
+# Location eligibility -- runs FIRST in the funnel (largest cut on a global
+# intake). eligible_for is a hiredra.location.eligibility() preference string
+# ("India", or a compound like "India or Remote"); everything else (country/
+# city dictionaries, remote/restriction detection) is the ported engine in
+# hiredra/location.py, not config -- same split as the ALLOW/BLOCK lists vs.
+# the word-boundary matcher. A job with no location signal at all is KEPT
+# (never guessed), same posture as an unstated years_required.
+location:
+  eligible_for: India
+
 # Seniority anti-signal in the TITLE (docs/repos.md sec 6). "staff" is
 # deliberately narrow: hiredra/filter.py's has_senior_title_term() neutralizes
 # "Member of Technical Staff" / "MTS" before testing, so that title's

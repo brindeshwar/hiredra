@@ -1,0 +1,55 @@
+# config/scoring.wide.yml — the wide/max-scale sourcing run. See docs/sourcing.md §9.5.
+# Identical to config/scoring.yml except companies_path -- this is the
+# "full-power" switch: point --config at this file instead to run the large
+# generated company list (config/companies.wide.yml) instead of the curated
+# small one. Regenerate that list with scripts/generate_company_list.py.
+# Loading is STRICT: an unknown key anywhere (including nested sections) is an error.
+
+kind: scoring
+companies_path: config/companies.wide.yml
+
+pacing:
+  between_companies: 1.0      # base seconds between company fetches
+  jitter: 0.5                 # + up to this many random seconds
+
+http:
+  timeout: 15.0
+  cooldown_seconds: 900.0     # default block cooldown (ATS hosts): 15 min
+  proxy: null                 # OFF (docs/decisions.md #20)
+
+jobspy:
+  sites: [indeed, linkedin, google]
+  country_indeed: India
+  linkedin_fetch_description: true
+  between_sites_delay: 3.0
+  cooldown_short: 1800.0      # LinkedIn / Indeed / Google block -> 30 min
+  cooldown_long: 21600.0      # Glassdoor / Naukri block -> 6 h
+
+  # Every site except LinkedIn uses this broad query.
+  default_query:
+    search_terms:
+      - AI Engineer
+      - Machine Learning Engineer
+      - LLM Engineer
+      - Generative AI Engineer
+      - Backend Engineer
+      - Python Developer
+      - Data Engineer
+      - Software Engineer
+    location: India
+    hours_old: 336            # 14 days (Track 1 default)
+    results_per_site: 10      # kept small for the 2a end-to-end review run
+
+  # LinkedIn's ~10-page budget: fewer terms, full-time, tighter window.
+  linkedin_query:
+    search_terms:
+      - AI Engineer
+      - LLM Engineer
+      - Machine Learning Engineer
+      - Backend Engineer
+    job_type: fulltime
+    hours_old: 168            # 7 days
+    results_per_site: 10      # kept small for the 2a end-to-end review run
+
+path2:
+  enabled: false              # Path-2 discovery slot (not implemented)

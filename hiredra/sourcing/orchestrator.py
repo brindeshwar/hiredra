@@ -18,7 +18,7 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 
 from hiredra.sourcing.config import RunConfig, load_companies
-from hiredra.sourcing.http import Blocked, FetchError, HttpClient
+from hiredra.sourcing.http import Blocked, FetchError, HTTPError, HttpClient
 from hiredra.sourcing.jobspy_source import JobSpySource, SiteOutcome
 from hiredra.sourcing.provider import CompanyEntry, FetchContext, Provider
 from hiredra.sourcing.registry import REGISTRY, route
@@ -35,7 +35,7 @@ def _now_iso() -> str:
 @dataclass(frozen=True, slots=True)
 class CompanyOutcome:
     name: str
-    status: str  # "ok" | "unroutable" | "blocked" | "error" | "skipped"
+    status: str  # "ok" | "unroutable" | "blocked" | "gone" | "error" | "skipped"
     provider: str | None
     jobs: int
     detail: str | None = None
@@ -75,8 +75,12 @@ class RunReport:
 
 
 # The only statuses that push a run to 'partial'. NOT 'empty', NOT 'cooldown',
-# NOT 'unroutable' -- see docs/sourcing.md sec. 9 / the design-chat reasoning:
-# those are normal/expected outcomes, not failures worth flagging on every run.
+# NOT 'unroutable', NOT 'gone' -- see docs/sourcing.md sec. 9 / the design-chat
+# reasoning: those are normal/expected outcomes, not failures worth flagging on
+# every run. 'gone' (a definitive 404) is a stale-roster artifact, not a
+# problem -- common on a large generated company list built from a days-old
+# slug snapshot; it shouldn't read as "this run degraded" any more than
+# 'unroutable' does.
 _PARTIAL_TRIGGERS = frozenset({"blocked", "error"})
 
 
@@ -154,6 +158,16 @@ def run(
                 except Blocked as err:
                     outcomes.append(
                         CompanyOutcome(entry.name, "blocked", provider.name, 0, str(err))
+                    )
+                except HTTPError as err:
+                    # A definitive 404 means the board is gone/renamed -- common with a
+                    # generated company list built from a days-old slug snapshot. Benign,
+                    # like 'unroutable': never a PARTIAL trigger. Any other HTTP status
+                    # (403 without a block marker, 5xx that isn't retried here, etc.) is
+                    # still a real 'error'.
+                    status = "gone" if err.status == 404 else "error"
+                    outcomes.append(
+                        CompanyOutcome(entry.name, status, provider.name, 0, str(err))
                     )
                 except FetchError as err:
                     outcomes.append(

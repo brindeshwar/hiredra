@@ -11,7 +11,7 @@ import time
 import pytest
 
 from hiredra.sourcing.config import Pacing, RunConfig
-from hiredra.sourcing.http import Blocked, FetchError, HttpClient, HttpConfig
+from hiredra.sourcing.http import Blocked, FetchError, HTTPError, HttpClient, HttpConfig
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.jobspy_source import JobSpyConfig, JobSpyResult, SiteOutcome, SiteQuery
 from hiredra.sourcing.orchestrator import run
@@ -179,6 +179,36 @@ def test_unroutable_stays_ok_but_is_reported(tmp_path, ctx):
     assert report.companies[0].status == "unroutable"
     assert report.unroutable == ("Ghost",)
     assert report.status == "ok"
+
+
+def test_404_is_gone_not_error_and_stays_ok(tmp_path, ctx):
+    # A definitive 404 (board renamed/removed -- common on a large generated
+    # company list built from a days-old slug snapshot) is benign, like
+    # 'unroutable', not a PARTIAL trigger.
+    companies = _companies_yaml(tmp_path, [("Acme", "p1"), ("Beta", "p2")])
+    p1 = FakeProvider("p1", error=HTTPError("not found", status=404))
+    p2 = FakeProvider("p2", jobs=[_job(job_id="p2:1")])
+    report = run(
+        _config(companies_path=companies), sink_factory=lambda r: RecordingSink(),
+        run_store=FakeRunStore(), ctx=ctx, registry=(p1, p2),
+        jobspy_source=FakeJobSpySource(), sleep=lambda s: None,
+    )
+    assert [c.status for c in report.companies] == ["gone", "ok"]
+    assert report.status == "ok"
+
+
+def test_non_404_http_error_still_makes_partial(tmp_path, ctx):
+    # Only a 404 gets the benign treatment -- other HTTP errors (a 500 that
+    # wasn't retried away, a malformed-response 400, etc.) still surface loudly.
+    companies = _companies_yaml(tmp_path, [("Acme", "p1")])
+    p1 = FakeProvider("p1", error=HTTPError("server error", status=500))
+    report = run(
+        _config(companies_path=companies), sink_factory=lambda r: RecordingSink(),
+        run_store=FakeRunStore(), ctx=ctx, registry=(p1,),
+        jobspy_source=FakeJobSpySource(), sleep=lambda s: None,
+    )
+    assert report.companies[0].status == "error"
+    assert report.status == "partial"
 
 
 def test_empty_jobspy_site_is_ok_not_partial(ctx):

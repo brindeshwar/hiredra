@@ -32,3 +32,8 @@ data/*
 # Build spec — kept local-only, not published to the repo
 CLAUDE.md
 docs/
+
+# Generated Path-1 company list for max-scale sourcing runs — regenerable
+# data (scripts/generate_company_list.py), not hand-authored config. The
+# curated config/companies.yml stays tracked.
+config/companies.wide.yml
