@@ -118,7 +118,7 @@ def test_passes_location_drops_us_restricted_remote():
 
 def test_passes_location_keeps_and_flags_unknown_when_no_signal():
     r = funnel.passes_location("Backend Engineer", None, None, CONFIG)
-    assert r.keep and r.reason == "unknown" and r.note is None
+    assert r.keep and r.reason == "unknown" and r.note == "location: unknown"
 
 
 def test_passes_location_keeps_and_notes_hybrid_with_no_place():
@@ -185,14 +185,27 @@ def test_run_funnel_flags_onsite_unknown_place_via_job_events():
         "job_id": "hyb1", "url": "u1", "title": "Backend Engineer", "company": "Acme",
         "source": "ashby", "location": "Hybrid", "description": "No years stated.",
     })
+    # a genuinely place-less AND arrangement-less unknown -- real bug found via the
+    # discovery harvest run: onsite_unknown_place was incrementing for every
+    # "location: unknown" note, not just this onsite/hybrid sub-case, because
+    # both share a truthy `note` field.
+    upsert_job(conn, {
+        "job_id": "unk1", "url": "u2", "title": "Backend Engineer", "company": "Acme",
+        "source": "ashby", "location": None, "description": "No years stated.",
+    })
 
     stats = funnel.run_funnel(conn, CONFIG)
 
-    assert stats.onsite_unknown_place == 1
-    assert stats.kept == 1  # retained, not dropped
+    assert stats.unknown_location == 2
+    assert stats.onsite_unknown_place == 1  # only the hybrid one, not the generic unknown too
+    assert stats.kept == 2  # both retained, not dropped
 
     events = [e for e in get_events(conn, "hyb1") if e["kind"] == "note"]
     assert len(events) == 1
     assert events[0]["detail"] == "location: hybrid, place unknown"
+
+    events2 = [e for e in get_events(conn, "unk1") if e["kind"] == "note"]
+    assert len(events2) == 1
+    assert events2[0]["detail"] == "location: unknown"
 
     conn.close()

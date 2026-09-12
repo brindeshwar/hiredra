@@ -151,12 +151,14 @@ def passes_location(
     unknown years. Callers can tell the two keep cases apart via `reason`:
     ``"unknown"`` (no signal, kept by default) vs ``None`` (a definite match).
 
-    A specific unknown shape -- the posting says "Hybrid"/"In-Office" (so we
-    know it's NOT remote) but names no city or country at all -- is also kept
-    (never guessed which place), but flagged via `note` so it stays separable
-    from a genuine no-signal-whatsoever unknown: the owner wants these
-    retained and distinguishable, not lost or silently folded into the
-    ordinary "unknown" bucket.
+    Every "unknown" keep gets a `job_events` note, so a later consumer (e.g.
+    the discovery harvest's confirmed-vs-unknown-only company tagging) can
+    tell a definite match from a kept-by-default one without re-deriving the
+    decision. A specific unknown shape -- the posting says "Hybrid"/
+    "In-Office" (so we know it's NOT remote) but names no city or country at
+    all -- gets its own more specific note: the owner wants these retained
+    and distinguishable, not lost or silently folded into the ordinary
+    "unknown" bucket.
     """
     ok, reason = eligibility(config.location_eligible_for, location, description or "", title or "")
     note = None
@@ -168,6 +170,8 @@ def passes_location(
         # hide a genuinely place-less posting from this flag.
         if parsed["remote"] in ("onsite", "hybrid") and not parsed["countries"]:
             note = f"location: {parsed['remote']}, place unknown"
+        else:
+            note = "location: unknown"
         return LocationResult(True, "unknown", note)
     if ok is False:
         return LocationResult(False, reason)
@@ -251,7 +255,8 @@ def run_funnel(conn, config: FilterConfig) -> FunnelStats:
             stats.unknown_location += 1
         if location.note:
             add_note(conn, job_id, location.note)
-            stats.onsite_unknown_place += 1
+            if location.note.endswith("place unknown"):  # the onsite/hybrid sub-case specifically,
+                stats.onsite_unknown_place += 1           # not every "location: unknown" note
         if not location.keep:
             set_status(conn, job_id, "dropped", detail=f"location: {location.reason}")
             stats.dropped_location += 1
