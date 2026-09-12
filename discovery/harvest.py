@@ -293,7 +293,7 @@ def cmd_export(_args: argparse.Namespace) -> int:
     conn = connect(str(DB_PATH))
     try:
         jobs = conn.execute(
-            "select job_id, company, source, status, status_detail from jobs"
+            "select job_id, company, source, url, status, status_detail from jobs"
         ).fetchall()
         unknown_ids = {
             row["job_id"]
@@ -304,30 +304,41 @@ def cmd_export(_args: argparse.Namespace) -> int:
     finally:
         conn.close()
 
-    tag: dict[tuple[str, str], str] = {}
-    for job_id, company, source, status, status_detail in jobs:
+    # Keyed by (ats, slug) -- the real board identity -- not (ats, company):
+    # `company` is a display label (open-jobs-ingested rows get it from a
+    # lossy kebab-case -> Title Case transform of the slug; self-fetched rows
+    # get it from whatever display name the source list used), never
+    # guaranteed to be the exact fetchable URL token. The slug is instead
+    # recovered from the job's own posting `url` via resolve_ats_slug() --
+    # confirmed by a live spot-check: a naive company-as-slug 404s on real
+    # boards, the url-derived slug 200s.
+    rows: dict[tuple[str, str], tuple[str, str]] = {}  # (ats, slug) -> (company, tag)
+    for job_id, company, source, url, status, status_detail in jobs:
         ats = source[len("open-jobs-"):] if source.startswith("open-jobs-") else source
         if ats not in ATS:
             continue
         dropped_on_location = status == "dropped" and (status_detail or "").startswith("location:")
         if dropped_on_location:
             continue  # never passed location -- not an India/remote-eligible company via this job
-        key = (ats, company)
-        if job_id in unknown_ids:
-            tag.setdefault(key, "unknown")
-        else:
-            tag[key] = "confirmed"  # confirmed always wins, regardless of row order
+        resolved = resolve_ats_slug(url) if url else None
+        if not resolved or resolved[0] != ats:
+            continue  # shouldn't happen for real ATS-sourced job urls; skip rather than guess
+        key = (ats, resolved[1])
+        tag = "unknown" if job_id in unknown_ids else "confirmed"
+        prev = rows.get(key)
+        if prev is None or (prev[1] == "unknown" and tag == "confirmed"):
+            rows[key] = (company, tag)  # confirmed always wins, regardless of row order
 
     companies_csv = EXPORT_DIR / "companies.csv"
     if companies_csv.exists():
         companies_csv.unlink()  # regenerable deliverable, not the frozen corpus
     with open(companies_csv, "w", encoding="utf-8", newline="") as f:
-        f.write("ats,company,tag\n")
-        for (ats, company), t in sorted(tag.items()):
-            f.write(f'{ats},"{company.replace(chr(34), chr(39))}",{t}\n')
-    confirmed = sum(1 for t in tag.values() if t == "confirmed")
-    unknown_only = sum(1 for t in tag.values() if t == "unknown")
-    print(f"wrote {companies_csv}: {len(tag)} companies ({confirmed} confirmed, {unknown_only} unknown-only)")
+        f.write("ats,slug,company,tag\n")
+        for (ats, slug), (company, t) in sorted(rows.items()):
+            f.write(f'{ats},{slug},"{company.replace(chr(34), chr(39))}",{t}\n')
+    confirmed = sum(1 for _, t in rows.values() if t == "confirmed")
+    unknown_only = sum(1 for _, t in rows.values() if t == "unknown")
+    print(f"wrote {companies_csv}: {len(rows)} companies ({confirmed} confirmed, {unknown_only} unknown-only)")
 
     raw_parquet = EXPORT_DIR / "raw.parquet"
     if raw_parquet.exists():
