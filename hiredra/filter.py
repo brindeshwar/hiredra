@@ -7,11 +7,12 @@ jobs at status='fetched'; survivors of the three text stages advance to
 'filtered', failures move to 'dropped' with the killing stage recorded in
 status_detail. Code only -- no LLM call anywhere here.
 
-Liveness (``check_liveness``) is a separate pass, run after ``run_funnel``,
-over status='filtered' -- not folded into the per-job loop above, since it
-needs to see the whole survivor set to group jobs by board before fetching
-(one fetch per company, not one per job). This is also the only stage with a
-network cost, hence last and separate: ``run_funnel`` itself stays pure CPU.
+Liveness is a separate pass and a separate module (``hiredra.liveness``), run
+after ``run_funnel`` over status='filtered' -- not folded into the per-job
+loop above, since it needs to see the whole survivor set to group jobs by
+board before fetching (one fetch per company, not one per job). It's also the
+only 2b stage with a network cost, hence last and separate: ``run_funnel``
+itself stays pure CPU with no sourcing/http imports.
 
     python -m hiredra.filter [--db data/hiredra.db] [--config config/filters.yml]
 """
@@ -21,16 +22,13 @@ from __future__ import annotations
 import argparse
 import re
 import sys
-from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
 
+from hiredra.liveness import check_liveness
 from hiredra.location import eligibility, parse
-from hiredra.sourcing.http import HTTPError, HttpClient, HttpConfig
-from hiredra.sourcing.provider import CompanyEntry, FetchContext, Provider
-from hiredra.sourcing.registry import REGISTRY
 from hiredra.storage import (
     DEFAULT_DB_PATH,
     add_note,
@@ -42,27 +40,6 @@ from hiredra.storage import (
 )
 
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "filters.yml"
-
-# "N years" / "N+ yrs" / "N-M years" -- takes the max of every match, per job.
-_YEARS_RE = re.compile(r"(\d+)\s*\+?\s*(?:-\s*\d+\s*)?(?:years?|yrs?)", re.IGNORECASE)
-
-# Neutralized before generic senior-term matching so a bare "staff" term
-# catches "Staff Engineer" without also catching this generic AI-lab IC title.
-_MTS_RE = re.compile(r"\bmember of (?:the )?technical staff\b|\bmts\b", re.IGNORECASE)
-
-# Indian-market boilerplate: "Educational Qualification: 15 years full time
-# education" means "has a bachelor's degree," not 15 years of work experience.
-# A years match is excluded when "educational qualification" precedes it or
-# "full time education" follows it, each within a short window -- checked
-# directionally (not one wide window centered on the match) so a genuine
-# "N years of experience" match earlier in the same posting (e.g. "Minimum 3
-# Year(s) Of Experience Is Required ... Educational Qualification: 15 years
-# full time education") isn't also caught by the boilerplate a few dozen
-# characters downstream. This is deliberately narrow (two specific phrases),
-# not general experience-context anchoring (deferred to calibration).
-_EDU_QUALIFICATION_RE = re.compile(r"educational qualification", re.IGNORECASE)
-_FULL_TIME_EDUCATION_RE = re.compile(r"full[- ]?time education", re.IGNORECASE)
-_EDUCATION_WINDOW = 45
 
 
 @dataclass(frozen=True)
@@ -88,27 +65,6 @@ def load_filter_config(path: Path | str = DEFAULT_CONFIG_PATH) -> FilterConfig:
     )
 
 
-def extract_max_years(text: str | None) -> int | None:
-    """Max of every 'N years'/'N+ yrs' match in `text`, or None if none found.
-
-    None means unknown -- never a stand-in for zero (docs/repos.md sec 6).
-    A match near "educational qualification" / "full time education" is
-    excluded (real example: "Educational Qualification: 15 years full time
-    education" -- a bachelor's degree, not 15 years of experience); this is a
-    narrow, specific exclusion, not general experience-context anchoring.
-    """
-    if not text:
-        return None
-    matches = []
-    for m in _YEARS_RE.finditer(text):
-        before = text[max(0, m.start() - _EDUCATION_WINDOW) : m.start()]
-        after = text[m.end() : m.end() + _EDUCATION_WINDOW]
-        if _EDU_QUALIFICATION_RE.search(before) or _FULL_TIME_EDUCATION_RE.search(after):
-            continue
-        matches.append(int(m.group(1)))
-    return max(matches) if matches else None
-
-
 def _contains_term(text: str, term: str) -> bool:
     """Whole-phrase, case-insensitive membership.
 
@@ -129,6 +85,11 @@ def title_hits(title: str | None, terms: tuple[str, ...]) -> str | None:
         if _contains_term(title, term):
             return term
     return None
+
+
+# Neutralized before generic senior-term matching so a bare "staff" term
+# catches "Staff Engineer" without also catching this generic AI-lab IC title.
+_MTS_RE = re.compile(r"\bmember of (?:the )?technical staff\b|\bmts\b", re.IGNORECASE)
 
 
 def has_senior_title_term(title: str | None, terms: tuple[str, ...]) -> str | None:
@@ -193,6 +154,45 @@ class SeniorityResult:
     keep: bool
     years: int | None
     reason: str | None  # None iff keep
+
+
+# "N years" / "N+ yrs" / "N-M years" -- takes the max of every match, per job.
+_YEARS_RE = re.compile(r"(\d+)\s*\+?\s*(?:-\s*\d+\s*)?(?:years?|yrs?)", re.IGNORECASE)
+
+# Indian-market boilerplate: "Educational Qualification: 15 years full time
+# education" means "has a bachelor's degree," not 15 years of work experience.
+# A years match is excluded when "educational qualification" precedes it or
+# "full time education" follows it, each within a short window -- checked
+# directionally (not one wide window centered on the match) so a genuine
+# "N years of experience" match earlier in the same posting (e.g. "Minimum 3
+# Year(s) Of Experience Is Required ... Educational Qualification: 15 years
+# full time education") isn't also caught by the boilerplate a few dozen
+# characters downstream. This is deliberately narrow (two specific phrases),
+# not general experience-context anchoring (deferred to calibration).
+_EDU_QUALIFICATION_RE = re.compile(r"educational qualification", re.IGNORECASE)
+_FULL_TIME_EDUCATION_RE = re.compile(r"full[- ]?time education", re.IGNORECASE)
+_EDUCATION_WINDOW = 45
+
+
+def extract_max_years(text: str | None) -> int | None:
+    """Max of every 'N years'/'N+ yrs' match in `text`, or None if none found.
+
+    None means unknown -- never a stand-in for zero (docs/repos.md sec 6).
+    A match near "educational qualification" / "full time education" is
+    excluded (real example: "Educational Qualification: 15 years full time
+    education" -- a bachelor's degree, not 15 years of experience); this is a
+    narrow, specific exclusion, not general experience-context anchoring.
+    """
+    if not text:
+        return None
+    matches = []
+    for m in _YEARS_RE.finditer(text):
+        before = text[max(0, m.start() - _EDUCATION_WINDOW) : m.start()]
+        after = text[m.end() : m.end() + _EDUCATION_WINDOW]
+        if _EDU_QUALIFICATION_RE.search(before) or _FULL_TIME_EDUCATION_RE.search(after):
+            continue
+        matches.append(int(m.group(1)))
+    return max(matches) if matches else None
 
 
 def passes_seniority_gate(
@@ -288,92 +288,6 @@ def run_funnel(conn, config: FilterConfig) -> FunnelStats:
 
         set_status(conn, job_id, "filtered")
         stats.kept += 1
-
-    return stats
-
-
-@dataclass
-class LivenessStats:
-    checked: int = 0         # every status='filtered' job examined
-    boards_checked: int = 0  # distinct company boards re-fetched (ATS jobs only)
-    live: int = 0            # confirmed still in the board's current listing
-    gone: int = 0            # dropped: absent from a fresh listing, or the whole board 404'd
-    unchecked: int = 0       # no board mechanism for this job (JobSpy, or an unresolvable board) -- kept, noted
-    ambiguous: int = 0       # board recheck inconclusive (blocked/timeout/other error) -- kept, unchanged
-
-
-def check_liveness(
-    conn, ctx: FetchContext | None = None, registry: Sequence[Provider] = REGISTRY
-) -> LivenessStats:
-    """Re-verify every 'filtered' job is still live, one fetch per board.
-
-    ATS-sourced jobs are grouped by board (via each provider's own
-    ``_board_url`` -- the same resolver already used to fetch, so an EU Lever
-    host or any other provider-specific quirk is handled for free, not
-    re-derived here) and re-fetched once per group; a job absent from the
-    fresh listing, or a whole board that 404s, is dropped
-    (``status='dropped'``, ``detail='liveness: gone'`` -- reusing the
-    orchestrator's existing 'gone' vocabulary for a confirmed removal, no new
-    ``jobs.status`` value). JobSpy-sourced jobs have no board to re-list --
-    deliberately NOT fetched directly (that would mean scraping Indeed/
-    LinkedIn postings one by one, reopening a boundary this project has held
-    since Path 3 was built); they're kept and flagged
-    ``db.add_note(..., "liveness: unchecked")`` instead, same convention the
-    location stage uses for a kept-by-default job. Anything ambiguous (a
-    block, a timeout, a non-404 error) also keeps the job unchanged -- an
-    inconclusive recheck is never evidence of death.
-    """
-    stats = LivenessStats()
-    owns_ctx = ctx is None
-    if ctx is None:
-        ctx = FetchContext(http=HttpClient(HttpConfig()))
-
-    provider_by_name = {p.name: p for p in registry}
-    try:
-        jobs = list(iter_jobs(conn, status="filtered"))
-
-        # board key -> (provider, a representative entry to re-fetch with, jobs in this group)
-        groups: dict[str, tuple[Provider, CompanyEntry, list[dict]]] = {}
-        for job in jobs:
-            stats.checked += 1
-            provider = provider_by_name.get(job["source"])
-            board_url = None
-            if provider is not None and job["url"]:
-                entry = CompanyEntry(name=job["company"], careers_url=job["url"], provider=provider.name)
-                board_url = provider._board_url(entry)  # reuse: the same resolver fetch() already used
-            if board_url is None:
-                add_note(conn, job["job_id"], "liveness: unchecked")
-                stats.unchecked += 1
-                continue
-            key = f"{provider.name}:{board_url}"
-            if key not in groups:
-                groups[key] = (provider, entry, [])
-            groups[key][2].append(job)
-
-        for provider, entry, group_jobs in groups.values():
-            stats.boards_checked += 1
-            try:
-                fresh_jobs = provider.fetch(entry, ctx)
-            except HTTPError as err:
-                if err.status == 404:  # the whole board is gone -- every survivor from it is too
-                    for job in group_jobs:
-                        set_status(conn, job["job_id"], "dropped", detail="liveness: gone")
-                        stats.gone += 1
-                else:
-                    stats.ambiguous += len(group_jobs)
-            except Exception:  # noqa: BLE001 -- Blocked/other FetchError/anything unexpected: ambiguous, never a drop signal
-                stats.ambiguous += len(group_jobs)
-            else:
-                fresh_ids = {j.job_id for j in fresh_jobs}
-                for job in group_jobs:
-                    if job["job_id"] in fresh_ids:
-                        stats.live += 1
-                    else:
-                        set_status(conn, job["job_id"], "dropped", detail="liveness: gone")
-                        stats.gone += 1
-    finally:
-        if owns_ctx:
-            ctx.http.close()
 
     return stats
 
