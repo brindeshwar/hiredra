@@ -33,7 +33,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB_PATH: Path = _REPO_ROOT / "data" / "hiredra.db"
 
 _SCHEMA_PATH = Path(__file__).with_name("schema.sql")
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 #: run statuses (see schema `runs.status`).
 RUN_STATUSES: tuple[str, ...] = ("running", "ok", "partial", "failed")
@@ -43,6 +43,7 @@ RUN_STATUSES: tuple[str, ...] = ("running", "ok", "partial", "failed")
 STATUSES: tuple[str, ...] = (
     "fetched",
     "filtered",
+    "extracted",
     "scored",
     "tailored",
     "queued",
@@ -136,6 +137,8 @@ def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(_SCHEMA_PATH.read_text(encoding="utf-8"))
     if version < 2:
         _migrate_v2(conn)
+    if version < 3:
+        _migrate_v3(conn)
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
     conn.commit()
 
@@ -146,6 +149,110 @@ def _migrate_v2(conn: sqlite3.Connection) -> None:
     cols = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
     if "first_seen_run" not in cols:
         conn.execute("ALTER TABLE jobs ADD COLUMN first_seen_run TEXT")
+
+
+#: The pre-v3 ``jobs`` columns, in order -- frozen here (not derived from
+#: ``PRAGMA table_info`` at migration time) so the copy step in ``_migrate_v3``
+#: is an explicit, reviewable list rather than "whatever columns happen to be
+#: there."
+_JOBS_V2_COLUMNS: tuple[str, ...] = (
+    "job_id", "url", "title", "company", "description", "years_required",
+    "source", "location", "date_posted", "job_type", "salary", "apply_url",
+    "is_remote", "status", "status_detail", "status_changed_at", "score",
+    "score_features", "outcome", "outcome_at", "outcome_detail",
+    "first_seen_at", "last_seen_at", "updated_at", "first_seen_run",
+)
+
+#: The v3 ``jobs`` table shape, frozen as a migration-time snapshot (mirrors
+#: schema.sql's own CREATE TABLE -- kept in sync by hand, same as any other
+#: point-in-time migration DDL). SQLite can't ALTER a CHECK constraint or add
+#: columns in the middle of a table, so adding both the 'extracted' status and
+#: the four extraction columns means rebuilding the table. Kept as two
+#: separate statements (not one script): the index names are still held by
+#: the renamed-aside old table when the new ``jobs`` is created, so the
+#: indexes can only be (re)created after that old table is dropped.
+_JOBS_V3_TABLE_DDL = """
+CREATE TABLE jobs (
+    job_id            TEXT PRIMARY KEY,
+    url               TEXT NOT NULL UNIQUE,
+    title             TEXT NOT NULL,
+    company           TEXT NOT NULL,
+    description       TEXT,
+    years_required    INTEGER,
+    source            TEXT NOT NULL,
+    location          TEXT,
+    date_posted       TEXT,
+    job_type          TEXT,
+    salary            TEXT,
+    apply_url         TEXT,
+    is_remote         INTEGER,
+    status            TEXT NOT NULL DEFAULT 'fetched'
+                          CHECK (status IN (
+                              'fetched','filtered','extracted','scored','tailored',
+                              'queued','applied','outcome','dropped')),
+    status_detail     TEXT,
+    status_changed_at TEXT NOT NULL,
+    skills                 TEXT,
+    domain_bucket          TEXT,
+    legitimacy             TEXT,
+    extraction_confidence  TEXT,
+    score             REAL,
+    score_features    TEXT,
+    outcome           TEXT,
+    outcome_at        TEXT,
+    outcome_detail    TEXT,
+    first_seen_at     TEXT NOT NULL,
+    last_seen_at      TEXT NOT NULL,
+    updated_at        TEXT NOT NULL,
+    first_seen_run    TEXT
+);
+"""
+
+_JOBS_V3_INDEX_DDL = """
+CREATE INDEX idx_jobs_status        ON jobs (status);
+CREATE INDEX idx_jobs_source        ON jobs (source);
+CREATE INDEX idx_jobs_company_title ON jobs (company, title);
+CREATE INDEX idx_jobs_outcome       ON jobs (outcome);
+CREATE INDEX idx_jobs_date_posted   ON jobs (date_posted);
+"""
+
+
+def _migrate_v3(conn: sqlite3.Connection) -> None:
+    """v2 → v3: add the skill-extraction columns and the 'extracted' status.
+
+    SQLite has no ALTER for a CHECK constraint, so this rebuilds ``jobs``:
+    rename it aside (its indexes go with it, still under their old names),
+    create the new-shaped table, copy every pre-v3 column across explicitly,
+    drop the renamed-aside table (freeing the index names), recreate the
+    indexes on the new table, and verify ``job_events``'s foreign key into
+    ``jobs`` survived the swap.
+
+    ``legacy_alter_table`` matters here: modern SQLite's default RENAME
+    TABLE behavior rewrites *other* tables' foreign-key definitions to keep
+    pointing at the renamed table by name -- exactly wrong for this "rename
+    the old one out of the way, put a new one in its place" pattern, since
+    ``job_events``'s FK would end up following ``jobs_old`` and go dangling
+    once it's dropped. ``legacy_alter_table = ON`` makes RENAME a pure name
+    swap, so ``job_events``'s (unchanged) ``REFERENCES jobs (job_id)`` text
+    resolves to the *new* ``jobs`` table once it exists -- SQLite's own
+    documented approach for this exact rebuild pattern.
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
+    if "skills" in cols:
+        return  # a fresh DB's schema.sql already created the v3 shape
+    conn.execute("PRAGMA foreign_keys = OFF")
+    conn.execute("PRAGMA legacy_alter_table = ON")
+    conn.execute("ALTER TABLE jobs RENAME TO jobs_old")
+    conn.execute("PRAGMA legacy_alter_table = OFF")
+    conn.executescript(_JOBS_V3_TABLE_DDL)
+    col_list = ", ".join(_JOBS_V2_COLUMNS)
+    conn.execute(f"INSERT INTO jobs ({col_list}) SELECT {col_list} FROM jobs_old")
+    conn.execute("DROP TABLE jobs_old")
+    conn.executescript(_JOBS_V3_INDEX_DDL)
+    bad_fk = conn.execute("PRAGMA foreign_key_check").fetchall()
+    if bad_fk:
+        raise RuntimeError(f"v3 migration broke a foreign key: {bad_fk}")
+    conn.execute("PRAGMA foreign_keys = ON")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -269,6 +376,39 @@ def set_years_required(
         conn.execute(
             "UPDATE jobs SET years_required = ?, updated_at = ? WHERE job_id = ?",
             (years, _now(), job_id),
+        )
+
+
+def set_extraction(
+    conn: sqlite3.Connection,
+    job_id: str,
+    *,
+    skills: str,
+    domain_bucket: str | None,
+    legitimacy: str | None,
+    extraction_confidence: str,
+) -> None:
+    """Store Step 3's skill-extraction output.
+
+    Not a status change and not an event — same convention as
+    ``set_years_required``: a stored feature, written once per job regardless
+    of what the caller does with ``status`` next. ``skills`` is a JSON string
+    (a list of ``{name, requirement}``, already vocab-canonicalized by the
+    caller — this function does not touch the vocabulary). ``domain_bucket``/
+    ``legitimacy`` are ``None`` on a too-thin-to-call skip; ``skills``/
+    ``extraction_confidence`` are always given (``"[]"`` / ``"low"`` for a
+    skip).
+    """
+    with conn:
+        row = conn.execute(
+            "SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"no job with job_id {job_id!r}")
+        conn.execute(
+            "UPDATE jobs SET skills = ?, domain_bucket = ?, legitimacy = ?, "
+            "extraction_confidence = ?, updated_at = ? WHERE job_id = ?",
+            (skills, domain_bucket, legitimacy, extraction_confidence, _now(), job_id),
         )
 
 
@@ -545,3 +685,29 @@ def clear_cooldown(conn: sqlite3.Connection, key: str | None = None) -> None:
             conn.execute("DELETE FROM cooldowns")
         else:
             conn.execute("DELETE FROM cooldowns WHERE key = ?", (key,))
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# skill_vocab (v3) — the growing canonical skill vocabulary (build step 3,
+# see hiredra/vocab.py for the resolve logic that calls these).
+# ─────────────────────────────────────────────────────────────────────────────
+def touch_skill_vocab(conn: sqlite3.Connection, name: str) -> None:
+    """Record a sighting of ``name``: insert it (``seen_count=1``) if new,
+    else bump ``seen_count``. ``name`` is stored exactly as given — callers
+    normalize case/whitespace before calling, this function does no folding.
+    """
+    with conn:
+        conn.execute(
+            "INSERT INTO skill_vocab (name, first_seen_at, seen_count) "
+            "VALUES (?, ?, 1) "
+            "ON CONFLICT(name) DO UPDATE SET seen_count = seen_count + 1",
+            (name, _now()),
+        )
+
+
+def get_skill_vocab(conn: sqlite3.Connection, name: str) -> dict | None:
+    """Exact lookup by canonical name (case-sensitive — fold before calling)."""
+    row = conn.execute(
+        "SELECT * FROM skill_vocab WHERE name = ?", (name,)
+    ).fetchone()
+    return dict(row) if row is not None else None

@@ -42,10 +42,18 @@ CREATE TABLE IF NOT EXISTS jobs (
     -- pipeline status (docs/sourcing.md sec. 10, CLAUDE.md sec. 7)
     status            TEXT NOT NULL DEFAULT 'fetched'
                           CHECK (status IN (
-                              'fetched','filtered','scored','tailored',
+                              'fetched','filtered','extracted','scored','tailored',
                               'queued','applied','outcome','dropped')),
     status_detail     TEXT,                    -- why we're here (esp. drop reason)
     status_changed_at TEXT NOT NULL,           -- ISO-8601 UTC
+
+    -- skill extraction (build step 3; NULL until step 3 runs). Also NULL
+    -- (domain_bucket/legitimacy) on a too-thin-to-call skip -- extraction_
+    -- confidence is 'low' in that case, never guessed as anything else.
+    skills                 TEXT,               -- JSON array of {name, requirement}
+    domain_bucket          TEXT,               -- agent_llm|backend|data|ml|generic_swe|other
+    legitimacy             TEXT,               -- legitimate|suspect|likely_ghost
+    extraction_confidence  TEXT,               -- high|low
 
     -- scoring-ledger space (build step 6 finalizes; NULL until then)
     score             REAL,
@@ -129,4 +137,18 @@ CREATE TABLE IF NOT EXISTS cooldowns (
     until      REAL NOT NULL,
     tripped_at TEXT NOT NULL,
     reason     TEXT
+);
+
+-- ---------------------------------------------------------------
+-- skill_vocab (v3) -- the flat, growing canonical skill vocabulary
+-- (build step 3). name = canonical, case-folded. Step 3 only dedupes
+-- exact (case-insensitive) repeats; the embed-check that catches
+-- near-duplicate spellings is Step 4 machinery (docs/graph.md sec 5's
+-- overlay match) and is stubbed out until the graph/embedder exist.
+-- This table is also the seed Step 4 reads to build `market` nodes.
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS skill_vocab (
+    name          TEXT PRIMARY KEY,
+    first_seen_at TEXT NOT NULL,
+    seen_count    INTEGER NOT NULL DEFAULT 1
 );

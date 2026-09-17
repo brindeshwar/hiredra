@@ -17,12 +17,13 @@ def _cols(conn, table) -> set[str]:
     return {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
 
 
-def test_fresh_db_is_v2(tmp_path):
+def test_fresh_db_is_current_version(tmp_path):
     conn = db.connect(tmp_path / "fresh.db")
     db.init_db(conn)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
-    assert {"jobs", "job_events", "runs", "cooldowns"} <= _tables(conn)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
+    assert {"jobs", "job_events", "runs", "cooldowns", "skill_vocab"} <= _tables(conn)
     assert "first_seen_run" in _cols(conn, "jobs")
+    assert "skills" in _cols(conn, "jobs")
     conn.close()
 
 
@@ -30,7 +31,7 @@ def test_init_db_is_idempotent(tmp_path):
     conn = db.connect(tmp_path / "x.db")
     db.init_db(conn)
     db.init_db(conn)  # must not raise
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     conn.close()
 
 
@@ -74,11 +75,12 @@ def test_v1_to_v2_migration_preserves_data(tmp_path):
     conn = db.connect(path)
     db.init_db(conn)
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 2
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     assert {"runs", "cooldowns"} <= _tables(conn)
     row = conn.execute("SELECT * FROM jobs WHERE job_id='legacy:1'").fetchone()
     assert row["title"] == "Old Role"
     assert "first_seen_run" in row.keys() and row["first_seen_run"] is None  # NULL for legacy
+    assert "skills" in row.keys() and row["skills"] is None  # NULL through v3 too
 
     db.init_db(conn)  # idempotent re-run
     assert conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 1

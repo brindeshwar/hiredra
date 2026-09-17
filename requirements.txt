@@ -16,3 +16,12 @@ pyyaml>=6.0
 # markdownify pandas numpy regex) yourself.
 python-jobspy>=1.1.79
 pandas>=2.0
+
+# skill extraction -- Gemini via LangChain/LangGraph only (build step 3,
+# CLAUDE.md sec 7). Pinned tightly (==), not >=: LangChain breaks across
+# minors far more often than the deps above, and a future `pip install -r`
+# pulling a newer minor mid-project is exactly the kind of drift this
+# project avoids. Bump deliberately, re-verify the smoke test after.
+langchain==1.4.1
+langchain-google-genai==4.4.0
+langgraph==1.2.11

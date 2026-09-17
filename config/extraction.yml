@@ -1,0 +1,16 @@
+# config/extraction.yml -- Step 3 (skill extraction) tunables.
+# Owner-editable; the parsing/preprocessing engine itself stays code, same
+# split as config/filters.yml's ALLOW/BLOCK lists vs their matcher.
+
+# Below this many characters of PREPROCESSED JD text (after boilerplate/
+# footer stripping, backslash-unescaping, blank-line collapse -- see
+# hiredra/extraction.py's preprocess()), skip the LLM call entirely: mark
+# the job extraction_confidence=low with a "skipped-thin" note, keep it at
+# status='extracted' for review, never drop it. Characterization sample's
+# thinnest genuinely-real JD was 184 raw chars; 200 sits just above that.
+min_description_chars: 200
+
+# Gemini free-tier pacing (gemini-3.5-flash-lite): 15 RPM. A plain minimum
+# gap between calls, not a token-bucket/learned-rate scheme -- see
+# hiredra/extraction.py's _pace().
+requests_per_minute: 15
