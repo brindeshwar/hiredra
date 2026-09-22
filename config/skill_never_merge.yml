@@ -1,0 +1,20 @@
+# config/skill_never_merge.yml -- owner-editable list of skill pairs that look
+# alike but are DIFFERENT skills. They are never proposed by `merges`, in any
+# band, on any future run (so a rejected pair doesn't come back every time).
+# Format: a list of two-name pairs; order doesn't matter.
+#
+# Starter entries: pairs from the first real dry-run that are clearly distinct.
+# Edit freely.
+
+never_merge:
+  - [sql, sql server]
+  - [react, react native]
+  - [machine learning, deep learning]
+  - [devops, azure devops]
+  - [gitlab, gitlab ci]
+  - [observability, data observability]
+  - [vector databases, vector embeddings]
+  - [data security, data privacy]
+  - [c, c++]
+  - [c, c#]
+  - [c++, c#]

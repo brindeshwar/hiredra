@@ -140,15 +140,54 @@ CREATE TABLE IF NOT EXISTS cooldowns (
 );
 
 -- ---------------------------------------------------------------
--- skill_vocab (v3) -- the flat, growing canonical skill vocabulary
--- (build step 3). name = canonical, case-folded. Step 3 only dedupes
--- exact (case-insensitive) repeats; the embed-check that catches
--- near-duplicate spellings is Step 4 machinery (docs/graph.md sec 5's
--- overlay match) and is stubbed out until the graph/embedder exist.
--- This table is also the seed Step 4 reads to build `market` nodes.
+-- skill_vocab (v3, extended in v4) -- the growing canonical skill
+-- vocabulary AND the Step 4 graph's node table (docs/graph.md sec 2:
+-- one embedded index, not a graph plus a vector store). name =
+-- canonical, case-folded. Step 3 wrote (name, first_seen_at,
+-- seen_count); v4 adds the rest of the Skill object:
+--   vector     float32 little-endian BLOB, L2-normalized, NULL until
+--              embedded (768 x 4 = 3072 bytes at the configured dims)
+--   embed_tag  the version tag the vector was made under
+--              (model|dims|prefix -- hiredra.graph.config); a row whose
+--              tag differs from the live config is STALE and is
+--              re-embedded before scoring
+--   mine       1 = the owner has it (overlay from the master profile;
+--              deferred -- nothing sets it yet), else a market/JD node
+--   level      only if mine (docs/graph.md sec 2)
+--   source     where the node first came from. 'profile' is here now
+--              because a CHECK can't be altered without a table rebuild
+--   edges      JSON list, ALWAYS '[]' through Phase A (docs/graph.md sec 3)
+-- seen_count counts sightings in OUR jobs only: market-harvested nodes
+-- start at 0, so it stays meaningful for yield analysis.
+-- No index on the v4 columns on purpose: init_db runs this script BEFORE
+-- migrations, so an index on a column a v3 DB doesn't have yet would
+-- fail; the table is a few thousand rows and every scan of it is cheap.
 -- ---------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS skill_vocab (
     name          TEXT PRIMARY KEY,
     first_seen_at TEXT NOT NULL,
-    seen_count    INTEGER NOT NULL DEFAULT 1
+    seen_count    INTEGER NOT NULL DEFAULT 1,
+    vector        BLOB,
+    embed_tag     TEXT,
+    mine          INTEGER NOT NULL DEFAULT 0 CHECK (mine IN (0, 1)),
+    level         TEXT CHECK (level IS NULL OR level IN ('production','built-with','learned','interview-ready')),
+    source        TEXT NOT NULL DEFAULT 'jd' CHECK (source IN ('market','jd','profile')),
+    edges         TEXT NOT NULL DEFAULT '[]'
 );
+
+-- ---------------------------------------------------------------
+-- skill_alias (v4) -- a spelling that was merged into a canonical node
+-- ("fast api" -> "fastapi"). A table, not a JSON list on the node, so
+-- "have I seen this exact string before?" is one indexed lookup: that
+-- is what makes a merged spelling a cache hit instead of a fresh embed
+-- call. Invariant (enforced by the helpers in hiredra.storage.db): an
+-- alias string is never also a skill_vocab.name -- a string is a node or
+-- an alias, not both. Aliases are always flat (one hop to a node).
+-- ---------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS skill_alias (
+    alias      TEXT PRIMARY KEY,
+    canonical  TEXT NOT NULL REFERENCES skill_vocab (name) ON DELETE CASCADE,
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_skill_alias_canonical ON skill_alias (canonical);

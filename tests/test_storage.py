@@ -315,7 +315,7 @@ def test_migrate_v3_rebuilds_jobs_and_preserves_job_events_fk():
 
     db.init_db(raw)  # runs _migrate_v3
 
-    assert raw.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert raw.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION  # v2 -> v3 -> v4 in one init_db
     cols = {r[1] for r in raw.execute("PRAGMA table_info(jobs)")}
     assert {"skills", "domain_bucket", "legitimacy", "extraction_confidence"} <= cols
 
@@ -335,6 +335,6 @@ def test_migrate_v3_rebuilds_jobs_and_preserves_job_events_fk():
     raw.close()
 
 
-def test_migrate_v3_is_a_noop_on_an_already_v3_db(conn):
+def test_migrate_v3_is_a_noop_on_an_already_current_db(conn):
     db.init_db(conn)  # conn fixture already ran init_db once; run again
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 3
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION

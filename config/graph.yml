@@ -1,0 +1,106 @@
+# config/graph.yml -- Step 4 (graph foundation + per-skill fit) tunables.
+# Owner-editable. Loading is STRICT: an unknown key anywhere is an error.
+# Anything under `embedding:` (model / dimensions / prefix) is part of the
+# stored embedding version tag -- changing it makes every stored vector stale,
+# and the version gate re-embeds the whole index before the next scoring run.
+
+embedding:
+  # Stable model id, confirmed against the live models.list on 2026-09-21.
+  # There is no "gemini-embedding-002"; the ids are gemini-embedding-2,
+  # gemini-embedding-2-preview and gemini-embedding-001.
+  model: gemini-embedding-2
+
+  # Output dimensionality (MRL, 128-3072). Cosines were identical to ~2 dp at
+  # 768 / 1536 / 3072 on the probe set, so 768 (3 KB/vector) is enough.
+  dimensions: 768
+
+  # Text prepended to every skill string before embedding. gemini-embedding-2
+  # has no task_type parameter -- the task is a text prefix (e.g.
+  # "task: sentence similarity | query: "). Bare (empty) spreads related vs
+  # unrelated skills further apart than the similarity prefix, which matters
+  # because fit = s in the adjacent band (docs/scoring.md sec 4). Step 5 may
+  # revisit; the version gate makes changing it safe.
+  prefix: ""
+
+  # How many skills go in ONE HTTP request. One request is one batchEmbedContents
+  # call: many inputs in, many SEPARATE vectors out (proven offline against the
+  # real SDK -- 120 skills = 3 requests of 50/50/20). 100 is the ceiling: the
+  # LangChain wrapper documents it and a 100-input request worked live; the
+  # Google docs do not state a maximum, so nothing above 100 has been tried.
+  # Smaller chunks save to the DB more often, so an interrupted build loses less.
+  inputs_per_request: 50
+
+limits:
+  # Google's real numbers for this model on the free tier (AI Studio dashboard).
+  # IMPORTANT: Google counts EVERY INPUT inside a batch as one "request". A
+  # batch of 50 skills is ONE HTTP call but spends 50 of the 100 requests/min
+  # and 50 of the 1,000 requests/day. So batching cannot lower these counts; it
+  # only saves HTTP round trips. (Evidence: ~959 counted requests for ~959
+  # skills sent, while our client made ~20 HTTP calls.)
+  requests_per_minute: 100
+  tokens_per_minute: 30000
+  requests_per_day: 1000       # resets at midnight Pacific (= 12:30 IST)
+  # Stay this fraction under every limit (0.90 -> 90/min, 27,000 tokens/min,
+  # 900/day). The daily counter is local and advisory (Google is the source of
+  # truth), so it needs room for requests made outside this tool.
+  headroom: 0.90
+
+dedup:
+  # Near-duplicate merge in THREE BANDS (owner-approved; hiredra/graph/merge.py).
+  # Cosine alone cannot tell synonyms from siblings (genai ~ generative ai 0.896
+  # is the same skill; machine learning ~ deep learning 0.894 is not), so cosine
+  # only sorts pairs into bands. Merges are NEVER applied without the dry-run
+  # review file and `merges --apply`.
+  #   AUTO   (pre-approved in the file): names that are the same after
+  #          normalising (case, hyphen/space, plural, "2.0"), OR cosine >=
+  #          auto_cosine when neither name contains the other and they are not a
+  #          version variant (oauth / oauth2).
+  #   REVIEW (approve: false -- you tick it): cosine >= review_cosine that is not
+  #          AUTO (one name contains the other: sql / sql server; version
+  #          variants: css / css3).
+  #   LEAVE: everything else. Pairs from `threshold` up to review_cosine are
+  #          HIDDEN by default (about half were wrong on the first real data);
+  #          `merges --show-low` lists them.
+  # A missed merge is cheap (fit already gives full credit at cosine >= have);
+  # a wrong merge loses a real distinction -- so be conservative.
+  # PROVISIONAL until Step 5.
+  threshold: 0.90        # the lowest cosine ever considered
+  review_cosine: 0.93    # below this (and >= threshold) a pair is hidden unless --show-low
+  auto_cosine: 0.96
+
+fit:
+  # PLACEHOLDER thresholds for the per-skill fit mechanic (docs/scoring.md
+  # sec 4): s >= have -> 1.0 ; adj <= s < have -> s ; s < adj -> 0.0.
+  # NOT calibrated -- Step 5's F1 sweep sets the real values for this model.
+  have: 0.90
+  adj: 0.70
+
+harvest:
+  # Market vocabulary comes from open-jobs' OWN skill fields (CC0), not from
+  # Gemini calls: each enriched posting carries enrichment_json.data.
+  # skills_required / skills_preferred (docs/repos.md sec 7). Only ~1-3% of
+  # rows are enriched, and only in the FULL per-ATS parquet (the lite/ diffs
+  # strip enrichment_json). Read with DuckDB column projection over HTTPS, so
+  # only that column transfers -- no full downloads.
+  export_base_url: https://backend.dehnbostele.workers.dev/data/exports
+  export_date: latest             # or a YYYY-MM-DD export directory
+  ats: [ashby, lever, greenhouse] # the 3 sampled files; expand only if a real gap shows
+
+  # Breadth levers (owner-set): tech role families only, and a skill must appear
+  # in at least min_df enriched jobs. The tail below df 3 is mostly junk
+  # ("service levels", "alarms", "art market"); the head is clean canonical.
+  role_families: [software_engineering, data, ml_ai, devops_sre]
+  min_df: 3
+
+  # Light sanity filter on the surviving tokens.
+  max_words: 4
+  max_chars: 40
+
+gate:
+  # Version-consistency canary (docs/graph.md sec 4b): at run start, re-embed
+  # these existing nodes and require cosine >= canary_min_cosine against their
+  # stored vectors. Embedding is deterministic (measured cosine 1.000000), so a
+  # drop means the provider changed weights under the same model id -> re-embed
+  # the whole index before scoring. Nodes that don't exist yet are skipped.
+  canary_skills: [python, kubernetes, postgresql]
+  canary_min_cosine: 0.999

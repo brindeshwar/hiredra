@@ -33,7 +33,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB_PATH: Path = _REPO_ROOT / "data" / "hiredra.db"
 
 _SCHEMA_PATH = Path(__file__).with_name("schema.sql")
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 #: run statuses (see schema `runs.status`).
 RUN_STATUSES: tuple[str, ...] = ("running", "ok", "partial", "failed")
@@ -139,6 +139,8 @@ def init_db(conn: sqlite3.Connection) -> None:
         _migrate_v2(conn)
     if version < 3:
         _migrate_v3(conn)
+    if version < 4:
+        _migrate_v4(conn)
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
     conn.commit()
 
@@ -253,6 +255,50 @@ def _migrate_v3(conn: sqlite3.Connection) -> None:
     if bad_fk:
         raise RuntimeError(f"v3 migration broke a foreign key: {bad_fk}")
     conn.execute("PRAGMA foreign_keys = ON")
+
+
+#: The v4 ``skill_vocab`` additions, in order. The DDL text is identical to
+#: schema.sql's own CREATE TABLE (kept in sync by hand, like ``_JOBS_V3_*``), so a
+#: migrated table and a fresh one have the same shape and the same CHECKs.
+_SKILL_VOCAB_V4_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("vector", "BLOB"),
+    ("embed_tag", "TEXT"),
+    ("mine", "INTEGER NOT NULL DEFAULT 0 CHECK (mine IN (0, 1))"),
+    (
+        "level",
+        "TEXT CHECK (level IS NULL OR level IN "
+        "('production','built-with','learned','interview-ready'))",
+    ),
+    ("source", "TEXT NOT NULL DEFAULT 'jd' CHECK (source IN ('market','jd','profile'))"),
+    ("edges", "TEXT NOT NULL DEFAULT '[]'"),
+)
+
+#: Vocabulary for ``skill_vocab.level`` / ``.source`` -- mirrors the CHECKs above.
+SKILL_LEVELS: tuple[str, ...] = ("production", "built-with", "learned", "interview-ready")
+SKILL_SOURCES: tuple[str, ...] = ("market", "jd", "profile")
+
+
+def _migrate_v4(conn: sqlite3.Connection) -> None:
+    """v3 -> v4: extend ``skill_vocab`` into the graph's node table and add
+    ``skill_alias`` (the latter comes from ``schema.sql``'s CREATE TABLE IF NOT
+    EXISTS, which ``init_db`` has already applied).
+
+    Unlike v3 this needs no table rebuild: every added column is either nullable
+    or NOT NULL with a constant default, which ``ALTER TABLE ADD COLUMN`` handles
+    in place, and existing rows pick up the defaults (``mine=0``, ``source='jd'``
+    -- Step 3 wrote them from real JDs -- ``edges='[]'``, no vector). Each column
+    is added only if absent, so a half-finished run resumes and a fresh DB (whose
+    schema.sql already has them) is a no-op. ``jobs`` and ``job_events`` are not
+    touched at all; the closing ``foreign_key_check`` is the same
+    belt-and-braces guard v3 used, to prove the FK into ``jobs`` is still intact.
+    """
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(skill_vocab)")}
+    for name, ddl in _SKILL_VOCAB_V4_COLUMNS:
+        if name not in cols:
+            conn.execute(f"ALTER TABLE skill_vocab ADD COLUMN {name} {ddl}")
+    bad_fk = conn.execute("PRAGMA foreign_key_check").fetchall()
+    if bad_fk:
+        raise RuntimeError(f"v4 migration broke a foreign key: {bad_fk}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -711,3 +757,183 @@ def get_skill_vocab(conn: sqlite3.Connection, name: str) -> dict | None:
         "SELECT * FROM skill_vocab WHERE name = ?", (name,)
     ).fetchone()
     return dict(row) if row is not None else None
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# skill graph nodes + aliases (v4) — build step 4. Persistence only: the Skill
+# object, the vector codec and the embed/merge policy live in hiredra.graph;
+# vectors cross this boundary as opaque ``bytes`` so storage stays stdlib-only.
+# ─────────────────────────────────────────────────────────────────────────────
+def add_market_skill(conn: sqlite3.Connection, name: str) -> bool:
+    """Insert ``name`` as a ``source='market'`` node (``seen_count=0``: it has
+    never been seen in one of OUR jobs). Insert-or-ignore: an existing node is
+    left untouched (its ``seen_count``/``source`` are not bumped or rewritten),
+    and a name that is already a merged alias is skipped -- a string is a node
+    or an alias, never both. Returns True only if a new row was inserted.
+    ``name`` is stored exactly as given (fold before calling).
+    """
+    with conn:
+        if conn.execute("SELECT 1 FROM skill_alias WHERE alias = ?", (name,)).fetchone():
+            return False
+        cur = conn.execute(
+            "INSERT INTO skill_vocab (name, first_seen_at, seen_count, source) "
+            "VALUES (?, ?, 0, 'market') ON CONFLICT(name) DO NOTHING",
+            (name, _now()),
+        )
+        return cur.rowcount == 1
+
+
+def resolve_alias(conn: sqlite3.Connection, name: str) -> str | None:
+    """The canonical node ``name`` was merged into, or None if it isn't an alias."""
+    row = conn.execute(
+        "SELECT canonical FROM skill_alias WHERE alias = ?", (name,)
+    ).fetchone()
+    return row["canonical"] if row is not None else None
+
+
+def add_alias(conn: sqlite3.Connection, alias: str, canonical: str) -> None:
+    """Record that ``alias`` is another spelling of the existing node ``canonical``.
+
+    Raises ``ValueError`` if ``canonical`` is not a node, if ``alias`` is itself a
+    node (merge it with ``merge_skill`` instead -- that is what keeps seen_count
+    and existing aliases from being lost), or if ``alias`` is already an alias of
+    a DIFFERENT node (silently retargeting an alias would rewrite history).
+    Re-adding an identical alias is a no-op.
+    """
+    if alias == canonical:
+        raise ValueError(f"alias {alias!r} cannot point at itself")
+    with conn:
+        if conn.execute("SELECT 1 FROM skill_vocab WHERE name = ?", (canonical,)).fetchone() is None:
+            raise ValueError(f"canonical skill {canonical!r} does not exist")
+        if conn.execute("SELECT 1 FROM skill_vocab WHERE name = ?", (alias,)).fetchone() is not None:
+            raise ValueError(f"{alias!r} is a canonical skill, not an alias -- use merge_skill")
+        existing = resolve_alias(conn, alias)
+        if existing is not None:
+            if existing != canonical:
+                raise ValueError(f"alias {alias!r} already points at {existing!r}, not {canonical!r}")
+            return
+        conn.execute(
+            "INSERT INTO skill_alias (alias, canonical, created_at) VALUES (?, ?, ?)",
+            (alias, canonical, _now()),
+        )
+
+
+def merge_skill(conn: sqlite3.Connection, dup: str, canonical: str) -> None:
+    """Fold node ``dup`` into node ``canonical`` (one transaction).
+
+    ``canonical`` gains ``dup``'s ``seen_count`` and the earlier ``first_seen_at``;
+    any aliases that pointed at ``dup`` are re-pointed at ``canonical`` (aliases
+    stay one hop, never a chain); ``dup`` is deleted and recorded as an alias of
+    ``canonical``. ``dup``'s vector is dropped -- the surviving node's is kept.
+    Which node survives is the caller's decision (this is mechanism, not policy).
+
+    A ``mine`` node is never absorbed (``ValueError``): the owner's capability is
+    edited in the master profile, not silently folded away. ``jobs.skills`` still
+    stores whatever spelling extraction wrote; ``resolve_alias`` maps it back.
+    """
+    if dup == canonical:
+        raise ValueError("cannot merge a skill into itself")
+    with conn:
+        d = conn.execute("SELECT * FROM skill_vocab WHERE name = ?", (dup,)).fetchone()
+        c = conn.execute("SELECT * FROM skill_vocab WHERE name = ?", (canonical,)).fetchone()
+        if d is None or c is None:
+            missing = dup if d is None else canonical
+            raise ValueError(f"skill {missing!r} does not exist")
+        if d["mine"]:
+            raise ValueError(f"{dup!r} is a 'mine' skill and is never merged away")
+        conn.execute(
+            "UPDATE skill_vocab SET seen_count = seen_count + ?, "
+            "first_seen_at = MIN(first_seen_at, ?) WHERE name = ?",
+            (d["seen_count"], d["first_seen_at"], canonical),
+        )
+        conn.execute("UPDATE skill_alias SET canonical = ? WHERE canonical = ?", (canonical, dup))
+        conn.execute("DELETE FROM skill_vocab WHERE name = ?", (dup,))
+        conn.execute(
+            "INSERT INTO skill_alias (alias, canonical, created_at) VALUES (?, ?, ?)",
+            (dup, canonical, _now()),
+        )
+
+
+def iter_skill_vocab(conn: sqlite3.Connection) -> list[dict]:
+    """Every node as a plain dict (all columns incl. ``vector`` bytes), by name."""
+    return [dict(r) for r in conn.execute("SELECT * FROM skill_vocab ORDER BY name")]
+
+
+def list_skill_aliases(conn: sqlite3.Connection) -> dict[str, list[str]]:
+    """``{canonical: [aliases…]}`` (aliases sorted), only for nodes that have any."""
+    out: dict[str, list[str]] = {}
+    for r in conn.execute("SELECT canonical, alias FROM skill_alias ORDER BY canonical, alias"):
+        out.setdefault(r["canonical"], []).append(r["alias"])
+    return out
+
+
+def skills_needing_embedding(
+    conn: sqlite3.Connection,
+    embed_tag: str,
+    limit: int | None = None,
+    weights: Mapping[str, int] | None = None,
+) -> list[str]:
+    """Nodes with no vector yet, or one made under a different ``embed_tag``
+    (stale). This IS the resumable work queue for an index build: a chunk's
+    vectors commit before the next chunk starts, so re-running just continues.
+    Highest-value first -- ``mine`` nodes, then the most-sighted in OUR jobs,
+    then (if ``weights`` is given, e.g. market document frequency) the most
+    common, then by name -- so an interrupted build has embedded what scoring
+    is most likely to need.
+    """
+    rows = conn.execute(
+        "SELECT name, mine, seen_count FROM skill_vocab WHERE vector IS NULL OR embed_tag IS NOT ?",
+        (embed_tag,),
+    ).fetchall()
+    w = weights or {}
+    rows.sort(key=lambda r: (-r["mine"], -r["seen_count"], -w.get(r["name"], 0), r["name"]))
+    names = [r["name"] for r in rows]
+    return names if limit is None else names[:limit]
+
+
+def skill_index_status(conn: sqlite3.Connection, embed_tag: str) -> dict[str, int]:
+    """Counts describing the embedded index against the live ``embed_tag``:
+    ``total`` nodes, ``current`` (vector under this tag), ``stale`` (a vector
+    under another tag), ``unembedded`` (no vector), plus ``market``/``jd``/
+    ``profile`` node counts and ``aliases``."""
+    row = conn.execute(
+        "SELECT COUNT(*) AS total, "
+        "SUM(vector IS NOT NULL AND embed_tag IS ?) AS current, "
+        "SUM(vector IS NOT NULL AND embed_tag IS NOT ?) AS stale, "
+        "SUM(vector IS NULL) AS unembedded, "
+        "SUM(source = 'market') AS market, SUM(source = 'jd') AS jd, "
+        "SUM(source = 'profile') AS profile FROM skill_vocab",
+        (embed_tag, embed_tag),
+    ).fetchone()
+    out = {k: int(row[k] or 0) for k in row.keys()}
+    out["aliases"] = conn.execute("SELECT COUNT(*) FROM skill_alias").fetchone()[0]
+    return out
+
+
+def invalidate_skill_vectors(conn: sqlite3.Connection) -> int:
+    """Drop EVERY stored vector and its tag, so the whole index re-enters the
+    embedding queue. Used when the canary shows the provider changed weights
+    under an unchanged model id: those vectors are no longer comparable to
+    anything embedded from now on. Returns the number of rows cleared."""
+    with conn:
+        cur = conn.execute(
+            "UPDATE skill_vocab SET vector = NULL, embed_tag = NULL WHERE vector IS NOT NULL"
+        )
+        return cur.rowcount
+
+
+def set_skill_vectors(
+    conn: sqlite3.Connection, items: list[tuple[str, bytes]], embed_tag: str
+) -> None:
+    """Write ``(name, vector_blob)`` pairs and stamp them with ``embed_tag``, all
+    in ONE transaction: a chunk lands whole or not at all. An unknown ``name``
+    raises ``KeyError`` and rolls the whole batch back -- vectors are never
+    silently dropped."""
+    with conn:
+        for name, blob in items:
+            cur = conn.execute(
+                "UPDATE skill_vocab SET vector = ?, embed_tag = ? WHERE name = ?",
+                (blob, embed_tag, name),
+            )
+            if cur.rowcount != 1:
+                raise KeyError(f"no skill_vocab row named {name!r}")

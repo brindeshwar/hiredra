@@ -25,3 +25,13 @@ pandas>=2.0
 langchain==1.4.1
 langchain-google-genai==4.4.0
 langgraph==1.2.11
+
+# graph / per-skill fit -- embeddings + nearest-skill dot product (build step 4).
+# numpy is already present via python-jobspy's exact pin; declared here because
+# hiredra/graph imports it directly. Gemini embeddings go through the
+# langchain-google-genai pin above (GoogleGenerativeAIEmbeddings).
+numpy>=1.26
+
+# graph / daily request counter -- Pacific-time day boundaries (build 4.3). Windows has no
+# system timezone database, so zoneinfo needs this; it was only installed by accident via pandas.
+tzdata>=2024.1

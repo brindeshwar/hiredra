@@ -35,12 +35,12 @@ def test_resolve_skill_distinct_names_get_distinct_entries():
     conn.close()
 
 
-def test_find_near_duplicate_stub_always_misses():
+def test_extraction_time_resolution_does_not_merge_near_duplicates():
     conn = connect(":memory:")
     init_db(conn)
     vocab.resolve_skill(conn, "fast api")
     # a genuinely different spelling of the same skill does NOT get merged
-    # today -- that's Step 4's job (docs/graph.md sec 5's overlay match).
+    # at extraction time -- that is the between-runs sync step (hiredra.graph.merge).
     canonical = vocab.resolve_skill(conn, "fastapi")
     assert canonical == "fastapi"
     assert get_skill_vocab(conn, "fast api") is not None

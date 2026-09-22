@@ -1,49 +1,39 @@
 """Sub-slice 3.2: the growing canonical skill vocabulary (build step 3).
 
-A flat, growing list of canonical skill names (docs/graph.md's eventual
-`market` nodes are seeded from this table) -- never an enum, since the
-vocabulary is discovered from JD text and grows every run. Step 3 only
-dedupes exact (case/whitespace-folded) repeats here; catching near-duplicate
-SPELLINGS of the same skill ("fastapi" vs "fast api") is Step 4 machinery
-(docs/graph.md sec 5's overlay match: exact name first, then >=0.9 cosine)
-and needs the embedder that Step 4 builds -- `_find_near_duplicate` is a
-stub seam for it, not a real implementation, so Step 3 doesn't block on the
-embedder existing.
+A flat, growing list of canonical skill names (docs/graph.md's `market`
+nodes live in this same table) -- never an enum, since the vocabulary is
+discovered from JD text and grows every run.
+
+Extraction-time resolution is deliberately cheap and offline: case/whitespace
+fold, then an exact lookup in the merged-spelling alias table (Step 4, v4).
+It never calls the embedder. Catching near-duplicate SPELLINGS of the same
+skill ("fastapi" vs "fast api") is the between-runs sync step's job
+(`hiredra.graph.merge`; docs/graph.md sec 6's freeze rule: nodes are added and
+merged between runs, never mid-run, and merges are dry-run-reviewed, never
+auto-applied). Once a merge is applied, the alias table makes that spelling
+resolve here without an embed call, so extraction stays independent of the
+embedding API being up.
 """
 
 from __future__ import annotations
 
-from hiredra.storage import touch_skill_vocab
+from hiredra.storage import resolve_alias, touch_skill_vocab
 
 
-def _normalize(raw_name: str) -> str:
+def normalize(raw_name: str) -> str:
     """Case/whitespace fold only -- no synonym logic here."""
     return " ".join(raw_name.split()).lower()
-
-
-def _find_near_duplicate(name: str, conn) -> str | None:
-    """Step-4 seam: find an existing vocab entry that's the same skill under
-    a different spelling, via embedding similarity (docs/graph.md sec 5).
-
-    Always returns None for now -- there is no embedder yet, and Step 3 is
-    not blocked on one existing. Step 4 replaces this body with the real
-    embed-and-compare check; the call site in `resolve_skill` does not
-    change.
-    """
-    return None
 
 
 def resolve_skill(conn, raw_name: str) -> str:
     """Canonicalize `raw_name` against `skill_vocab`, recording the sighting.
 
-    Exact match (case/whitespace-folded) reuses the existing entry. No exact
-    match: the near-duplicate check is the Step-4 stub above, which always
-    misses today -- so right now, no exact match always means "first sighting
-    of a new skill," and it's added as its own vocab entry under its folded
-    name.
+    Order: fold; if that exact string is a merged alias, use the node it was
+    merged into; otherwise it is its own canonical name. Either way the
+    canonical node's `seen_count` is bumped (or the node is created, on first
+    sighting). No embedder is involved.
     """
-    name = _normalize(raw_name)
-    near = _find_near_duplicate(name, conn)
-    canonical = near if near is not None else name
+    name = normalize(raw_name)
+    canonical = resolve_alias(conn, name) or name
     touch_skill_vocab(conn, canonical)
     return canonical

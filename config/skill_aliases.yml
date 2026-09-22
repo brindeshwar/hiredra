@@ -1,0 +1,37 @@
+# config/skill_aliases.yml -- owner-editable STARTER list of abbreviations and
+# renames that embeddings can't reach (cosine for k8s ~ kubernetes is far below
+# any safe threshold).  Format:   canonical: [alias, ...]
+#
+# * The canonical spelling below is the more common one in the harvested market
+#   vocabulary (by document frequency) unless noted; change it freely.
+# * An alias that is not a node yet (k8s, js, ts ...) is still recorded, so when
+#   real job descriptions use it, Step 3 extraction resolves it with NO embedding.
+# * Nothing here changes the database by itself: entries show up in the merge
+#   dry-run as their own band and are applied only by `merges --apply`.
+# * Strict: an alias under two canonicals, a self-alias, or a name that is both a
+#   canonical and an alias is an error.
+#
+# These are starter entries chosen conservatively -- delete anything you disagree
+# with. Deliberately NOT included (ambiguous): ai, ci, node, ux.
+
+aliases:
+  kubernetes: [k8s]
+  javascript: [js]
+  typescript: [ts]
+  go: [golang]
+  gcp: [google cloud platform, google cloud]   # "google cloud" is loose; drop it if you prefer
+  azure: [microsoft azure]
+  aws: [amazon web services]
+  generative ai: [genai]
+  llm: [large language models]
+  machine learning: [ml]
+  natural language processing: [nlp]
+  sre: [site reliability engineering]
+  vue: [vue.js]
+  node.js: [nodejs]
+  react: [react.js, reactjs]
+  c#: [csharp]
+  mongodb: [mongo]
+  scikit-learn: [sklearn]
+  postgresql: [postgres]
+  ci/cd: [cicd]
