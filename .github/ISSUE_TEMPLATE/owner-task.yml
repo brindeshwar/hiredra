@@ -1,0 +1,26 @@
+name: Owner task
+description: Something only the repo owner (or the design reviewer) can do.
+title: "[O-ID] Owner: "
+labels: ["type:owner-task"]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What is needed
+    validations:
+      required: true
+  - type: input
+    id: where
+    attributes:
+      label: Where it goes
+      description: The path or place, for example data/master_profile.md (git-ignored).
+  - type: input
+    id: timebox
+    attributes:
+      label: Time box
+      description: For example "about 10 minutes".
+  - type: input
+    id: unblocks
+    attributes:
+      label: Unblocks
+      description: Unit IDs or issues waiting on this.

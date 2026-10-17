@@ -104,7 +104,7 @@ def main(argv: list[str] | None = None) -> int:
     total = len(kept_entries) + len(sample)
     print(f"wrote {out_path}: {total} companies ({len(kept_entries)} kept from {keep_path} + {len(sample)} sampled)")
     print(f"  by ATS (sampled only): {by_ats}")
-    print(f"  pool sizes: " + ", ".join(f"{a}={len(data['ats'][a])}" for a in _ATS))
+    print("  pool sizes: " + ", ".join(f"{a}={len(data['ats'][a])}" for a in _ATS))
     return 0
 
 

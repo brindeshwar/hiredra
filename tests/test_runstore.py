@@ -6,7 +6,7 @@ import json
 
 import pytest
 
-from hiredra.sourcing.runstore import RunHandle, SqliteRunStore
+from hiredra.sourcing.runstore import SqliteRunStore
 from hiredra.sourcing.sink import SinkStats
 from hiredra.storage import db
 
