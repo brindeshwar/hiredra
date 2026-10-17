@@ -253,7 +253,7 @@ class JobSpySource:
             from jobspy import scrape_jobs
         except ImportError as err:  # pragma: no cover
             raise RuntimeError(
-                "python-jobspy is not installed (pip install python-jobspy)"
+                "python-jobspy is not installed (run `uv sync`)"
             ) from err
         return scrape_jobs
 

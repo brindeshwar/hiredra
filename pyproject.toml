@@ -1,0 +1,61 @@
+[project]
+name = "hiredra"
+version = "0.0.0"
+description = "One system, many agents: sources, scores and tailors job applications, then hands you a batch to send. Human-gated; nothing auto-submits."
+# numpy is held at 1.26.x by python-jobspy's exact pin, and numpy 1.26 supports Python up to 3.12.
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "python-dotenv>=1.0",
+    # sourcing -- shared http layer (build 2a.3)
+    "httpx>=0.27",
+    "tenacity>=8.2",
+    # sourcing -- orchestrator config files (build 2a.8)
+    "pyyaml>=6.0",
+    # sourcing -- Path 3 aggregators via JobSpy (build 2a.6). python-jobspy pins numpy==1.26.3
+    # exactly; uv resolves it. If another dependency ever forces a newer numpy, use
+    # [tool.uv] override-dependencies rather than dropping the pin silently.
+    "python-jobspy>=1.1.79,<1.2",
+    "pandas>=2.0,<3",
+    # skill extraction -- Gemini via LangChain/LangGraph only (build step 3, CLAUDE.md sec 7).
+    # Pinned tightly (==), not >=: LangChain breaks across minors far more often than the deps
+    # above, and pulling a newer minor mid-project is exactly the drift this project avoids.
+    # Bump deliberately, re-verify the smoke test after.
+    "langchain==1.4.1",
+    "langchain-google-genai==4.4.0",
+    "langgraph==1.2.11",
+    # graph / per-skill fit -- embeddings + nearest-skill dot product (build step 4).
+    # Upper bounds on python-jobspy, pandas and numpy hold the tested stack (jobspy 1.1.x pins
+    # numpy 1.26.3). Moving to jobspy 1.3 / numpy 2 / pandas 3 is a deliberate upgrade, not drift.
+    "numpy>=1.26,<2",
+    # graph / daily request counter -- Pacific-time day boundaries. Windows has no system
+    # timezone database, so zoneinfo needs this.
+    "tzdata>=2024.1",
+    # graph harvest -- reads open-jobs parquet over HTTPS (hiredra/graph/harvest.py) and the
+    # discovery program's ingest/export.
+    "duckdb>=1.1",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.15",
+]
+
+[tool.uv]
+# Hiredra runs from the repo root (python -m hiredra.<stage>); it is not built or installed as a package.
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests", "discovery"]
+# Run from the repo root so `import hiredra` / `import discovery` resolve under `uv run pytest`.
+pythonpath = ["."]
+
+[tool.ruff]
+# Matches the existing code's width, so the one-time format pass reflows as little as possible.
+line-length = 120
+target-version = "py312"
+extend-exclude = ["reference", "graphify-out", "data", "docs"]
+
+[tool.ruff.lint]
+# Syntax errors and real bugs only (pyflakes). Style rules stay off on purpose: no churn.
+select = ["E9", "F"]

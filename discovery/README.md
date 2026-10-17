@@ -25,7 +25,7 @@ tracks jobs through the live apply stages. Everything here reads/writes only
 ## Running it (phases, in order)
 
 ```sh
-pip install -r discovery/requirements.txt   # duckdb, on top of the root requirements.txt
+uv sync                                  # once: installs everything from uv.lock (duckdb included)
 
 python -m discovery.harvest pool         # covered-vs-not-covered split -> data/discovery/not_covered.yml
 python -m discovery.harvest ingest       # pulls + ingests open-jobs' greenhouse/lever/ashby parquet (~1.2 GB)
