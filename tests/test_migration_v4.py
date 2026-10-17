@@ -72,7 +72,7 @@ def test_v3_to_v4_preserves_rows_and_applies_defaults(tmp_path):
     conn = db.connect(path)
     db.init_db(conn)
 
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION == 4
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION  # v3 -> v4 -> v5 in one init_db
     assert _V4_SKILL_COLS <= _cols(conn, "skill_vocab")
 
     py = db.get_skill_vocab(conn, "python")
@@ -164,7 +164,7 @@ def test_v4_migration_is_idempotent_and_resumes_a_partial_run(tmp_path):
 def test_fresh_db_gets_v4_shape_directly(tmp_path):
     conn = db.connect(tmp_path / "fresh.db")
     db.init_db(conn)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 4
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
     assert _V4_SKILL_COLS <= _cols(conn, "skill_vocab")
     assert {"alias", "canonical", "created_at"} == _cols(conn, "skill_alias")
     conn.close()

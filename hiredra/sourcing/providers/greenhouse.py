@@ -44,7 +44,7 @@ class GreenhouseProvider:
 
     name = "greenhouse"
 
-    def _board_url(self, entry: CompanyEntry) -> str | None:
+    def board_url(self, entry: CompanyEntry) -> str | None:
         if entry.provider and entry.provider != self.name:
             return None
         if entry.api:
@@ -60,10 +60,10 @@ class GreenhouseProvider:
         return _API.format(slug=slug) if slug else None
 
     def detect(self, entry: CompanyEntry) -> bool:
-        return self._board_url(entry) is not None
+        return self.board_url(entry) is not None
 
     def fetch(self, entry: CompanyEntry, ctx: FetchContext) -> list[Job]:
-        base = self._board_url(entry)
+        base = self.board_url(entry)
         if base is None:
             raise FetchError(f"greenhouse: cannot resolve a board for {entry.name!r}")
         url = f"{base}{'&' if '?' in base else '?'}content=true"

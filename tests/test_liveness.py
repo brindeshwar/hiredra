@@ -30,7 +30,7 @@ def _job(**overrides):
 
 class _FakeLivenessProvider:
     """Mirrors tests/test_orchestrator.py's FakeProvider shape, plus the
-    _board_url() hook check_liveness reuses to group jobs by board."""
+    board_url() hook check_liveness reuses to group jobs by board."""
 
     def __init__(self, name, board_url="https://fake/board", jobs=None, error=None):
         self.name = name
@@ -38,11 +38,13 @@ class _FakeLivenessProvider:
         self._jobs = jobs if jobs is not None else []
         self._error = error
         self.fetch_calls = 0
+        self.entries = []  # every entry board_url() was asked about
 
     def detect(self, entry):
         return entry.provider == self.name
 
-    def _board_url(self, entry):
+    def board_url(self, entry):
+        self.entries.append(entry)
         return self._board_url_value
 
     def fetch(self, entry, ctx):

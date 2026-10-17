@@ -1,10 +1,12 @@
 """Sinks -- what the orchestrator does with each batch of fetched jobs.
 
 The orchestrator core is sink-agnostic: it calls ``sink.consume(jobs)`` per
-company (and once for the JobSpy batch) and ``sink.stats()`` at the end.
+company (and once for the JobSpy batch) and ``sink.stats()`` at the end. A
+company batch also carries its provenance: the board slug and the list tag.
 
 * ``ScoringSink`` -- holds the SQLite connection: dedup against the store, persist
-  the new jobs (stamped with ``run_id``), ``touch`` the re-sighted ones.
+  the new jobs (stamped with ``run_id``), ``touch`` the re-sighted ones, and fill
+  ``company_slug`` / ``list_tag`` on both where still NULL (v5).
 * ``BackfillSink`` -- holds nothing DB-ish; intra-run ``collapse`` only, then
   hands jobs to skill extraction and discards them. Skill extraction is wired at
   graph-build (step 4); for now it just accumulates the collapsed jobs so a
@@ -34,7 +36,7 @@ class SinkStats:
 
 @runtime_checkable
 class Sink(Protocol):
-    def consume(self, jobs: list[Job]) -> None: ...
+    def consume(self, jobs: list[Job], *, company_slug: str | None = None, list_tag: str | None = None) -> None: ...
     def stats(self) -> SinkStats: ...
 
 
@@ -50,7 +52,7 @@ class ScoringSink:
         self._new = 0
         self._touched = 0
 
-    def consume(self, jobs: list[Job]) -> None:
+    def consume(self, jobs: list[Job], *, company_slug: str | None = None, list_tag: str | None = None) -> None:
         self._fetched += len(jobs)
         result = dedup(self._conn, jobs)
         self._collapsed += result.collapsed_in_run
@@ -60,6 +62,12 @@ class ScoringSink:
         for job_id in result.seen:
             db.touch_job(self._conn, job_id, run_id=self._run_id)
         self._touched += len(result.seen)
+        db.fill_provenance(
+            self._conn,
+            [j.job_id for j in result.new] + list(result.seen),
+            company_slug=company_slug,
+            list_tag=list_tag,
+        )
 
     def stats(self) -> SinkStats:
         return SinkStats(
@@ -79,8 +87,8 @@ class BackfillSink:
         self._fetched = 0
         self._collapsed = 0
 
-    def consume(self, jobs: list[Job]) -> None:
-        self._fetched += len(jobs)
+    def consume(self, jobs: list[Job], *, company_slug: str | None = None, list_tag: str | None = None) -> None:
+        self._fetched += len(jobs)  # provenance is for stored rows; this sink stores nothing
         kept, collapsed = collapse(list(jobs))
         self._collapsed += collapsed
         self.jobs.extend(kept)

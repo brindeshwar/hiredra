@@ -59,6 +59,9 @@ class FakeProvider:
     def detect(self, entry):
         return entry.provider == self.name
 
+    def board_url(self, entry):  # greenhouse-shaped, so company_slug() reads the name back out
+        return f"https://fake/v1/boards/{entry.name.lower()}/jobs"
+
     def fetch(self, entry, ctx):
         self.calls.append(entry.name)
         if self._error is not None:
@@ -82,9 +85,11 @@ class FakeJobSpySource:
 class RecordingSink:
     def __init__(self):
         self.batches: list[list[Job]] = []
+        self.provenance: list[tuple[str | None, str | None]] = []
 
-    def consume(self, jobs):
+    def consume(self, jobs, *, company_slug=None, list_tag=None):
         self.batches.append(list(jobs))
+        self.provenance.append((company_slug, list_tag))
 
     def stats(self):
         n = sum(len(b) for b in self.batches)
@@ -425,7 +430,7 @@ def test_unexpected_crash_marks_run_failed_and_reraises(tmp_path, ctx):
     p = FakeProvider("p", jobs=[_job(job_id="p:1")])
 
     class BadSink:
-        def consume(self, jobs):
+        def consume(self, jobs, **_):
             raise RuntimeError("sink bug")
 
         def stats(self):

@@ -7,10 +7,12 @@ group jobs by board before fetching (one fetch per company, not one per
 job). It's also the only 2b stage with a network cost, hence last and
 separate: run_funnel itself stays pure CPU.
 
-ATS-sourced jobs are grouped by board (via each provider's own
-``_board_url`` -- the same resolver already used to fetch, so an EU Lever
+ATS-sourced jobs are grouped by board (via each provider's own public
+``board_url`` -- the same resolver already used to fetch, so an EU Lever
 host or any other provider-specific quirk is handled for free, not
-re-derived here) and re-fetched once per group; a job absent from the
+re-derived here). The stored ``company_slug`` (v5) is passed in when present,
+so a board whose job URLs live on the company's own domain still resolves;
+without it the job URL alone is used. Each group is re-fetched once; a job absent from the
 fresh listing, or a whole board that 404s, is dropped (``status='dropped'``,
 ``detail='liveness: gone'`` -- reusing the orchestrator's existing 'gone'
 vocabulary for a confirmed removal, no new ``jobs.status`` value). JobSpy-
@@ -61,9 +63,15 @@ def check_liveness(conn, ctx: FetchContext | None = None, registry: Sequence[Pro
             stats.checked += 1
             provider = provider_by_name.get(job["source"])
             board_url = None
-            if provider is not None and job["url"]:
-                entry = CompanyEntry(name=job["company"], careers_url=job["url"], provider=provider.name)
-                board_url = provider._board_url(entry)  # reuse: the same resolver fetch() already used
+            if provider is not None and (job["url"] or job.get("company_slug")):
+                slug = job.get("company_slug")
+                entry = CompanyEntry(
+                    name=job["company"],
+                    careers_url=job["url"],  # still passed with a slug: it carries the EU Lever host
+                    provider=provider.name,
+                    extra={"slug": slug} if slug else {},
+                )
+                board_url = provider.board_url(entry)  # reuse: the same resolver fetch() already used
             if board_url is None:
                 add_note(conn, job["job_id"], "liveness: unchecked")
                 stats.unchecked += 1
