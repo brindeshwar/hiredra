@@ -39,11 +39,11 @@ class MergeTrace:
 
 @dataclass(frozen=True, slots=True)
 class DedupResult:
-    new: list[Job]                 # unique this run AND not stored -> persist_jobs
-    seen: list[str]                # distinct stored job_ids matched -> touch_job
-    collapsed_in_run: int          # dupes removed within this run's pile
-    matched_in_store: int          # distinct stored jobs re-matched (== len(seen))
-    merges: list[MergeTrace] = field(default_factory=list)          # intra-run, for inspection
+    new: list[Job]  # unique this run AND not stored -> persist_jobs
+    seen: list[str]  # distinct stored job_ids matched -> touch_job
+    collapsed_in_run: int  # dupes removed within this run's pile
+    matched_in_store: int  # distinct stored jobs re-matched (== len(seen))
+    merges: list[MergeTrace] = field(default_factory=list)  # intra-run, for inspection
     store_matches: list[tuple[Job, str]] = field(default_factory=list)  # (incoming, stored job_id)
 
 
@@ -53,8 +53,21 @@ class DedupResult:
 # all identity or harmless.)
 _TRACKING_PARAMS = frozenset(
     {
-        "gclid", "gclsrc", "dclid", "fbclid", "msclkid", "yclid", "twclid",
-        "mc_cid", "mc_eid", "_ga", "_gl", "igshid", "ref_src", "spm", "scid",
+        "gclid",
+        "gclsrc",
+        "dclid",
+        "fbclid",
+        "msclkid",
+        "yclid",
+        "twclid",
+        "mc_cid",
+        "mc_eid",
+        "_ga",
+        "_gl",
+        "igshid",
+        "ref_src",
+        "spm",
+        "scid",
     }
 )
 # ATS host variants that address the same board.
@@ -154,16 +167,13 @@ def _is_aggregator(job: Job) -> bool:
 
 
 def _completeness(job: Job) -> int:
-    return sum(
-        v is not None
-        for v in (job.description, job.date_posted, job.salary, job.location, job.is_remote)
-    )
+    return sum(v is not None for v in (job.description, job.date_posted, job.salary, job.location, job.is_remote))
 
 
 def _pick_winner(a: Job, b: Job) -> Job:
     a_agg, b_agg = _is_aggregator(a), _is_aggregator(b)
     if a_agg != b_agg:
-        return a if b_agg else b            # a non-aggregator (ATS) row always wins
+        return a if b_agg else b  # a non-aggregator (ATS) row always wins
     return b if _completeness(b) > _completeness(a) else a
 
 
@@ -174,9 +184,7 @@ def _merge(current: Job, incoming: Job, on: str, trace: list[MergeTrace]) -> Job
     return winner
 
 
-def collapse(
-    jobs: list[Job], trace: list[MergeTrace] | None = None
-) -> tuple[list[Job], int]:
+def collapse(jobs: list[Job], trace: list[MergeTrace] | None = None) -> tuple[list[Job], int]:
     """Intra-run dedup only (no DB): url pass, then (company, role) pass.
 
     Public because the backfill sink wants it without a cross-run store. The
@@ -242,9 +250,7 @@ class _SeenIndex:
 
 def _load_seen_index(conn: sqlite3.Connection) -> _SeenIndex:
     idx = _SeenIndex()
-    for row in conn.execute(
-        "SELECT job_id, url, apply_url, company, title FROM jobs"
-    ):
+    for row in conn.execute("SELECT job_id, url, apply_url, company, title FROM jobs"):
         jid = row["job_id"]
         idx.by_job_id.add(jid)
         for candidate in (_norm_url(row["url"]), _norm_url(row["apply_url"])):

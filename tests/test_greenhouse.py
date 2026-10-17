@@ -52,24 +52,30 @@ def test_fetch_maps_jobs(http_factory, greenhouse_payload):
     assert first.source == "greenhouse"
     assert first.description == "Build APIs. 0-2 years experience."
     assert first.location == "San Francisco, CA"
-    assert first.date_posted == "2026-08-15"       # from first_published, date only
-    assert first.is_remote is None                 # no clear signal -> unknown, NOT False
-    assert first.years_required is None            # never parsed here
+    assert first.date_posted == "2026-08-15"  # from first_published, date only
+    assert first.is_remote is None  # no clear signal -> unknown, NOT False
+    assert first.years_required is None  # never parsed here
 
 
 def test_remote_inferred_only_on_clear_signal(http_factory, greenhouse_payload):
     http = http_factory(lambda req: httpx.Response(200, json=greenhouse_payload))
     jobs = GH.fetch(_entry(), FetchContext(http=http))
-    assert jobs[1].is_remote is True               # "AI Engineer (Remote)" / "Remote - US"
+    assert jobs[1].is_remote is True  # "AI Engineer (Remote)" / "Remote - US"
 
 
 def test_is_remote_is_never_false(http_factory):
-    payload = {"jobs": [{
-        "id": 1, "title": "Backend Engineer",
-        "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/1",
-        "location": {"name": "New York, NY"}, "content": "<p>x</p>",
-        "updated_at": "2026-09-01T00:00:00Z",
-    }]}
+    payload = {
+        "jobs": [
+            {
+                "id": 1,
+                "title": "Backend Engineer",
+                "absolute_url": "https://job-boards.greenhouse.io/acme/jobs/1",
+                "location": {"name": "New York, NY"},
+                "content": "<p>x</p>",
+                "updated_at": "2026-09-01T00:00:00Z",
+            }
+        ]
+    }
     http = http_factory(lambda req: httpx.Response(200, json=payload))
     assert GH.fetch(_entry(), FetchContext(http=http))[0].is_remote is None
 
@@ -77,7 +83,7 @@ def test_is_remote_is_never_false(http_factory):
 def test_date_posted_falls_back_to_updated_at(http_factory, greenhouse_payload):
     http = http_factory(lambda req: httpx.Response(200, json=greenhouse_payload))
     jobs = GH.fetch(_entry(), FetchContext(http=http))
-    assert jobs[1].date_posted == "2026-09-05"     # job 67890 has no first_published
+    assert jobs[1].date_posted == "2026-09-05"  # job 67890 has no first_published
 
 
 def test_empty_board_returns_empty_list(http_factory):
@@ -116,8 +122,6 @@ def test_404_board_propagates_as_httperror(http_factory):
 
 
 def test_api_redirect_is_not_followed(http_factory):
-    http = http_factory(
-        lambda req: httpx.Response(302, headers={"location": "https://elsewhere.example.com/"})
-    )
+    http = http_factory(lambda req: httpx.Response(302, headers={"location": "https://elsewhere.example.com/"}))
     with pytest.raises(HTTPError):
         GH.fetch(_entry(), FetchContext(http=http))

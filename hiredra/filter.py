@@ -108,8 +108,12 @@ def has_anti_signal_phrase(text: str | None, phrases: tuple[str, ...]) -> str | 
 @dataclass(frozen=True)
 class LocationResult:
     keep: bool
-    reason: str | None  # drop reason if not keep; "unknown" if kept with no location signal; None if kept on a definite match
-    note: str | None = None  # a job_events note to record regardless of keep/drop (e.g. onsite/hybrid with no stated place)
+    reason: (
+        str | None
+    )  # drop reason if not keep; "unknown" if kept with no location signal; None if kept on a definite match
+    note: str | None = (
+        None  # a job_events note to record regardless of keep/drop (e.g. onsite/hybrid with no stated place)
+    )
 
 
 def passes_location(
@@ -195,9 +199,7 @@ def extract_max_years(text: str | None) -> int | None:
     return max(matches) if matches else None
 
 
-def passes_seniority_gate(
-    title: str | None, description: str | None, config: FilterConfig
-) -> SeniorityResult:
+def passes_seniority_gate(title: str | None, description: str | None, config: FilterConfig) -> SeniorityResult:
     """Gate only -- not a score term. `years` is always populated when
     extractable, even when a title term or anti-signal phrase is what
     actually drops the job."""
@@ -267,7 +269,7 @@ def run_funnel(conn, config: FilterConfig) -> FunnelStats:
         if location.note:
             add_note(conn, job_id, location.note)
             if location.note.endswith("place unknown"):  # the onsite/hybrid sub-case specifically,
-                stats.onsite_unknown_place += 1           # not every "location: unknown" note
+                stats.onsite_unknown_place += 1  # not every "location: unknown" note
         if not location.keep:
             set_status(conn, job_id, "dropped", detail=f"location: {location.reason}")
             stats.dropped_location += 1

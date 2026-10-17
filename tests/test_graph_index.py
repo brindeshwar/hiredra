@@ -14,8 +14,14 @@ DIM = 8
 
 def _cfg(**over) -> GraphConfig:
     base = dict(
-        model="gemini-embedding-2", dimensions=DIM, prefix="", inputs_per_request=50,
-        requests_per_minute=100, dedup_threshold=0.9, have=0.9, adj=0.7,
+        model="gemini-embedding-2",
+        dimensions=DIM,
+        prefix="",
+        inputs_per_request=50,
+        requests_per_minute=100,
+        dedup_threshold=0.9,
+        have=0.9,
+        adj=0.7,
     )
     base.update(over)
     return GraphConfig(**base)

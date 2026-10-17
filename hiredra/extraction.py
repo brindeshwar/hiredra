@@ -77,9 +77,7 @@ def load_extraction_config(
 ) -> ExtractionConfig:
     data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
     footers_file = Path(footers_path)
-    footers = (
-        json.loads(footers_file.read_text(encoding="utf-8")) if footers_file.exists() else {}
-    )
+    footers = json.loads(footers_file.read_text(encoding="utf-8")) if footers_file.exists() else {}
     return ExtractionConfig(
         min_description_chars=int(data.get("min_description_chars", 200)),
         requests_per_minute=int(data.get("requests_per_minute", 15)),
@@ -241,10 +239,7 @@ def build_extraction_chain(*, api_key: str | None = None):
     load_dotenv()
     key = api_key or os.environ.get("GEMINI_API_KEY")
     if not key:
-        raise RuntimeError(
-            "GEMINI_API_KEY is not set (check .env) -- required to build the "
-            "extraction chain."
-        )
+        raise RuntimeError("GEMINI_API_KEY is not set (check .env) -- required to build the extraction chain.")
     model = ChatGoogleGenerativeAI(
         model=MODEL_NAME,
         google_api_key=key,
@@ -326,7 +321,11 @@ def run_extraction(conn, config: ExtractionConfig, chain=None) -> ExtractionStat
         if len(clean_text) < config.min_description_chars:
             add_note(conn, job_id, "extraction: skipped-thin")
             set_extraction(
-                conn, job_id, skills="[]", domain_bucket=None, legitimacy=None,
+                conn,
+                job_id,
+                skills="[]",
+                domain_bucket=None,
+                legitimacy=None,
                 extraction_confidence="low",
             )
             set_status(conn, job_id, "extracted")
@@ -342,11 +341,11 @@ def run_extraction(conn, config: ExtractionConfig, chain=None) -> ExtractionStat
             continue
 
         skills = [
-            {"name": vocab.resolve_skill(conn, item.name), "requirement": item.requirement}
-            for item in result.skills
+            {"name": vocab.resolve_skill(conn, item.name), "requirement": item.requirement} for item in result.skills
         ]
         set_extraction(
-            conn, job_id,
+            conn,
+            job_id,
             skills=json.dumps(skills),
             domain_bucket=result.domain_bucket,
             legitimacy=result.legitimacy,
@@ -372,10 +371,7 @@ def main(argv: list[str] | None = None) -> int:
     finally:
         conn.close()
 
-    print(
-        f"seen={stats.seen} extracted={stats.extracted} "
-        f"skipped_thin={stats.skipped_thin} failed={stats.failed}"
-    )
+    print(f"seen={stats.seen} extracted={stats.extracted} skipped_thin={stats.skipped_thin} failed={stats.failed}")
     return 0
 
 

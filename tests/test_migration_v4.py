@@ -101,9 +101,7 @@ def test_v3_to_v4_leaves_jobs_and_job_events_intact(tmp_path):
     # the FK-survival check: job_events still references jobs (not a renamed-away
     # table), nothing is orphaned, and the DB is structurally sound
     fks = conn.execute("PRAGMA foreign_key_list(job_events)").fetchall()
-    assert [(r["table"], r["from"], r["to"], r["on_delete"]) for r in fks] == [
-        ("jobs", "job_id", "job_id", "CASCADE")
-    ]
+    assert [(r["table"], r["from"], r["to"], r["on_delete"]) for r in fks] == [("jobs", "job_id", "job_id", "CASCADE")]
     assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
     assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
 
@@ -142,9 +140,7 @@ def test_migrated_table_enforces_the_v4_checks(tmp_path, column, bad):
     conn = db.connect(path)
     db.init_db(conn)
     with pytest.raises(sqlite3.IntegrityError):
-        conn.execute(
-            f"INSERT INTO skill_vocab (name, first_seen_at, {column}) VALUES ('x', 't', {bad})"
-        )
+        conn.execute(f"INSERT INTO skill_vocab (name, first_seen_at, {column}) VALUES ('x', 't', {bad})")
     conn.close()
 
 

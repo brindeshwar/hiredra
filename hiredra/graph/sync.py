@@ -157,11 +157,7 @@ class GateReport:
     def ready(self) -> bool:
         """The whole index is comparable: every node embedded under the live tag,
         and the canary did not fail outright."""
-        return (
-            self.after.get("unembedded", 1) == 0
-            and self.after.get("stale", 1) == 0
-            and self.canary.error is None
-        )
+        return self.after.get("unembedded", 1) == 0 and self.after.get("stale", 1) == 0 and self.canary.error is None
 
 
 def ensure_index_current(
@@ -191,8 +187,10 @@ def ensure_index_current(
     invalidated = 0
     if canary.drifted:
         invalidated = invalidate_skill_vectors(conn)
-        log(f"CANARY DRIFT (min cosine {canary.min_cosine:.4f} < {cfg.canary_min_cosine}) -- "
-            f"invalidated {invalidated} vectors; the whole index will be re-embedded")
+        log(
+            f"CANARY DRIFT (min cosine {canary.min_cosine:.4f} < {cfg.canary_min_cosine}) -- "
+            f"invalidated {invalidated} vectors; the whole index will be re-embedded"
+        )
     elif canary.skipped_reason:
         log(f"canary skipped: {canary.skipped_reason}")
     elif canary.error:

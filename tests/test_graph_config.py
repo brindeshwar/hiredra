@@ -94,8 +94,8 @@ def test_missing_key_is_an_error(tmp_path):
         ("requests_per_day: 1000", "requests_per_day: 0"),
         ("headroom: 0.90", "headroom: 0"),
         ("headroom: 0.90", "headroom: 1.5"),
-        ("requests_per_minute: 100", "requests_per_minute: 50"),        # 45/min budget < 50 inputs per request
-        ("requests_per_day: 1000", "requests_per_day: 80"),             # 72/day budget < 90/min budget
+        ("requests_per_minute: 100", "requests_per_minute: 50"),  # 45/min budget < 50 inputs per request
+        ("requests_per_day: 1000", "requests_per_day: 80"),  # 72/day budget < 90/min budget
         ("threshold: 0.90", "threshold: 0"),
         ("have: 0.90", "have: 0.60"),  # have must exceed adj
         ("adj: 0.70", "adj: 0"),
@@ -130,7 +130,7 @@ def test_real_config_has_the_owner_set_harvest_levers():
     [
         ("ats: [ashby, lever]", "ats: []"),
         ("ats: [ashby, lever]", "ats: ashby"),
-        ("ats: [ashby, lever]", "ats: [ashby, '../etc']"),      # goes into a URL path
+        ("ats: [ashby, lever]", "ats: [ashby, '../etc']"),  # goes into a URL path
         ("export_date: latest", "export_date: '2026/09/19'"),
         ("min_df: 3", "min_df: 0"),
         ("max_words: 4", "max_words: 0"),
@@ -154,7 +154,7 @@ def test_limits_load_and_budgets_apply_the_headroom(tmp_path):
     cfg = _load(tmp_path)
     assert (cfg.requests_per_minute, cfg.tokens_per_minute, cfg.requests_per_day) == (100, 30000, 1000)
     assert cfg.inputs_per_request == 50
-    assert (cfg.rpm_budget, cfg.tpm_budget, cfg.rpd_budget) == (90, 27000, 900)     # 0.90 headroom on each
+    assert (cfg.rpm_budget, cfg.tpm_budget, cfg.rpd_budget) == (90, 27000, 900)  # 0.90 headroom on each
 
 
 def test_real_config_matches_the_dashboard_numbers():
@@ -173,9 +173,12 @@ def test_changing_rate_settings_never_changes_the_embedding_tag(tmp_path):
     """Rate limits are how we SEND requests, not what a vector is: the 950 stored
     vectors must stay valid when a limit or the chunk size changes."""
     base = _load(tmp_path).embed_tag
-    changed = _load(tmp_path, _BASE.replace("requests_per_minute: 100", "requests_per_minute: 60")
-                    .replace("inputs_per_request: 50", "inputs_per_request: 20")
-                    .replace("headroom: 0.90", "headroom: 0.5")).embed_tag
+    changed = _load(
+        tmp_path,
+        _BASE.replace("requests_per_minute: 100", "requests_per_minute: 60")
+        .replace("inputs_per_request: 50", "inputs_per_request: 20")
+        .replace("headroom: 0.90", "headroom: 0.5"),
+    ).embed_tag
     assert base == changed == "gemini-embedding-2|d768|prefix=none"
 
 
@@ -193,11 +196,11 @@ def test_real_config_bands_are_the_approved_ones():
 @pytest.mark.parametrize(
     "old,new",
     [
-        ("review_cosine: 0.93", "review_cosine: 0.85"),      # below the threshold
-        ("review_cosine: 0.93", "review_cosine: 0.99"),      # above auto_cosine
+        ("review_cosine: 0.93", "review_cosine: 0.85"),  # below the threshold
+        ("review_cosine: 0.93", "review_cosine: 0.99"),  # above auto_cosine
         ("auto_cosine: 0.96", "auto_cosine: 1.2"),
-        ("auto_cosine: 0.96", "auto_cosine: 0.92"),          # below review_cosine
-        ("threshold: 0.90", "threshold: 0.95"),              # above review_cosine
+        ("auto_cosine: 0.96", "auto_cosine: 0.92"),  # below review_cosine
+        ("threshold: 0.90", "threshold: 0.95"),  # above review_cosine
     ],
 )
 def test_misordered_band_cutoffs_are_rejected(tmp_path, old, new):

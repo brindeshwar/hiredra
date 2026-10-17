@@ -55,12 +55,17 @@ def test_print_report_handles_non_ascii_content(capsys):
     from hiredra.sourcing.__main__ import _print_report
 
     report = RunReport(
-        run_id="R1", kind="scoring", config_name="s.yml",
-        started_at="t0", finished_at="t1", status="partial", resumed=False,
-        companies=(
-            CompanyOutcome("Café Corp™", "error", "greenhouse", 0, "blocked — café ⚠"),
-        ),
-        jobspy=(), stats=SinkStats(), unroutable=("Naïve Co",),
+        run_id="R1",
+        kind="scoring",
+        config_name="s.yml",
+        started_at="t0",
+        finished_at="t1",
+        status="partial",
+        resumed=False,
+        companies=(CompanyOutcome("Café Corp™", "error", "greenhouse", 0, "blocked — café ⚠"),),
+        jobspy=(),
+        stats=SinkStats(),
+        unroutable=("Naïve Co",),
     )
     _print_report(report)  # must not raise
     out = capsys.readouterr().out

@@ -24,7 +24,10 @@ def _write_raw(tmp_path, name, body):
 
 # ── companies.yml ──────────────────────────────────────────────────────────
 def test_load_companies_maps_fields(tmp_path):
-    p = _write(tmp_path, "c.yml", """
+    p = _write(
+        tmp_path,
+        "c.yml",
+        """
         companies:
           - name: Stripe
             careers_url: https://stripe.com/jobs
@@ -34,17 +37,21 @@ def test_load_companies_maps_fields(tmp_path):
           - name: Disabled Co
             careers_url: https://x
             enabled: false
-    """)
+    """,
+    )
     entries = load_companies(p)
-    assert [e.name for e in entries] == ["Stripe", "Ramp"]          # disabled one dropped
+    assert [e.name for e in entries] == ["Stripe", "Ramp"]  # disabled one dropped
     assert entries[1].provider == "ashby" and entries[1].extra == {"slug": "ramp"}
 
 
-@pytest.mark.parametrize("body", [
-    "companies:\n  - careers_url: https://x\n",                     # missing name
-    "companies:\n  - name: X\n    wat: 1\n",                        # unknown key
-    "companies: not-a-list\n",
-])
+@pytest.mark.parametrize(
+    "body",
+    [
+        "companies:\n  - careers_url: https://x\n",  # missing name
+        "companies:\n  - name: X\n    wat: 1\n",  # unknown key
+        "companies: not-a-list\n",
+    ],
+)
 def test_load_companies_rejects_bad_input(tmp_path, body):
     with pytest.raises(ConfigError):
         load_companies(_write(tmp_path, "c.yml", body))
@@ -85,9 +92,7 @@ def test_jobspy_block_round_trips_into_jobspyconfig(tmp_path):
     expected = JobSpyConfig(
         sites=("indeed", "linkedin"),
         country_indeed="India",
-        default_query=SiteQuery(
-            search_terms=("AI Engineer", "Backend Engineer"), hours_old=200
-        ),
+        default_query=SiteQuery(search_terms=("AI Engineer", "Backend Engineer"), hours_old=200),
         linkedin_query=SiteQuery(search_terms=("AI Engineer",), job_type="fulltime"),
     )
     assert rc.jobspy == expected
@@ -107,16 +112,14 @@ def test_run_config_rejects_unknown_top_level_key(tmp_path):
 
 
 def test_run_config_rejects_unknown_key_in_nested_default_query(tmp_path):
-    body = _GOOD.replace("search_terms: [AI Engineer, Backend Engineer]",
-                         "serch_terms: [AI Engineer]")
+    body = _GOOD.replace("search_terms: [AI Engineer, Backend Engineer]", "serch_terms: [AI Engineer]")
     with pytest.raises(ConfigError) as ei:
         load_run_config(_write(tmp_path, "s.yml", body))
     assert "jobspy.default_query" in str(ei.value) and "serch_terms" in str(ei.value)
 
 
 def test_run_config_rejects_unknown_key_in_pacing_and_http(tmp_path):
-    for section in ("pacing: {between_companies: 2.0, jitter: 1.0}",
-                    "http: {timeout: 20.0}"):
+    for section in ("pacing: {between_companies: 2.0, jitter: 1.0}", "http: {timeout: 20.0}"):
         bad = section.replace("}", ", bogus: 1}")
         body = _GOOD.replace(section, bad)
         with pytest.raises(ConfigError):

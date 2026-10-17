@@ -33,12 +33,8 @@ class RunHandle:
 
 class RunStore(Protocol):
     def begin(self, kind: str, config_name: str | None, *, resume: bool) -> RunHandle: ...
-    def checkpoint(
-        self, run_id: str, *, companies_done: set[str], jobspy_done: bool
-    ) -> None: ...
-    def finish(
-        self, run_id: str, *, status: str, stats: SinkStats, report_json: str
-    ) -> None: ...
+    def checkpoint(self, run_id: str, *, companies_done: set[str], jobspy_done: bool) -> None: ...
+    def finish(self, run_id: str, *, status: str, stats: SinkStats, report_json: str) -> None: ...
     def load_cooldowns(self) -> dict[str, float]: ...
     def save_cooldown(self, key: str, until: float, reason: str | None) -> None: ...
 
@@ -71,20 +67,14 @@ class SqliteRunStore:
         started_at = db.open_run(self._conn, run_id, kind=kind, config_name=config_name)
         return RunHandle(run_id=run_id, started_at=started_at)
 
-    def checkpoint(
-        self, run_id: str, *, companies_done: set[str], jobspy_done: bool
-    ) -> None:
+    def checkpoint(self, run_id: str, *, companies_done: set[str], jobspy_done: bool) -> None:
         db.checkpoint_run(
             self._conn,
             run_id,
-            detail=json.dumps(
-                {"companies_done": sorted(companies_done), "jobspy_done": jobspy_done}
-            ),
+            detail=json.dumps({"companies_done": sorted(companies_done), "jobspy_done": jobspy_done}),
         )
 
-    def finish(
-        self, run_id: str, *, status: str, stats: SinkStats, report_json: str
-    ) -> None:
+    def finish(self, run_id: str, *, status: str, stats: SinkStats, report_json: str) -> None:
         db.finish_run(
             self._conn,
             run_id,
@@ -131,9 +121,7 @@ class FakeRunStore:
         return RunHandle(run_id="TESTRUN-0000")
 
     def checkpoint(self, run_id, *, companies_done, jobspy_done):
-        self.checkpoints.append(
-            {"run_id": run_id, "companies_done": set(companies_done), "jobspy_done": jobspy_done}
-        )
+        self.checkpoints.append({"run_id": run_id, "companies_done": set(companies_done), "jobspy_done": jobspy_done})
 
     def finish(self, run_id, *, status, stats, report_json):
         self.finished.append({"run_id": run_id, "status": status, "stats": stats})

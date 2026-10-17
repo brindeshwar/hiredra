@@ -27,8 +27,8 @@ def test_a_merged_spelling_resolves_to_its_canonical_node():
     merge_skill(conn, "fast api", "fastapi")  # fastapi seen_count is now 2
 
     assert vocab.resolve_skill(conn, "Fast  API") == "fastapi"  # folded, then aliased
-    assert get_skill_vocab(conn, "fastapi")["seen_count"] == 3   # bumped the survivor
-    assert get_skill_vocab(conn, "fast api") is None             # no node resurrected
+    assert get_skill_vocab(conn, "fastapi")["seen_count"] == 3  # bumped the survivor
+    assert get_skill_vocab(conn, "fast api") is None  # no node resurrected
     conn.close()
 
 

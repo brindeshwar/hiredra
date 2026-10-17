@@ -41,10 +41,7 @@ def _print_report(report: RunReport) -> None:
             line += f"  ({c.detail[:100]})"
         print(line)
     if report.unroutable:
-        print(
-            f"  [!] {len(report.unroutable)} unroutable -- "
-            f"fix the company list: {list(report.unroutable)}"
-        )
+        print(f"  [!] {len(report.unroutable)} unroutable -- fix the company list: {list(report.unroutable)}")
 
     print("  jobspy:")
     for o in report.jobspy:

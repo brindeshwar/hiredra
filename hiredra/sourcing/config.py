@@ -30,19 +30,19 @@ class ConfigError(ValueError):
 
 @dataclass(frozen=True, slots=True)
 class Pacing:
-    between_companies: float = 1.0   # base seconds between company fetches
-    jitter: float = 0.5             # + up to this many random seconds
+    between_companies: float = 1.0  # base seconds between company fetches
+    jitter: float = 0.5  # + up to this many random seconds
 
 
 @dataclass(frozen=True, slots=True)
 class RunConfig:
-    kind: str                       # "scoring" | "backfill"
-    config_name: str                # basename, recorded on the runs row
+    kind: str  # "scoring" | "backfill"
+    config_name: str  # basename, recorded on the runs row
     companies_path: str | None
     jobspy: JobSpyConfig
     http: HttpConfig
     pacing: Pacing
-    path2_enabled: bool = False      # the Path-2 discovery slot
+    path2_enabled: bool = False  # the Path-2 discovery slot
 
 
 # ── strict dataclass construction ──────────────────────────────────────────
@@ -55,10 +55,7 @@ def _build(cls: type[_T], data: Any, path: str) -> _T:
     allowed = {f.name for f in fields(cls)}
     unknown = set(data) - allowed
     if unknown:
-        raise ConfigError(
-            f"{path}: unknown key(s) {sorted(unknown)} "
-            f"(allowed: {sorted(allowed)})"
-        )
+        raise ConfigError(f"{path}: unknown key(s) {sorted(unknown)} (allowed: {sorted(allowed)})")
     kwargs: dict[str, Any] = {}
     for f in fields(cls):
         if f.name not in data:
@@ -67,7 +64,7 @@ def _build(cls: type[_T], data: Any, path: str) -> _T:
         sub = f"{path}.{f.name}" if path else f.name
         ftype = str(f.type)
         if raw is None:
-            kwargs[f.name] = None                      # e.g. `linkedin_query: null`
+            kwargs[f.name] = None  # e.g. `linkedin_query: null`
         elif "SiteQuery" in ftype:
             kwargs[f.name] = _build(SiteQuery, raw, sub)
         elif ftype.startswith("tuple"):

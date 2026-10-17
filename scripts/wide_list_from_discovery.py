@@ -62,7 +62,9 @@ def main(argv: list[str] | None = None) -> int:
 
     confirmed = sum(1 for r in rows if r["tag"] == "confirmed")
     unknown = sum(1 for r in rows if r["tag"] == "unknown")
-    lines = [_HEADER.format(out=args.out, csv=csv_path, total=len(rows), confirmed=confirmed, unknown=unknown).rstrip("\n")]
+    lines = [
+        _HEADER.format(out=args.out, csv=csv_path, total=len(rows), confirmed=confirmed, unknown=unknown).rstrip("\n")
+    ]
 
     ats_order = list(_ATS_ORDER) + [a for a in by_ats if a not in _ATS_ORDER]
     for ats in ats_order:

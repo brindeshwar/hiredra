@@ -84,9 +84,7 @@ class RunReport:
 _PARTIAL_TRIGGERS = frozenset({"blocked", "error"})
 
 
-def _roll_up(
-    companies: Sequence[CompanyOutcome], jobspy: Sequence[SiteOutcome]
-) -> str:
+def _roll_up(companies: Sequence[CompanyOutcome], jobspy: Sequence[SiteOutcome]) -> str:
     if any(c.status in _PARTIAL_TRIGGERS for c in companies):
         return "partial"
     if any(o.status in _PARTIAL_TRIGGERS for o in jobspy):
@@ -125,9 +123,7 @@ def run(
         companies_done: set[str] = set(handle.companies_done)
         jobspy_done = handle.jobspy_done
 
-        companies: list[CompanyEntry] = (
-            load_companies(config.companies_path) if config.companies_path else []
-        )
+        companies: list[CompanyEntry] = load_companies(config.companies_path) if config.companies_path else []
         if config.path2_enabled:
             log.warning(
                 "orchestrator: path2 is enabled in config but Path-2 discovery "
@@ -140,9 +136,7 @@ def run(
         attempted = 0
         for entry in companies:
             if entry.name in companies_done:
-                outcomes.append(
-                    CompanyOutcome(entry.name, "skipped", None, 0, "already fetched this run")
-                )
+                outcomes.append(CompanyOutcome(entry.name, "skipped", None, 0, "already fetched this run"))
                 continue
             if attempted:
                 sleep(config.pacing.between_companies + rng.random() * config.pacing.jitter)
@@ -156,9 +150,7 @@ def run(
                 try:
                     jobs_c = provider.fetch(entry, ctx)
                 except Blocked as err:
-                    outcomes.append(
-                        CompanyOutcome(entry.name, "blocked", provider.name, 0, str(err))
-                    )
+                    outcomes.append(CompanyOutcome(entry.name, "blocked", provider.name, 0, str(err)))
                 except HTTPError as err:
                     # A definitive 404 means the board is gone/renamed -- common with a
                     # generated company list built from a days-old slug snapshot. Benign,
@@ -166,33 +158,26 @@ def run(
                     # (403 without a block marker, 5xx that isn't retried here, etc.) is
                     # still a real 'error'.
                     status = "gone" if err.status == 404 else "error"
-                    outcomes.append(
-                        CompanyOutcome(entry.name, status, provider.name, 0, str(err))
-                    )
+                    outcomes.append(CompanyOutcome(entry.name, status, provider.name, 0, str(err)))
                 except FetchError as err:
-                    outcomes.append(
-                        CompanyOutcome(entry.name, "error", provider.name, 0, str(err))
-                    )
+                    outcomes.append(CompanyOutcome(entry.name, "error", provider.name, 0, str(err)))
                 except Exception as err:  # noqa: BLE001 -- a provider bug must not kill the run
-                    log.exception(
-                        "orchestrator: %s.fetch(%r) raised unexpectedly", provider.name, entry.name
-                    )
+                    log.exception("orchestrator: %s.fetch(%r) raised unexpectedly", provider.name, entry.name)
                     outcomes.append(
                         CompanyOutcome(
-                            entry.name, "error", provider.name, 0,
+                            entry.name,
+                            "error",
+                            provider.name,
+                            0,
                             f"{type(err).__name__}: {err}",
                         )
                     )
                 else:
                     sink.consume(jobs_c)
-                    outcomes.append(
-                        CompanyOutcome(entry.name, "ok", provider.name, len(jobs_c))
-                    )
+                    outcomes.append(CompanyOutcome(entry.name, "ok", provider.name, len(jobs_c)))
 
             companies_done.add(entry.name)
-            run_store.checkpoint(
-                handle.run_id, companies_done=companies_done, jobspy_done=jobspy_done
-            )
+            run_store.checkpoint(handle.run_id, companies_done=companies_done, jobspy_done=jobspy_done)
 
         if unroutable and companies and len(unroutable) == len(companies):
             log.warning(
@@ -208,17 +193,13 @@ def run(
                 result = source.fetch(ctx)
             except Exception as err:  # noqa: BLE001 -- a JobSpy bug must not lose the company results
                 log.exception("orchestrator: jobspy_source.fetch() raised")
-                jobspy_outcomes = (
-                    SiteOutcome("jobspy", "error", 0, f"{type(err).__name__}: {err}"),
-                )
+                jobspy_outcomes = (SiteOutcome("jobspy", "error", 0, f"{type(err).__name__}: {err}"),)
                 # jobspy_done stays False -> a --resume retries the whole batch
             else:
                 sink.consume(result.jobs)
                 jobspy_outcomes = tuple(result.outcomes)
                 jobspy_done = True
-                run_store.checkpoint(
-                    handle.run_id, companies_done=companies_done, jobspy_done=jobspy_done
-                )
+                run_store.checkpoint(handle.run_id, companies_done=companies_done, jobspy_done=jobspy_done)
 
         status = _roll_up(outcomes, jobspy_outcomes)
         stats = sink.stats()
@@ -235,9 +216,7 @@ def run(
             stats=stats,
             unroutable=tuple(unroutable),
         )
-        run_store.finish(
-            handle.run_id, status=status, stats=stats, report_json=report.to_json()
-        )
+        run_store.finish(handle.run_id, status=status, stats=stats, report_json=report.to_json())
         return report
 
     except Exception:

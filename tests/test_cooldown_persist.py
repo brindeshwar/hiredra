@@ -21,6 +21,7 @@ class Clock:
 # ── registry: lock, load, on_trip ─────────────────────────────────────────
 def test_default_clock_is_wall_time():
     import time
+
     r = CooldownRegistry()
     until = r.trip("h", 100)
     assert abs(until - (time.time() + 100)) < 5
@@ -37,18 +38,18 @@ def test_on_trip_callback_fires_after_trip():
 def test_load_merges_non_expired_and_never_shortens():
     clk = Clock()
     r = CooldownRegistry(now=clk)
-    r.trip("a", 100)                         # until ~= 1_000_100
-    r.load({"a": clk.t + 10, "b": clk.t + 500, "c": clk.t - 1})   # 'a' shorter, 'c' expired
+    r.trip("a", 100)  # until ~= 1_000_100
+    r.load({"a": clk.t + 10, "b": clk.t + 500, "c": clk.t - 1})  # 'a' shorter, 'c' expired
     active = r.active()
     assert set(active) == {"a", "b"}
-    assert active["a"] == pytest.approx(clk.t + 100)   # not shortened by the load
+    assert active["a"] == pytest.approx(clk.t + 100)  # not shortened by the load
 
 
 def test_trip_extends_never_shortens_across_load():
     clk = Clock()
     r = CooldownRegistry(now=clk)
     r.load({"k": clk.t + 1000})
-    r.trip("k", 10)                          # would be +10, but +1000 stands
+    r.trip("k", 10)  # would be +10, but +1000 stands
     assert r.active()["k"] == pytest.approx(clk.t + 1000)
 
 
@@ -80,6 +81,7 @@ def conn():
 
 def test_save_and_load_round_trip(conn):
     import time
+
     future = time.time() + 3600
     db.save_cooldown(conn, "jobspy-naukri", future, "HTTP 406 recaptcha required")
     assert db.load_cooldowns(conn) == {"jobspy-naukri": pytest.approx(future)}
@@ -87,6 +89,7 @@ def test_save_and_load_round_trip(conn):
 
 def test_load_cooldowns_filters_expired(conn):
     import time
+
     db.save_cooldown(conn, "old", time.time() - 10, "x")
     db.save_cooldown(conn, "live", time.time() + 100, "y")
     assert set(db.load_cooldowns(conn)) == {"live"}
@@ -94,17 +97,19 @@ def test_load_cooldowns_filters_expired(conn):
 
 def test_save_cooldown_extends_never_shortens(conn):
     import time
+
     now = time.time()
     db.save_cooldown(conn, "k", now + 1000, "first")
-    db.save_cooldown(conn, "k", now + 10, "second")           # shorter -> ignored
+    db.save_cooldown(conn, "k", now + 10, "second")  # shorter -> ignored
     assert db.load_cooldowns(conn)["k"] == pytest.approx(now + 1000)
     row = conn.execute("SELECT reason FROM cooldowns WHERE key='k'").fetchone()
-    assert row["reason"] == "second"                          # metadata still updates
+    assert row["reason"] == "second"  # metadata still updates
 
 
 def test_registry_persists_via_on_trip_and_reloads(conn):
     """The wiring the orchestrator does: on_trip -> save, then load on next run."""
     import time
+
     r1 = CooldownRegistry()  # wall clock
     r1.on_trip = lambda k, u, reason: db.save_cooldown(conn, k, u, reason)
     r1.trip("api.ashbyhq.com", 900, reason="HTTP 429")

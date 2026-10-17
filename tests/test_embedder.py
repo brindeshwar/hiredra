@@ -104,9 +104,7 @@ def test_chunks_by_inputs_per_request_and_preserves_order():
 def test_prefix_is_applied_to_every_text_sent():
     embed, client, _ = _embedder(_cfg(prefix="task: sentence similarity | query: "))
     embed(["fastapi", "kafka"])
-    assert client.calls == [
-        ["task: sentence similarity | query: fastapi", "task: sentence similarity | query: kafka"]
-    ]
+    assert client.calls == [["task: sentence similarity | query: fastapi", "task: sentence similarity | query: kafka"]]
 
 
 def test_empty_input_makes_no_request():
@@ -127,7 +125,7 @@ def test_paces_by_items_not_requests():
 
 def test_smaller_request_frees_the_budget_sooner_than_a_larger_one():
     embed, _, t = _embedder(_cfg(inputs_per_request=100))
-    embed(["a", "b", "c"])      # 3 strings -> next request owes 1s
+    embed(["a", "b", "c"])  # 3 strings -> next request owes 1s
     embed(["d"])
     assert t.slept == pytest.approx([1.0])
 
@@ -235,9 +233,18 @@ def test_missing_api_key_is_a_clear_error(monkeypatch):
 
 # ── daily quota (build 4.3) ──────────────────────────────────────────────────
 def _quota_error(quota_id: str, retry_delay: str | None = "57s") -> dict:
-    details = [{"@type": "type.googleapis.com/google.rpc.QuotaFailure",
-                "violations": [{"quotaMetric": "generativelanguage.googleapis.com/embed_content_free_tier_requests",
-                                "quotaId": quota_id, "quotaValue": "100"}]}]
+    details = [
+        {
+            "@type": "type.googleapis.com/google.rpc.QuotaFailure",
+            "violations": [
+                {
+                    "quotaMetric": "generativelanguage.googleapis.com/embed_content_free_tier_requests",
+                    "quotaId": quota_id,
+                    "quotaValue": "100",
+                }
+            ],
+        }
+    ]
     if retry_delay:
         details.append({"@type": "type.googleapis.com/google.rpc.RetryInfo", "retryDelay": retry_delay})
     return {"error": {"code": 429, "status": "RESOURCE_EXHAUSTED", "details": details}}
@@ -261,8 +268,8 @@ def test_a_per_day_quota_429_is_raised_at_once_and_never_retried():
     embed, client, t = _embedder(client=FakeClient(fail_with=[err]))
     with pytest.raises(DailyQuotaExceeded, match="PerDay"):
         embed(["fastapi"])
-    assert len(client.calls) == 1              # no retry burned on a cap that will not clear
-    assert t.slept == []                       # ...and no waiting
+    assert len(client.calls) == 1  # no retry burned on a cap that will not clear
+    assert t.slept == []  # ...and no waiting
 
 
 def test_a_per_day_id_is_recognised_even_with_no_retry_delay():
@@ -305,7 +312,7 @@ def test_the_daily_quota_error_records_the_limit_value_not_just_the_quota_id():
     embed, _, _ = _embedder(client=FakeClient(fail_with=[err]))
     with pytest.raises(DailyQuotaExceeded) as info:
         embed(["fastapi"])
-    assert "PerDay" in str(info.value) and "limit 100" in str(info.value)     # helper's quotaValue is "100"
+    assert "PerDay" in str(info.value) and "limit 100" in str(info.value)  # helper's quotaValue is "100"
 
 
 def test_quota_values_tolerates_errors_without_details():
@@ -330,7 +337,7 @@ def _usage(tmp_path, budget=900):
 def test_estimate_tokens_is_pessimistic_and_never_zero():
     assert estimate_tokens("") == 1 and estimate_tokens("a") == 1
     assert estimate_tokens("abc") == 1 and estimate_tokens("abcd") == 2
-    assert estimate_tokens("x" * 300) == 100                     # ~3 chars per token
+    assert estimate_tokens("x" * 300) == 100  # ~3 chars per token
 
 
 def test_one_http_call_per_chunk_not_one_per_skill():
@@ -349,13 +356,13 @@ def test_tokens_per_minute_can_be_the_binding_limit():
 
 
 def test_requests_per_minute_is_the_binding_limit_for_short_names():
-    embed, _, t = _embedder()          # default tokens/min is huge relative to tiny skill names
+    embed, _, t = _embedder()  # default tokens/min is huge relative to tiny skill names
     embed([f"s{i}" for i in range(6)])
-    assert t.slept == pytest.approx([1.0])        # 3 requests at 180/min = 1s
+    assert t.slept == pytest.approx([1.0])  # 3 requests at 180/min = 1s
 
 
 def test_a_chunk_bigger_than_the_whole_token_budget_is_refused_before_any_call():
-    embed, client, _ = _embedder(_cfg(tokens_per_minute=100))       # budget 90 tokens
+    embed, client, _ = _embedder(_cfg(tokens_per_minute=100))  # budget 90 tokens
     with pytest.raises(EmbeddingError, match="above the whole per-minute token budget"):
         embed(["x" * 300])
     assert client.calls == []
@@ -365,7 +372,7 @@ def test_usage_counts_each_input_as_one_request_after_google_accepts(tmp_path):
     usage = _usage(tmp_path)
     embed, client, _ = _embedder()
     embed = build_embedder(_cfg(), client=client, usage=usage, sleep=lambda s: None, clock=lambda: 0.0)
-    embed([f"s{i}" for i in range(7)])          # chunks of 3, 3, 1
+    embed([f"s{i}" for i in range(7)])  # chunks of 3, 3, 1
     assert usage.used() == 7 and len(client.calls) == 3
 
 
@@ -374,8 +381,8 @@ def test_the_budget_stops_the_run_before_the_call_that_would_pass_it(tmp_path):
     client = FakeClient()
     embed = build_embedder(_cfg(), client=client, usage=usage, sleep=lambda s: None, clock=lambda: 0.0)
     with pytest.raises(DailyBudgetReached):
-        embed([f"s{i}" for i in range(7)])      # chunk 1 (3) fits; chunk 2 (3 more = 6 > 5) must not be sent
-    assert len(client.calls) == 1               # the second request was never made
+        embed([f"s{i}" for i in range(7)])  # chunk 1 (3) fits; chunk 2 (3 more = 6 > 5) must not be sent
+    assert len(client.calls) == 1  # the second request was never made
     assert usage.used() == 3
 
 
@@ -385,7 +392,7 @@ def test_a_retried_chunk_is_counted_once(tmp_path):
     client = FakeClient(fail_with=[err])
     embed = build_embedder(_cfg(), client=client, usage=usage, sleep=lambda s: None, clock=lambda: 0.0)
     embed(["a", "b"])
-    assert len(client.calls) == 2 and usage.used() == 2         # the rejected attempt is not counted
+    assert len(client.calls) == 2 and usage.used() == 2  # the rejected attempt is not counted
 
 
 def test_a_failed_request_is_not_counted(tmp_path):
@@ -410,14 +417,14 @@ def test_a_server_side_daily_quota_marks_the_day_exhausted_and_later_calls_make_
     assert usage.exhausted()
     calls_before = len(client.calls)
     with pytest.raises(DailyQuotaExceeded, match="already reported exhausted"):
-        embed(["b"])                             # refused locally...
-    assert len(client.calls) == calls_before     # ...with NO request to Google
+        embed(["b"])  # refused locally...
+    assert len(client.calls) == calls_before  # ...with NO request to Google
 
 
 def test_without_a_usage_counter_nothing_is_tracked(tmp_path):
     embed, client, _ = _embedder()
     embed(["a", "b", "c", "d"])
-    assert not list(tmp_path.iterdir())          # no stray state files
+    assert not list(tmp_path.iterdir())  # no stray state files
 
 
 # ── failure classification: expected stop vs bug (build 4.3 hardening) ───────

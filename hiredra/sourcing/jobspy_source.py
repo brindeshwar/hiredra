@@ -39,8 +39,7 @@ _LONG_COOLDOWN_SITES = frozenset({"glassdoor", "naukri", "bayt", "bdjobs"})
 # JobSpy per-scraper logger names (JobSpy:LinkedIn, ...); propagate is False, so
 # we attach directly. getLogger() is idempotent -- safe before jobspy imports.
 _JOBSPY_LOGGERS = tuple(
-    f"JobSpy:{s}"
-    for s in ("LinkedIn", "Indeed", "Google", "Glassdoor", "Naukri", "ZipRecruiter", "Bayt", "BDJobs")
+    f"JobSpy:{s}" for s in ("LinkedIn", "Indeed", "Google", "Glassdoor", "Naukri", "ZipRecruiter", "Bayt", "BDJobs")
 )
 
 # A JobSpy log line (or exception text) that means "the board is blocking us".
@@ -64,10 +63,10 @@ class SiteQuery:
     search_terms: tuple[str, ...]
     location: str | None = "India"
     is_remote: bool = False
-    job_type: str | None = None          # "fulltime" | "internship" | "contract" | ...
-    hours_old: int | None = 336          # Track 1 default (14 days)
-    results_per_site: int = 20           # Track 1 default
-    distance: int | None = None          # radius in miles/km (LinkedIn/Indeed)
+    job_type: str | None = None  # "fulltime" | "internship" | "contract" | ...
+    hours_old: int | None = 336  # Track 1 default (14 days)
+    results_per_site: int = 20  # Track 1 default
+    distance: int | None = None  # radius in miles/km (LinkedIn/Indeed)
     google_search_term: str | None = None  # when set, google scrapes once with it
 
 
@@ -89,13 +88,13 @@ _LINKEDIN_QUERY = SiteQuery(
 class JobSpyConfig:
     sites: tuple[str, ...] = ("indeed", "linkedin", "google")
     default_query: SiteQuery = _DEFAULT_QUERY
-    linkedin_query: SiteQuery | None = _LINKEDIN_QUERY   # overrides default_query for LinkedIn only
+    linkedin_query: SiteQuery | None = _LINKEDIN_QUERY  # overrides default_query for LinkedIn only
     country_indeed: str = "India"
-    linkedin_fetch_description: bool = True   # LinkedIn needs the body for the seniority gate (2b)
+    linkedin_fetch_description: bool = True  # LinkedIn needs the body for the seniority gate (2b)
     between_sites_delay: float = 3.0
-    cooldown_short: float = 1800.0            # LinkedIn/Indeed/Google block -> 30 min
-    cooldown_long: float = 21600.0           # Glassdoor/Naukri block -> 6 h
-    proxies: tuple[str, ...] = ()             # wired, empty = OFF (decisions.md #20)
+    cooldown_short: float = 1800.0  # LinkedIn/Indeed/Google block -> 30 min
+    cooldown_long: float = 21600.0  # Glassdoor/Naukri block -> 6 h
+    proxies: tuple[str, ...] = ()  # wired, empty = OFF (decisions.md #20)
     verbose: int = 2
 
 
@@ -103,7 +102,7 @@ class JobSpyConfig:
 @dataclass(frozen=True, slots=True)
 class SiteOutcome:
     site: str
-    status: str          # "ok" | "empty" | "blocked" | "cooldown" | "error"
+    status: str  # "ok" | "empty" | "blocked" | "cooldown" | "error"
     jobs: int
     detail: str | None = None
 
@@ -186,7 +185,7 @@ def _row_to_job(row: dict, site: str) -> Job | None:
     raw_remote = row.get("is_remote")
     remote: bool | None
     if raw_remote is not None and bool(raw_remote):
-        remote = True                       # JobSpy's True is trusted
+        remote = True  # JobSpy's True is trusted
     else:
         remote = infer_remote(f"{location or ''} {title}")  # its False/NaN is not
 
@@ -252,9 +251,7 @@ class JobSpySource:
         try:
             from jobspy import scrape_jobs
         except ImportError as err:  # pragma: no cover
-            raise RuntimeError(
-                "python-jobspy is not installed (run `uv sync`)"
-            ) from err
+            raise RuntimeError("python-jobspy is not installed (run `uv sync`)") from err
         return scrape_jobs
 
     # -----------------------------------------------------------------
@@ -318,17 +315,11 @@ class JobSpySource:
         return params
 
     def _trip(self, ctx: FetchContext, site: str, reason: str) -> None:
-        seconds = (
-            self.config.cooldown_long
-            if site in _LONG_COOLDOWN_SITES
-            else self.config.cooldown_short
-        )
+        seconds = self.config.cooldown_long if site in _LONG_COOLDOWN_SITES else self.config.cooldown_short
         ctx.http.cooldowns.trip(f"jobspy-{site}", seconds, reason=reason[:200])
         log.warning("jobspy: %s blocked -- cooling down %.0fs", site, seconds)
 
-    def _scrape_site(
-        self, site: str, query: SiteQuery, ctx: FetchContext
-    ) -> tuple[list[Job], SiteOutcome]:
+    def _scrape_site(self, site: str, query: SiteQuery, ctx: FetchContext) -> tuple[list[Job], SiteOutcome]:
         frames: list = []
         errors: list[str] = []
 

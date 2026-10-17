@@ -69,9 +69,12 @@ def test_checkpoint_writes_progress_json(conn):
 def test_finish_records_stats_and_status(conn):
     store = SqliteRunStore(conn)
     h = store.begin("scoring", "scoring.yml", resume=False)
-    store.finish(h.run_id, status="partial",
-                 stats=SinkStats(fetched=50, persisted_new=12, touched=38, collapsed_in_run=3),
-                 report_json='{"ok": true}')
+    store.finish(
+        h.run_id,
+        status="partial",
+        stats=SinkStats(fetched=50, persisted_new=12, touched=38, collapsed_in_run=3),
+        report_json='{"ok": true}',
+    )
     row = conn.execute("SELECT * FROM runs WHERE run_id=?", (h.run_id,)).fetchone()
     assert row["status"] == "partial" and row["finished_at"] is not None
     assert row["fetched"] == 50 and row["persisted_new"] == 12 and row["touched"] == 38
@@ -87,6 +90,7 @@ def test_finish_rejects_running(conn):
 
 def test_cooldown_bridge(conn):
     import time
+
     store = SqliteRunStore(conn)
     store.save_cooldown("h", time.time() + 500, "HTTP 429")
     assert set(store.load_cooldowns()) == {"h"}

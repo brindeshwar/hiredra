@@ -49,16 +49,16 @@ def test_fetch_maps_jobs(http_factory, lever_payload):
     assert j0.title == "Senior Backend Engineer"
     assert j0.source == "lever"
     assert j0.description == "Build backend systems."
-    assert j0.location == "Berlin; Remote - EU"       # folded, deduped, "; "
-    assert j0.date_posted == "2024-09-10"             # epoch-ms -> date
+    assert j0.location == "Berlin; Remote - EU"  # folded, deduped, "; "
+    assert j0.date_posted == "2024-09-10"  # epoch-ms -> date
     assert j0.job_type == "Full-time"
-    assert j0.is_remote is False                       # workplaceType "hybrid" -> explicit False
+    assert j0.is_remote is False  # workplaceType "hybrid" -> explicit False
 
 
 def test_remote_from_workplace_type(http_factory, lever_payload):
     http = http_factory(lambda req: httpx.Response(200, json=lever_payload))
     jobs = LV.fetch(_entry(), FetchContext(http=http))
-    assert jobs[1].is_remote is True                   # workplaceType "remote"
+    assert jobs[1].is_remote is True  # workplaceType "remote"
 
 
 def test_eu_host_is_derived(http_factory):

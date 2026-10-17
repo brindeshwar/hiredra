@@ -18,8 +18,14 @@ DIM = 8
 
 def _cfg(**over) -> GraphConfig:
     base = dict(
-        model="gemini-embedding-2", dimensions=DIM, prefix="", inputs_per_request=50, requests_per_minute=100,
-        dedup_threshold=0.9, have=0.90, adj=0.70,
+        model="gemini-embedding-2",
+        dimensions=DIM,
+        prefix="",
+        inputs_per_request=50,
+        requests_per_minute=100,
+        dedup_threshold=0.9,
+        have=0.90,
+        adj=0.70,
     )
     base.update(over)
     return GraphConfig(**base)
@@ -84,7 +90,9 @@ def test_worked_example_shape(monkeypatch=None):
 
     by_skill = {r.skill: r for r in results}
     for name in ("python", "fastapi", "postgresql"):
-        assert by_skill[name] == SkillFit(skill=name, nearest=name, similarity=pytest.approx(1.0), fit=pytest.approx(1.0))
+        assert by_skill[name] == SkillFit(
+            skill=name, nearest=name, similarity=pytest.approx(1.0), fit=pytest.approx(1.0)
+        )
     k8s = by_skill["kubernetes"]
     assert k8s.nearest == "docker"
     assert k8s.similarity == pytest.approx(0.82)

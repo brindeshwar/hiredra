@@ -25,9 +25,7 @@ REGISTRY: tuple[Provider, ...] = (
 )
 
 
-def route(
-    entry: CompanyEntry, registry: Sequence[Provider] = REGISTRY
-) -> Provider | None:
+def route(entry: CompanyEntry, registry: Sequence[Provider] = REGISTRY) -> Provider | None:
     """The provider that handles ``entry``, or ``None`` (caller logs & skips).
 
     1. An explicit ``entry.provider`` name resolves directly (``detect()`` is
@@ -40,9 +38,7 @@ def route(
         for provider in registry:
             if provider.name == entry.provider:
                 return provider
-        log.warning(
-            "registry: %r names unknown provider %r", entry.name, entry.provider
-        )
+        log.warning("registry: %r names unknown provider %r", entry.name, entry.provider)
         return None
 
     for provider in registry:

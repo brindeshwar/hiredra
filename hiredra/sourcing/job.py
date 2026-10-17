@@ -88,8 +88,7 @@ class Job:
         yr = self.years_required
         if yr is not None and (isinstance(yr, bool) or not isinstance(yr, int)):
             raise TypeError(
-                "Job.years_required must be an int or None "
-                "(0 = explicitly zero-experience role; unknown = None)"
+                "Job.years_required must be an int or None (0 = explicitly zero-experience role; unknown = None)"
             )
 
         if self.is_remote is not None and not isinstance(self.is_remote, bool):

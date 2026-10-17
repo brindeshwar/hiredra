@@ -34,7 +34,7 @@ class _Holder:
     def __init__(self, path):
         code = _HOLDER.format(repo="D:/Projects/hiredra", path=str(path))
         self.proc = subprocess.Popen([sys.executable, "-c", code], stdout=subprocess.PIPE, text=True)
-        line = self.proc.stdout.readline()          # blocks until the child really holds the lock
+        line = self.proc.stdout.readline()  # blocks until the child really holds the lock
         assert line.startswith("LOCKED "), f"holder did not start: {line!r}"
         self.pid = int(line.split()[1])
 
@@ -83,7 +83,7 @@ def test_the_lock_is_released_when_the_body_raises(tmp_path):
     with pytest.raises(ZeroDivisionError):
         with RunLock(p):
             1 / 0
-    with RunLock(p):                                   # not stuck
+    with RunLock(p):  # not stuck
         pass
 
 
@@ -95,8 +95,8 @@ def test_the_lock_directory_is_created_if_missing(tmp_path):
 def test_the_note_is_cleared_on_release_so_nothing_stale_is_left_behind(tmp_path):
     p = tmp_path / "g.lock"
     with RunLock(p, what="sync"):
-        assert b'"what": "sync"' in _read_note(p)      # the note is there while held
-    assert p.read_bytes() == b"L" and _read_note(p) == b""   # only the sentinel byte remains
+        assert b'"what": "sync"' in _read_note(p)  # the note is there while held
+    assert p.read_bytes() == b"L" and _read_note(p) == b""  # only the sentinel byte remains
 
 
 def test_a_real_second_process_holding_the_lock_blocks_us(tmp_path):

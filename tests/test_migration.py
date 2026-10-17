@@ -89,6 +89,6 @@ def test_v1_to_v2_migration_preserves_data(tmp_path):
 
 def test_migrate_v2_is_safe_on_a_db_that_already_has_the_column(tmp_path):
     conn = db.connect(tmp_path / "y.db")
-    db.init_db(conn)                 # v2, column present
-    db._migrate_v2(conn)             # calling it again must not raise
+    db.init_db(conn)  # v2, column present
+    db._migrate_v2(conn)  # calling it again must not raise
     conn.close()

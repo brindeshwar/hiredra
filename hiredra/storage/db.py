@@ -100,9 +100,7 @@ def new_run_id() -> str:
     starts don't collide. Deterministic under a monkeypatched ``_now`` except the
     hex.
     """
-    compact = (
-        _now().replace("-", "").replace(":", "").replace("+0000", "Z").replace("+00:00", "Z")
-    )
+    compact = _now().replace("-", "").replace(":", "").replace("+0000", "Z").replace("+00:00", "Z")
     return f"{compact}-{secrets.token_hex(2)}"
 
 
@@ -158,11 +156,31 @@ def _migrate_v2(conn: sqlite3.Connection) -> None:
 #: is an explicit, reviewable list rather than "whatever columns happen to be
 #: there."
 _JOBS_V2_COLUMNS: tuple[str, ...] = (
-    "job_id", "url", "title", "company", "description", "years_required",
-    "source", "location", "date_posted", "job_type", "salary", "apply_url",
-    "is_remote", "status", "status_detail", "status_changed_at", "score",
-    "score_features", "outcome", "outcome_at", "outcome_detail",
-    "first_seen_at", "last_seen_at", "updated_at", "first_seen_run",
+    "job_id",
+    "url",
+    "title",
+    "company",
+    "description",
+    "years_required",
+    "source",
+    "location",
+    "date_posted",
+    "job_type",
+    "salary",
+    "apply_url",
+    "is_remote",
+    "status",
+    "status_detail",
+    "status_changed_at",
+    "score",
+    "score_features",
+    "outcome",
+    "outcome_at",
+    "outcome_detail",
+    "first_seen_at",
+    "last_seen_at",
+    "updated_at",
+    "first_seen_run",
 )
 
 #: The v3 ``jobs`` table shape, frozen as a migration-time snapshot (mirrors
@@ -266,8 +284,7 @@ _SKILL_VOCAB_V4_COLUMNS: tuple[tuple[str, str], ...] = (
     ("mine", "INTEGER NOT NULL DEFAULT 0 CHECK (mine IN (0, 1))"),
     (
         "level",
-        "TEXT CHECK (level IS NULL OR level IN "
-        "('production','built-with','learned','interview-ready'))",
+        "TEXT CHECK (level IS NULL OR level IN ('production','built-with','learned','interview-ready'))",
     ),
     ("source", "TEXT NOT NULL DEFAULT 'jd' CHECK (source IN ('market','jd','profile'))"),
     ("edges", "TEXT NOT NULL DEFAULT '[]'"),
@@ -337,20 +354,14 @@ def upsert_job(
 
     yr = job.get("years_required")
     if yr is not None and not isinstance(yr, int):
-        raise TypeError(
-            "years_required must be an int or None "
-            "(0 = explicitly zero-experience role; unknown = None)"
-        )
+        raise TypeError("years_required must be an int or None (0 = explicitly zero-experience role; unknown = None)")
 
     now = _now()
     with conn:
-        exists = conn.execute(
-            "SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)
-        ).fetchone()
+        exists = conn.execute("SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
 
         if exists is None:
-            cols = (*_JOB_COLUMNS, "status_changed_at", "first_seen_at",
-                    "last_seen_at", "updated_at", "first_seen_run")
+            cols = (*_JOB_COLUMNS, "status_changed_at", "first_seen_at", "last_seen_at", "updated_at", "first_seen_run")
             values = [job_id if c == "job_id" else job.get(c) for c in _JOB_COLUMNS]
             values += [now, now, now, now, first_seen_run]
             placeholders = ", ".join("?" for _ in cols)
@@ -387,26 +398,26 @@ def set_status(
 
     now = _now()
     with conn:
-        row = conn.execute(
-            "SELECT status FROM jobs WHERE job_id = ?", (job_id,)
-        ).fetchone()
+        row = conn.execute("SELECT status FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
         if row is None:
             raise KeyError(f"no job with job_id {job_id!r}")
         from_status = row["status"]
         conn.execute(
-            "UPDATE jobs SET status = ?, status_detail = ?, status_changed_at = ?, "
-            "updated_at = ? WHERE job_id = ?",
+            "UPDATE jobs SET status = ?, status_detail = ?, status_changed_at = ?, updated_at = ? WHERE job_id = ?",
             (to_status, detail, now, now, job_id),
         )
         _add_event(
-            conn, job_id, "status",
-            from_status=from_status, to_status=to_status, detail=detail, at=now,
+            conn,
+            job_id,
+            "status",
+            from_status=from_status,
+            to_status=to_status,
+            detail=detail,
+            at=now,
         )
 
 
-def set_years_required(
-    conn: sqlite3.Connection, job_id: str, years: int | None
-) -> None:
+def set_years_required(conn: sqlite3.Connection, job_id: str, years: int | None) -> None:
     """Store the filter funnel's extracted years-required feature.
 
     Not a status change and not an event — ``years_required`` is a stored
@@ -414,9 +425,7 @@ def set_years_required(
     of whether the gate then keeps or drops the job.
     """
     with conn:
-        row = conn.execute(
-            "SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)
-        ).fetchone()
+        row = conn.execute("SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
         if row is None:
             raise KeyError(f"no job with job_id {job_id!r}")
         conn.execute(
@@ -446,9 +455,7 @@ def set_extraction(
     skip).
     """
     with conn:
-        row = conn.execute(
-            "SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)
-        ).fetchone()
+        row = conn.execute("SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
         if row is None:
             raise KeyError(f"no job with job_id {job_id!r}")
         conn.execute(
@@ -473,36 +480,32 @@ def record_outcome(
     """
     now = _now()
     with conn:
-        row = conn.execute(
-            "SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)
-        ).fetchone()
+        row = conn.execute("SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
         if row is None:
             raise KeyError(f"no job with job_id {job_id!r}")
         conn.execute(
-            "UPDATE jobs SET outcome = ?, outcome_at = ?, outcome_detail = ?, "
-            "updated_at = ? WHERE job_id = ?",
+            "UPDATE jobs SET outcome = ?, outcome_at = ?, outcome_detail = ?, updated_at = ? WHERE job_id = ?",
             (outcome, at or now, detail, now, job_id),
         )
         _add_event(
-            conn, job_id, "outcome",
-            detail=f"{outcome}: {detail}" if detail else outcome, at=now,
+            conn,
+            job_id,
+            "outcome",
+            detail=f"{outcome}: {detail}" if detail else outcome,
+            at=now,
         )
 
 
 def add_note(conn: sqlite3.Connection, job_id: str, text: str) -> None:
     """Append a free-text ``note`` event. Changes no column."""
     with conn:
-        row = conn.execute(
-            "SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)
-        ).fetchone()
+        row = conn.execute("SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
         if row is None:
             raise KeyError(f"no job with job_id {job_id!r}")
         _add_event(conn, job_id, "note", detail=text, at=_now())
 
 
-def touch_job(
-    conn: sqlite3.Connection, job_id: str, *, run_id: str | None = None
-) -> None:
+def touch_job(conn: sqlite3.Connection, job_id: str, *, run_id: str | None = None) -> None:
     """Record a re-sighting (dedup's cross-run match).
 
     Bumps ``last_seen_at``/``updated_at`` and appends a ``seen`` event. Does not
@@ -512,17 +515,13 @@ def touch_job(
     now = _now()
     detail = "re-sighted (dedup match)" + (f" [{run_id}]" if run_id else "")
     with conn:
-        row = conn.execute(
-            "SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)
-        ).fetchone()
+        row = conn.execute("SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
         if row is None:
             raise KeyError(f"no job with job_id {job_id!r}")
         _touch(conn, job_id, detail=detail, now=now)
 
 
-def _touch(
-    conn: sqlite3.Connection, job_id: str, *, detail: str, now: str
-) -> None:
+def _touch(conn: sqlite3.Connection, job_id: str, *, detail: str, now: str) -> None:
     conn.execute(
         "UPDATE jobs SET last_seen_at = ?, updated_at = ? WHERE job_id = ?",
         (now, now, job_id),
@@ -541,8 +540,7 @@ def _add_event(
     at: str | None = None,
 ) -> None:
     conn.execute(
-        "INSERT INTO job_events (job_id, kind, from_status, to_status, detail, at) "
-        "VALUES (?, ?, ?, ?, ?, ?)",
+        "INSERT INTO job_events (job_id, kind, from_status, to_status, detail, at) VALUES (?, ?, ?, ?, ?, ?)",
         (job_id, kind, from_status, to_status, detail, at or _now()),
     )
 
@@ -557,10 +555,7 @@ def get_job(conn: sqlite3.Connection, job_id: str) -> dict | None:
 
 def job_exists(conn: sqlite3.Connection, job_id: str) -> bool:
     """True if ``job_id`` is already stored — the cross-run dedup check (§8)."""
-    return (
-        conn.execute("SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
-        is not None
-    )
+    return conn.execute("SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)).fetchone() is not None
 
 
 def iter_jobs(
@@ -579,27 +574,21 @@ def iter_jobs(
         clauses.append("source = ?")
         params.append(source)
     where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
-    cur = conn.execute(
-        f"SELECT * FROM jobs{where} ORDER BY first_seen_at, job_id", params
-    )
+    cur = conn.execute(f"SELECT * FROM jobs{where} ORDER BY first_seen_at, job_id", params)
     for row in cur:
         yield dict(row)
 
 
 def get_events(conn: sqlite3.Connection, job_id: str) -> list[dict]:
     """All events for a job, oldest first."""
-    cur = conn.execute(
-        "SELECT * FROM job_events WHERE job_id = ? ORDER BY id", (job_id,)
-    )
+    cur = conn.execute("SELECT * FROM job_events WHERE job_id = ? ORDER BY id", (job_id,))
     return [dict(r) for r in cur]
 
 
 def status_counts(conn: sqlite3.Connection) -> dict[str, int]:
     """``{status: count}`` over every known status — the dashboard funnel snapshot."""
     counts = dict.fromkeys(STATUSES, 0)
-    for row in conn.execute(
-        "SELECT status, COUNT(*) AS n FROM jobs GROUP BY status"
-    ):
+    for row in conn.execute("SELECT status, COUNT(*) AS n FROM jobs GROUP BY status"):
         counts[row["status"]] = row["n"]
     return counts
 
@@ -607,17 +596,14 @@ def status_counts(conn: sqlite3.Connection) -> dict[str, int]:
 # ─────────────────────────────────────────────────────────────────────────────
 # runs (v2) — the orchestrator's run bookkeeping. See docs/sourcing.md §9-10.
 # ─────────────────────────────────────────────────────────────────────────────
-def open_run(
-    conn: sqlite3.Connection, run_id: str, *, kind: str, config_name: str | None
-) -> str:
+def open_run(conn: sqlite3.Connection, run_id: str, *, kind: str, config_name: str | None) -> str:
     """Insert the ``running`` row. Returns ``started_at`` (the caller often wants it)."""
     if kind not in ("scoring", "backfill"):
         raise ValueError(f"unknown run kind {kind!r}")
     now = _now()
     with conn:
         conn.execute(
-            "INSERT INTO runs (run_id, kind, config_name, started_at, status) "
-            "VALUES (?, ?, ?, ?, 'running')",
+            "INSERT INTO runs (run_id, kind, config_name, started_at, status) VALUES (?, ?, ?, ?, 'running')",
             (run_id, kind, config_name, now),
         )
     return now
@@ -648,14 +634,11 @@ def finish_run(
             "UPDATE runs SET finished_at = ?, status = ?, fetched = ?, "
             "collapsed_in_run = ?, matched_in_store = ?, persisted_new = ?, "
             "touched = ?, detail = COALESCE(?, detail) WHERE run_id = ?",
-            (_now(), status, fetched, collapsed_in_run, matched_in_store,
-             persisted_new, touched, detail, run_id),
+            (_now(), status, fetched, collapsed_in_run, matched_in_store, persisted_new, touched, detail, run_id),
         )
 
 
-def unfinished_run(
-    conn: sqlite3.Connection, kind: str, config_name: str | None
-) -> dict | None:
+def unfinished_run(conn: sqlite3.Connection, kind: str, config_name: str | None) -> dict | None:
     """Most recent ``running`` row for this (kind, config_name) — for ``--resume``."""
     row = conn.execute(
         "SELECT * FROM runs WHERE kind = ? AND config_name IS ? "
@@ -665,9 +648,7 @@ def unfinished_run(
     return dict(row) if row is not None else None
 
 
-def sweep_stale_runs(
-    conn: sqlite3.Connection, kind: str, config_name: str | None
-) -> int:
+def sweep_stale_runs(conn: sqlite3.Connection, kind: str, config_name: str | None) -> int:
     """Mark still-``running`` rows for this (kind, config_name) as ``failed``.
 
     Called ONLY on a fresh (non-``--resume``) start, before ``open_run``. Scoped
@@ -686,9 +667,7 @@ def sweep_stale_runs(
 
 
 def list_runs(conn: sqlite3.Connection, *, limit: int = 20) -> list[dict]:
-    cur = conn.execute(
-        "SELECT * FROM runs ORDER BY started_at DESC LIMIT ?", (limit,)
-    )
+    cur = conn.execute("SELECT * FROM runs ORDER BY started_at DESC LIMIT ?", (limit,))
     return [dict(r) for r in cur]
 
 
@@ -698,16 +677,10 @@ def list_runs(conn: sqlite3.Connection, *, limit: int = 20) -> list[dict]:
 def load_cooldowns(conn: sqlite3.Connection) -> dict[str, float]:
     """``{key: until}`` (epoch seconds) for cooldowns that haven't expired."""
     now = time.time()
-    return {
-        r["key"]: r["until"]
-        for r in conn.execute("SELECT key, until FROM cooldowns")
-        if r["until"] > now
-    }
+    return {r["key"]: r["until"] for r in conn.execute("SELECT key, until FROM cooldowns") if r["until"] > now}
 
 
-def save_cooldown(
-    conn: sqlite3.Connection, key: str, until: float, reason: str | None = None
-) -> None:
+def save_cooldown(conn: sqlite3.Connection, key: str, until: float, reason: str | None = None) -> None:
     """Write-through from ``CooldownRegistry.on_trip``. Extends, never shortens.
 
     NOTE: called on the same thread as the ``trip()`` that produced ``until``.
@@ -753,9 +726,7 @@ def touch_skill_vocab(conn: sqlite3.Connection, name: str) -> None:
 
 def get_skill_vocab(conn: sqlite3.Connection, name: str) -> dict | None:
     """Exact lookup by canonical name (case-sensitive — fold before calling)."""
-    row = conn.execute(
-        "SELECT * FROM skill_vocab WHERE name = ?", (name,)
-    ).fetchone()
+    row = conn.execute("SELECT * FROM skill_vocab WHERE name = ?", (name,)).fetchone()
     return dict(row) if row is not None else None
 
 
@@ -785,9 +756,7 @@ def add_market_skill(conn: sqlite3.Connection, name: str) -> bool:
 
 def resolve_alias(conn: sqlite3.Connection, name: str) -> str | None:
     """The canonical node ``name`` was merged into, or None if it isn't an alias."""
-    row = conn.execute(
-        "SELECT canonical FROM skill_alias WHERE alias = ?", (name,)
-    ).fetchone()
+    row = conn.execute("SELECT canonical FROM skill_alias WHERE alias = ?", (name,)).fetchone()
     return row["canonical"] if row is not None else None
 
 
@@ -842,8 +811,7 @@ def merge_skill(conn: sqlite3.Connection, dup: str, canonical: str) -> None:
         if d["mine"]:
             raise ValueError(f"{dup!r} is a 'mine' skill and is never merged away")
         conn.execute(
-            "UPDATE skill_vocab SET seen_count = seen_count + ?, "
-            "first_seen_at = MIN(first_seen_at, ?) WHERE name = ?",
+            "UPDATE skill_vocab SET seen_count = seen_count + ?, first_seen_at = MIN(first_seen_at, ?) WHERE name = ?",
             (d["seen_count"], d["first_seen_at"], canonical),
         )
         conn.execute("UPDATE skill_alias SET canonical = ? WHERE canonical = ?", (canonical, dup))
@@ -916,15 +884,11 @@ def invalidate_skill_vectors(conn: sqlite3.Connection) -> int:
     under an unchanged model id: those vectors are no longer comparable to
     anything embedded from now on. Returns the number of rows cleared."""
     with conn:
-        cur = conn.execute(
-            "UPDATE skill_vocab SET vector = NULL, embed_tag = NULL WHERE vector IS NOT NULL"
-        )
+        cur = conn.execute("UPDATE skill_vocab SET vector = NULL, embed_tag = NULL WHERE vector IS NOT NULL")
         return cur.rowcount
 
 
-def set_skill_vectors(
-    conn: sqlite3.Connection, items: list[tuple[str, bytes]], embed_tag: str
-) -> None:
+def set_skill_vectors(conn: sqlite3.Connection, items: list[tuple[str, bytes]], embed_tag: str) -> None:
     """Write ``(name, vector_blob)`` pairs and stamp them with ``embed_tag``, all
     in ONE transaction: a chunk lands whole or not at all. An unknown ``name``
     raises ``KeyError`` and rolls the whole batch back -- vectors are never

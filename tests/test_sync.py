@@ -20,9 +20,16 @@ DIM = 8
 
 def _cfg(**over) -> GraphConfig:
     base = dict(
-        model="gemini-embedding-2", dimensions=DIM, prefix="", inputs_per_request=2, requests_per_minute=100,
-        dedup_threshold=0.9, have=0.9, adj=0.7,
-        canary_skills=("python", "kubernetes", "postgresql"), canary_min_cosine=0.999,
+        model="gemini-embedding-2",
+        dimensions=DIM,
+        prefix="",
+        inputs_per_request=2,
+        requests_per_minute=100,
+        dedup_threshold=0.9,
+        have=0.9,
+        adj=0.7,
+        canary_skills=("python", "kubernetes", "postgresql"),
+        canary_min_cosine=0.999,
     )
     base.update(over)
     return GraphConfig(**base)
@@ -120,7 +127,7 @@ def test_limit_caps_this_run_and_a_second_run_finishes_without_redoing_work(conn
     second = FakeEmbedder()
     r2 = embed_pending(conn, cfg, second)
     assert (r2.queue_size, r2.embedded, r2.remaining) == (2, 2, 0)
-    assert set(second.embedded_names).isdisjoint(first.embedded_names)     # nothing re-embedded
+    assert set(second.embedded_names).isdisjoint(first.embedded_names)  # nothing re-embedded
     assert sorted(first.embedded_names + second.embedded_names) == ["a", "b", "c", "d", "e"]
 
 
@@ -132,7 +139,7 @@ def test_a_failing_chunk_stops_the_run_and_keeps_finished_chunks(conn):
 
     assert r.stopped == "transient" and "HTTP 503" in r.error
     assert (r.embedded, r.chunks, r.remaining) == (2, 1, 3)
-    assert len(emb.calls) == 2                            # stopped: did not skip ahead to chunk 3
+    assert len(emb.calls) == 2  # stopped: did not skip ahead to chunk 3
     assert skill_index_status(conn, cfg.embed_tag)["current"] == 2
 
 
@@ -158,7 +165,7 @@ def test_a_daily_quota_stops_cleanly_with_the_reason_and_is_resumable(conn):
     assert r.stopped == "daily_quota" and "PerDay" in r.error
     assert (r.embedded, r.remaining) == (2, 2)
 
-    later = FakeEmbedder()                                 # "the next day"
+    later = FakeEmbedder()  # "the next day"
     r2 = embed_pending(conn, cfg, later)
     assert (r2.stopped, r2.embedded, r2.remaining) == (None, 2, 0)
 
@@ -168,14 +175,18 @@ def test_ctrl_c_mid_run_keeps_finished_chunks(conn):
     _seed(conn, "a", "b", "c", "d")
     with pytest.raises(KeyboardInterrupt):
         embed_pending(conn, cfg, FakeEmbedder(script={2: KeyboardInterrupt()}))
-    assert skill_index_status(conn, cfg.embed_tag)["current"] == 2          # chunk 1 survived
+    assert skill_index_status(conn, cfg.embed_tag)["current"] == 2  # chunk 1 survived
 
 
 def test_stale_vectors_are_re_embedded_under_the_new_tag(conn):
     old, new = _cfg(), _cfg(prefix="task: sentence similarity | query: ")
     _seed(conn, "a", "b")
     embed_pending(conn, old, FakeEmbedder())
-    assert skill_index_status(conn, new.embed_tag) == {**skill_index_status(conn, new.embed_tag), "stale": 2, "current": 0}
+    assert skill_index_status(conn, new.embed_tag) == {
+        **skill_index_status(conn, new.embed_tag),
+        "stale": 2,
+        "current": 0,
+    }
 
     emb = FakeEmbedder()
     r = embed_pending(conn, new, emb)
@@ -200,7 +211,7 @@ def test_canary_is_skipped_on_an_empty_index(conn):
     emb = FakeEmbedder()
     res = check_canary(conn, _cfg(), emb)
     assert res.skipped_reason and res.checked == () and not res.drifted
-    assert emb.calls == []                                   # nothing to compare -> no API call
+    assert emb.calls == []  # nothing to compare -> no API call
 
 
 def test_canary_passes_when_the_provider_is_unchanged(conn):
@@ -208,9 +219,9 @@ def test_canary_passes_when_the_provider_is_unchanged(conn):
     _indexed(conn, cfg, "python", "kubernetes", "other")
     emb = FakeEmbedder()
     res = check_canary(conn, cfg, emb)
-    assert res.checked == ("python", "kubernetes")           # 'postgresql' isn't a node -> skipped
+    assert res.checked == ("python", "kubernetes")  # 'postgresql' isn't a node -> skipped
     assert not res.drifted and res.min_cosine == pytest.approx(1.0, abs=1e-5)
-    assert emb.calls == [["python", "kubernetes"]]           # ONE small request, only the canary names
+    assert emb.calls == [["python", "kubernetes"]]  # ONE small request, only the canary names
 
 
 def test_canary_detects_provider_drift(conn):
@@ -234,7 +245,7 @@ def test_canary_ignores_nodes_whose_vector_is_from_another_tag(conn):
     _indexed(conn, old, "python")
     new = _cfg(prefix="p: ")
     res = check_canary(conn, new, FakeEmbedder())
-    assert res.skipped_reason and not res.drifted            # stale tag: nothing current to compare
+    assert res.skipped_reason and not res.drifted  # stale tag: nothing current to compare
 
 
 def test_canary_that_cannot_run_reports_the_error_instead_of_raising(conn):
@@ -261,7 +272,7 @@ def test_gate_with_no_drift_only_embeds_new_nodes(conn):
     emb = FakeEmbedder()
     gate = ensure_index_current(conn, cfg, emb)
     assert gate.invalidated == 0 and not gate.canary.drifted
-    assert emb.calls == [["python", "kubernetes"], ["newskill"]]     # canary, then just the new node
+    assert emb.calls == [["python", "kubernetes"], ["newskill"]]  # canary, then just the new node
     assert gate.ready
 
 
@@ -303,7 +314,7 @@ def test_gate_is_not_ready_when_the_canary_could_not_run_even_if_the_drain_succe
     _seed(conn, "new")
     gate = ensure_index_current(conn, cfg, FakeEmbedder(script={1: _transient("canary call failed")}))
     assert gate.canary.error and gate.embed.embedded == 1
-    assert not gate.ready                                     # unverified index is not "current"
+    assert not gate.ready  # unverified index is not "current"
 
 
 # ── today's request budget (build 4.3 fix) ───────────────────────────────────
@@ -336,7 +347,7 @@ def test_the_smaller_of_limit_and_budget_wins(conn):
     cfg = _cfg()
     _seed(conn, *[f"s{i}" for i in range(10)])
     by_limit = embed_pending(conn, cfg, FakeEmbedder(), limit=3, daily_remaining=lambda: 5)
-    assert (by_limit.embedded, by_limit.stopped) == (3, None)          # --limit cut it, not the budget
+    assert (by_limit.embedded, by_limit.stopped) == (3, None)  # --limit cut it, not the budget
     by_budget = embed_pending(conn, cfg, FakeEmbedder(), limit=6, daily_remaining=lambda: 2)
     assert (by_budget.embedded, by_budget.stopped) == (2, "daily_budget")
 
@@ -380,7 +391,7 @@ def test_the_gate_reads_the_budget_after_the_canary_has_spent_its_share(conn, tm
 
     cfg = _cfg(inputs_per_request=50)
     _seed(conn, "python", "a", "b")
-    embed_pending(conn, cfg, FakeEmbedder())                                   # index python, a, b
+    embed_pending(conn, cfg, FakeEmbedder())  # index python, a, b
     _seed(conn, *[f"new{i}" for i in range(10)])
 
     moment = datetime(2026, 9, 21, 14, 0, tzinfo=timezone.utc)
@@ -389,14 +400,16 @@ def test_the_gate_reads_the_budget_after_the_canary_has_spent_its_share(conn, tm
     embed = build_embedder(cfg, client=client, usage=usage, sleep=lambda s: None, clock=lambda: 0.0)
     gate = ensure_index_current(conn, cfg, embed, daily_remaining=usage.remaining)
 
-    assert client.calls[0] == ["python"]                   # the canary (only 'python' exists among the canary names)
+    assert client.calls[0] == ["python"]  # the canary (only 'python' exists among the canary names)
     assert gate.embed.embedded == 7 and gate.embed.stopped == "daily_budget"
-    assert usage.used() == 8 and usage.remaining() == 0    # canary 1 + 7 skills = exactly the budget
-    assert not gate.ready                                   # 3 skills still wait for tomorrow
+    assert usage.used() == 8 and usage.remaining() == 0  # canary 1 + 7 skills = exactly the budget
+    assert not gate.ready  # 3 skills still wait for tomorrow
 
 
 # ── a real bug must not hide behind a status line (build 4.3 hardening) ──────
-@pytest.mark.parametrize("bug", [KeyError("missing"), TypeError("bad arg"), ValueError("bad value"), AttributeError("x")])
+@pytest.mark.parametrize(
+    "bug", [KeyError("missing"), TypeError("bad arg"), ValueError("bad value"), AttributeError("x")]
+)
 def test_an_unknown_exception_is_reraised_not_reported_as_a_stop(conn, bug):
     cfg = _cfg()
     _seed(conn, "a", "b", "c", "d")
@@ -443,8 +456,11 @@ def test_each_stop_reason_is_distinct(conn):
 
     reasons = set()
     for exc in (
-        DailyQuotaExceeded("PerDay"), DailyBudgetReached("budget"), _transient(),
-        _wrapped(ClientError(400, {"error": {"message": "bad request"}})), EmbeddingError("zero norm"),
+        DailyQuotaExceeded("PerDay"),
+        DailyBudgetReached("budget"),
+        _transient(),
+        _wrapped(ClientError(400, {"error": {"message": "bad request"}})),
+        EmbeddingError("zero norm"),
     ):
         c = connect(":memory:")
         init_db(c)

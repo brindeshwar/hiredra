@@ -39,8 +39,16 @@ DIM = 8
 
 def _cfg(**over) -> GraphConfig:
     base = dict(
-        model="gemini-embedding-2", dimensions=DIM, prefix="", inputs_per_request=50, requests_per_minute=100,
-        dedup_threshold=0.90, review_cosine=0.93, auto_cosine=0.96, have=0.9, adj=0.7,
+        model="gemini-embedding-2",
+        dimensions=DIM,
+        prefix="",
+        inputs_per_request=50,
+        requests_per_minute=100,
+        dedup_threshold=0.90,
+        review_cosine=0.93,
+        auto_cosine=0.96,
+        have=0.9,
+        adj=0.7,
     )
     base.update(over)
     return GraphConfig(**base)
@@ -87,7 +95,7 @@ def _band(report, band):
         ("pub/sub", "pubsub", True),
         ("system design", "systems design", True),
         ("c#", "csharp", True),
-        ("c#", "c++", False),          # the bug the first read-through caught: must never collapse
+        ("c#", "c++", False),  # the bug the first read-through caught: must never collapse
         ("c#", "c", False),
         ("c++", "c", False),
         ("f#", "f", False),
@@ -98,15 +106,19 @@ def _band(report, band):
 )
 def test_same_spelling(a, b, same):
     assert same_spelling(a, b) is same
-    assert same_spelling(b, a) is same                       # symmetric
+    assert same_spelling(b, a) is same  # symmetric
 
 
 @pytest.mark.parametrize(
     "a,b,expected",
     [
-        ("sql", "sql server", True), ("react", "react native", True), ("backend", "backend development", True),
-        ("gitlab", "gitlab ci", True), ("kubernetes", "k8s", False), ("aws", "amazon web services", False),
-        ("rest api", "rest apis", False),                     # same words once plurals fold: not a PROPER subset
+        ("sql", "sql server", True),
+        ("react", "react native", True),
+        ("backend", "backend development", True),
+        ("gitlab", "gitlab ci", True),
+        ("kubernetes", "k8s", False),
+        ("aws", "amazon web services", False),
+        ("rest api", "rest apis", False),  # same words once plurals fold: not a PROPER subset
     ],
 )
 def test_is_specialization(a, b, expected):
@@ -116,10 +128,15 @@ def test_is_specialization(a, b, expected):
 @pytest.mark.parametrize(
     "a,b,expected",
     [
-        ("oauth", "oauth2", True), ("css", "css3", True), ("python", "python3", True), ("http", "http2", True),
-        ("python 2", "python 3", True), ("ipv4", "ipv6", True),
-        ("oauth 2.0", "oauth2", False),                       # identical keys are a spelling match, not a variant
-        ("react", "vue", False), ("s3", "s3", False),
+        ("oauth", "oauth2", True),
+        ("css", "css3", True),
+        ("python", "python3", True),
+        ("http", "http2", True),
+        ("python 2", "python 3", True),
+        ("ipv4", "ipv6", True),
+        ("oauth 2.0", "oauth2", False),  # identical keys are a spelling match, not a variant
+        ("react", "vue", False),
+        ("s3", "s3", False),
     ],
 )
 def test_is_version_variant(a, b, expected):
@@ -152,8 +169,8 @@ def test_is_version_variant(a, b, expected):
         # left alone
         ("machine learning", "deep learning", 0.894, None),
         ("devops", "azure devops", 0.897, None),
-        ("c#", "c++", 0.867, None),                            # the collision the fix prevents
-        ("c#", "csharp", 0.84, None),                          # spelling match, but below the 0.85 floor
+        ("c#", "c++", 0.867, None),  # the collision the fix prevents
+        ("c#", "csharp", 0.84, None),  # spelling match, but below the 0.85 floor
         ("a b", "a-b", 0.80, None),
     ],
 )
@@ -163,7 +180,7 @@ def test_classify_pair(a, b, cos, expected):
 
 def test_a_spelling_match_is_auto_down_to_the_spelling_floor_even_below_the_threshold():
     assert SPELLING_FLOOR == 0.85
-    assert classify_pair("c#", "csharp", 0.86, _cfg())[0] == "auto"       # 0.86 < the 0.90 threshold, still AUTO
+    assert classify_pair("c#", "csharp", 0.86, _cfg())[0] == "auto"  # 0.86 < the 0.90 threshold, still AUTO
     assert classify_pair("c#", "csharp", 0.849, _cfg()) is None
 
 
@@ -195,15 +212,15 @@ def test_the_c_family_never_collapses_even_when_vectors_are_close(conn):
 def test_auto_and_review_and_low_are_reported_separately(conn):
     cfg = _cfg()
     _node(conn, cfg, "fastapi", _at(1.0), seen=9)
-    _node(conn, cfg, "fast api", _at(0.97), seen=1)                     # spelling -> AUTO
+    _node(conn, cfg, "fast api", _at(0.97), seen=1)  # spelling -> AUTO
     _node(conn, cfg, "sql", _at(1.0, base=2, axis=3), seen=9)
-    _node(conn, cfg, "sql server", _at(0.925, base=2, axis=3), seen=1)   # specialization, low band
+    _node(conn, cfg, "sql server", _at(0.925, base=2, axis=3), seen=1)  # specialization, low band
     _node(conn, cfg, "cloud architecture", _at(1.0, base=4, axis=5), seen=9)
-    _node(conn, cfg, "cloud infrastructure", _at(0.94, base=4, axis=5), seen=1)   # review
+    _node(conn, cfg, "cloud infrastructure", _at(0.94, base=4, axis=5), seen=1)  # review
     r = propose_merges(conn, cfg)
     assert _band(r, "auto") == [("fast api", "fastapi")]
     assert _band(r, "review") == [("cloud infrastructure", "cloud architecture")]
-    assert r.hidden_low == 1                                              # sql ~ sql server, not listed
+    assert r.hidden_low == 1  # sql ~ sql server, not listed
     shown = propose_merges(conn, cfg, show_low=True)
     assert ("sql server", "sql") in _band(shown, "review")
     assert shown.hidden_low == 0
@@ -224,17 +241,17 @@ def test_a_node_that_survives_an_auto_cluster_is_never_merged_away_by_a_review_p
     """j~k is a spelling match (AUTO, j survives). i~j is only REVIEW. The star rule says j
     stays a survivor: it is NOT also proposed as a duplicate of i (that would chain k into i)."""
     cfg = _cfg()
-    _node(conn, cfg, "vector database", _at(1.0), seen=9)                          # i (highest priority)
-    _node(conn, cfg, "vector stores", _at(0.94), seen=5)                            # j
-    _node(conn, cfg, "vector store", _at(0.94, axis=2), seen=1)                     # k: spelling match of j
+    _node(conn, cfg, "vector database", _at(1.0), seen=9)  # i (highest priority)
+    _node(conn, cfg, "vector stores", _at(0.94), seen=5)  # j
+    _node(conn, cfg, "vector store", _at(0.94, axis=2), seen=1)  # k: spelling match of j
     r = propose_merges(conn, cfg)
     assert _band(r, "auto") == [("vector store", "vector stores")]
-    assert all(m.dup != "vector stores" for m in r.proposals)                       # j is not merged into i
+    assert all(m.dup != "vector stores" for m in r.proposals)  # j is not merged into i
 
 
 def test_auto_pairs_are_claimed_before_review_pairs_can_take_the_node(conn):
     cfg = _cfg()
-    _node(conn, cfg, "vector database", _at(1.0), seen=9)     # highest priority; only REVIEW-close to `vector store`
+    _node(conn, cfg, "vector database", _at(1.0), seen=9)  # highest priority; only REVIEW-close to `vector store`
     _node(conn, cfg, "vector stores", _at(0.94, axis=2), seen=5)
     _node(conn, cfg, "vector store", _at(0.94, axis=3), seen=1)
     r = propose_merges(conn, cfg)
@@ -244,9 +261,9 @@ def test_auto_pairs_are_claimed_before_review_pairs_can_take_the_node(conn):
 def test_a_mine_node_is_still_never_a_duplicate_in_any_band(conn):
     cfg = _cfg()
     _node(conn, cfg, "python", _at(1.0), mine=True)
-    _node(conn, cfg, "python3", _at(0.99), seen=9)                                  # version variant -> REVIEW
+    _node(conn, cfg, "python3", _at(0.99), seen=9)  # version variant -> REVIEW
     r = propose_merges(conn, cfg)
-    assert _band(r, "review") == [("python3", "python")]                            # python (mine) survives
+    assert _band(r, "review") == [("python3", "python")]  # python (mine) survives
     r2 = propose_merges(conn, cfg)
     assert all(m.dup != "python" for m in r2.proposals)
 
@@ -255,9 +272,9 @@ def test_a_mine_node_is_still_never_a_duplicate_in_any_band(conn):
 def test_a_never_merge_pair_is_never_proposed_in_any_band(conn):
     cfg = _cfg()
     _node(conn, cfg, "sql", _at(1.0), seen=9)
-    _node(conn, cfg, "sql server", _at(0.97), seen=1)                               # would be REVIEW
+    _node(conn, cfg, "sql server", _at(0.97), seen=1)  # would be REVIEW
     _node(conn, cfg, "fastapi", _at(1.0, base=2, axis=3), seen=9)
-    _node(conn, cfg, "fast api", _at(0.97, base=2, axis=3), seen=1)                 # would be AUTO
+    _node(conn, cfg, "fast api", _at(0.97, base=2, axis=3), seen=1)  # would be AUTO
     never = {frozenset(("sql", "sql server")), frozenset(("fast api", "fastapi"))}
     r = propose_merges(conn, cfg, never=never)
     assert r.proposals == [] and r.never_blocked == 2
@@ -267,7 +284,9 @@ def test_a_never_merge_pair_does_not_appear_as_a_near_miss(conn):
     cfg = _cfg()
     _node(conn, cfg, "machine learning", _at(1.0), seen=9)
     _node(conn, cfg, "deep learning", _at(0.894), seen=1)
-    assert propose_merges(conn, cfg).near_misses == [("machine learning", "deep learning", pytest.approx(0.894, abs=1e-4))]
+    assert propose_merges(conn, cfg).near_misses == [
+        ("machine learning", "deep learning", pytest.approx(0.894, abs=1e-4))
+    ]
     never = {frozenset(("machine learning", "deep learning"))}
     assert propose_merges(conn, cfg, never=never).near_misses == []
 
@@ -292,7 +311,7 @@ def test_an_alias_that_is_not_a_node_is_proposed_as_alias_only(conn):
 def test_an_alias_that_is_a_node_is_proposed_as_a_merge_with_its_cosine(conn):
     cfg = _cfg()
     _node(conn, cfg, "go", _at(1.0), seen=3)
-    _node(conn, cfg, "golang", _at(0.767), seen=1)                                  # far below any cosine band
+    _node(conn, cfg, "golang", _at(0.767), seen=1)  # far below any cosine band
     r = propose_merges(conn, cfg, aliases={"go": ("golang",)})
     m = r.by_band("alias")[0]
     assert (m.dup, m.survivor) == ("golang", "go") and m.cosine == pytest.approx(0.767, abs=1e-4)
@@ -309,7 +328,7 @@ def test_the_alias_band_needs_no_vectors_at_all(conn):
 def test_an_alias_pair_is_not_proposed_a_second_time_by_cosine(conn):
     cfg = _cfg()
     _node(conn, cfg, "postgresql", _at(1.0), seen=9)
-    _node(conn, cfg, "postgres", _at(0.974), seen=1)                               # would also be AUTO by cosine
+    _node(conn, cfg, "postgres", _at(0.974), seen=1)  # would also be AUTO by cosine
     r = propose_merges(conn, cfg, aliases={"postgresql": ("postgres",)})
     assert [m.band for m in r.proposals] == ["alias"]
 
@@ -325,12 +344,13 @@ def test_alias_entries_that_cannot_apply_are_reported_not_silently_dropped(conn)
     add_alias(conn, "kube", "kubernetes") if False else None
     add_alias(conn, "ktes", "kubernetes")
     r = propose_merges(
-        conn, cfg,
+        conn,
+        cfg,
         aliases={
-            "no-such-skill": ("x",),                       # canonical missing
-            "kubernetes": ("ktes",),                       # already applied -> silent
-            "python": ("py",),                             # canonical is fine; alias is a plain node -> proposed
-            "sql": ("sql server",),                        # pair is in the never-merge list
+            "no-such-skill": ("x",),  # canonical missing
+            "kubernetes": ("ktes",),  # already applied -> silent
+            "python": ("py",),  # canonical is fine; alias is a plain node -> proposed
+            "sql": ("sql server",),  # pair is in the never-merge list
         },
         never={frozenset(("sql", "sql server"))},
     )
@@ -361,10 +381,10 @@ def test_an_alias_already_pointing_elsewhere_is_a_reported_conflict(conn):
 # ── the review file + apply ──────────────────────────────────────────────────
 def _all_bands(conn, cfg):
     _node(conn, cfg, "fastapi", _at(1.0), seen=9)
-    _node(conn, cfg, "fast api", _at(0.97), seen=1)                                  # AUTO
+    _node(conn, cfg, "fast api", _at(0.97), seen=1)  # AUTO
     _node(conn, cfg, "oauth2", _at(1.0, base=2, axis=3), seen=9)
-    _node(conn, cfg, "oauth", _at(0.961, base=2, axis=3), seen=1)                    # REVIEW (version variant)
-    _node(conn, cfg, "kubernetes", _at(1.0, base=4, axis=5), seen=9)                 # alias target
+    _node(conn, cfg, "oauth", _at(0.961, base=2, axis=3), seen=1)  # REVIEW (version variant)
+    _node(conn, cfg, "kubernetes", _at(1.0, base=4, axis=5), seen=9)  # alias target
     return propose_merges(conn, cfg, aliases={"kubernetes": ("k8s",)})
 
 
@@ -375,7 +395,7 @@ def test_the_file_carries_band_approve_and_reason_for_every_entry(conn, tmp_path
     got = [(p["band"], p["dup"], p["approve"]) for p in doc["proposals"]]
     assert got == [("auto", "fast api", True), ("alias", "k8s", True), ("review", "oauth", False)]
     assert all(p["reason"] for p in doc["proposals"])
-    assert doc["proposals"][1]["cosine"] is None                                     # alias-only: no cosine
+    assert doc["proposals"][1]["cosine"] is None  # alias-only: no cosine
 
 
 def test_apply_applies_auto_and_alias_but_not_the_unticked_review_entry(conn, tmp_path):
@@ -384,7 +404,9 @@ def test_apply_applies_auto_and_alias_but_not_the_unticked_review_entry(conn, tm
     r = apply_review(conn, cfg, path)
     assert sorted(r.applied) == [("fast api", "fastapi"), ("k8s", "kubernetes")] and r.not_approved == 1
     assert resolve_alias(conn, "fast api") == "fastapi"
-    assert resolve_alias(conn, "k8s") == "kubernetes" and get_skill_vocab(conn, "k8s") is None   # alias only: no node made
+    assert (
+        resolve_alias(conn, "k8s") == "kubernetes" and get_skill_vocab(conn, "k8s") is None
+    )  # alias only: no node made
     assert get_skill_vocab(conn, "oauth") is not None and resolve_alias(conn, "oauth") is None
 
 
@@ -393,7 +415,7 @@ def test_an_alias_only_entry_never_creates_a_node(conn, tmp_path):
     path = write_review(_all_bands(conn, cfg), tmp_path / "r.json")
     before = {r["name"] for r in iter_skill_vocab(conn)}
     apply_review(conn, cfg, path)
-    assert {r["name"] for r in iter_skill_vocab(conn)} == before - {"fast api"}        # only the merged dup is gone
+    assert {r["name"] for r in iter_skill_vocab(conn)} == before - {"fast api"}  # only the merged dup is gone
 
 
 @pytest.mark.parametrize("value", [False, None, "true", "yes", 1, 0, "True"])
@@ -412,8 +434,12 @@ def test_a_missing_approve_field_means_not_approved(conn, tmp_path):
     cfg = _cfg()
     _all_bands(conn, cfg)
     path = tmp_path / "old-format.json"
-    path.write_text(json.dumps({"embed_tag": cfg.embed_tag, "proposals": [
-        {"dup": "fast api", "survivor": "fastapi", "cosine": 0.97}]}), encoding="utf-8")          # the pre-band file format
+    path.write_text(
+        json.dumps(
+            {"embed_tag": cfg.embed_tag, "proposals": [{"dup": "fast api", "survivor": "fastapi", "cosine": 0.97}]}
+        ),
+        encoding="utf-8",
+    )  # the pre-band file format
     r = apply_review(conn, cfg, path)
     assert r.applied == [] and r.not_approved == 1
 
@@ -442,15 +468,35 @@ def test_apply_rechecks_the_never_merge_list(conn, tmp_path):
 def test_a_spelling_pair_applies_below_the_normal_threshold_but_only_if_the_names_really_match(conn, tmp_path):
     cfg = _cfg()
     _node(conn, cfg, "csharp", _at(1.0), seen=1)
-    _node(conn, cfg, "c#", _at(0.86), seen=9)                                       # 0.86 < 0.90 but a spelling match
+    _node(conn, cfg, "c#", _at(0.86), seen=9)  # 0.86 < 0.90 but a spelling match
     _node(conn, cfg, "java", _at(1.0, base=2, axis=3), seen=1)
-    _node(conn, cfg, "kotlin", _at(0.86, base=2, axis=3), seen=1)                   # 0.86, NOT a spelling match
+    _node(conn, cfg, "kotlin", _at(0.86, base=2, axis=3), seen=1)  # 0.86, NOT a spelling match
     path = tmp_path / "r.json"
-    path.write_text(json.dumps({"embed_tag": cfg.embed_tag, "proposals": [
-        {"band": "auto", "approve": True, "reason": "same spelling after normalising", "dup": "csharp", "survivor": "c#"},
-        # a tampered entry claiming to be a spelling match to dodge the cosine floor
-        {"band": "auto", "approve": True, "reason": "same spelling after normalising", "dup": "kotlin", "survivor": "java"},
-    ]}), encoding="utf-8")
+    path.write_text(
+        json.dumps(
+            {
+                "embed_tag": cfg.embed_tag,
+                "proposals": [
+                    {
+                        "band": "auto",
+                        "approve": True,
+                        "reason": "same spelling after normalising",
+                        "dup": "csharp",
+                        "survivor": "c#",
+                    },
+                    # a tampered entry claiming to be a spelling match to dodge the cosine floor
+                    {
+                        "band": "auto",
+                        "approve": True,
+                        "reason": "same spelling after normalising",
+                        "dup": "kotlin",
+                        "survivor": "java",
+                    },
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     r = apply_review(conn, cfg, path)
     assert r.applied == [("csharp", "c#")]
     assert len(r.skipped) == 1 and "below the floor 0.9" in r.skipped[0][2]
@@ -462,11 +508,24 @@ def test_alias_entries_are_reverified_at_apply(conn, tmp_path):
     _node(conn, cfg, "typescript", _at(0.3))
     add_alias(conn, "js", "typescript")
     path = tmp_path / "r.json"
-    path.write_text(json.dumps({"embed_tag": cfg.embed_tag, "proposals": [
-        {"band": "alias", "approve": True, "dup": "js", "survivor": "kubernetes"},        # conflicts with the existing alias
-        {"band": "alias", "approve": True, "dup": "k8s", "survivor": "no-longer-there"},  # canonical gone
-        {"band": "alias", "approve": True, "dup": "js", "survivor": "typescript"},        # already applied
-    ]}), encoding="utf-8")
+    path.write_text(
+        json.dumps(
+            {
+                "embed_tag": cfg.embed_tag,
+                "proposals": [
+                    {
+                        "band": "alias",
+                        "approve": True,
+                        "dup": "js",
+                        "survivor": "kubernetes",
+                    },  # conflicts with the existing alias
+                    {"band": "alias", "approve": True, "dup": "k8s", "survivor": "no-longer-there"},  # canonical gone
+                    {"band": "alias", "approve": True, "dup": "js", "survivor": "typescript"},  # already applied
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     r = apply_review(conn, cfg, path)
     reasons = [why for _, _, why in r.skipped]
     assert r.applied == [] and len(reasons) == 3
@@ -495,7 +554,7 @@ def test_proposing_with_aliases_and_never_is_still_read_only(conn):
 
 def test_spelling_keys_try_the_word_with_and_without_plural_folding():
     assert spelling_keys("nodejs") == {"nodejs", "nodej"}
-    assert spelling_keys("node.js") == {"nodejs"}             # short words are not folded, so both keys agree
+    assert spelling_keys("node.js") == {"nodejs"}  # short words are not folded, so both keys agree
     assert spelling_keys("rest apis") == {"restapis", "restapi"}
     assert spelling_keys("c#") == {"csharp"} and "cplusplus" in spelling_keys("c++")
     # the whole point: the three C names never share a key

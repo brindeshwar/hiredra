@@ -17,16 +17,14 @@ from hiredra.storage import db
 @dataclass(frozen=True, slots=True)
 class PersistResult:
     inserted: int  # job_ids not seen before
-    reseen: int    # job_ids already stored -> re-sighted (last_seen_at bumped, nothing regressed)
+    reseen: int  # job_ids already stored -> re-sighted (last_seen_at bumped, nothing regressed)
 
     @property
     def total(self) -> int:
         return self.inserted + self.reseen
 
 
-def persist_jobs(
-    conn: sqlite3.Connection, jobs: Iterable[Job], *, run_id: str | None = None
-) -> PersistResult:
+def persist_jobs(conn: sqlite3.Connection, jobs: Iterable[Job], *, run_id: str | None = None) -> PersistResult:
     """Upsert each job (stamping new rows with ``run_id``). New vs re-sighted."""
     inserted = reseen = 0
     for job in jobs:

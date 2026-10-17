@@ -103,10 +103,12 @@ def test_happy_path(tmp_path, ctx):
     companies = _companies_yaml(tmp_path, [("Acme", "p1"), ("Beta", "p2")])
     p1 = FakeProvider("p1", jobs=[_job(job_id="p1:1", company="Acme")])
     p2 = FakeProvider("p2", jobs=[_job(job_id="p2:1", company="Beta", title="Data Engineer")])
-    js = FakeJobSpySource(JobSpyResult(
-        jobs=[_job(job_id="jobspy-x:1", source="jobspy-x", company="X")],
-        outcomes=(SiteOutcome("indeed", "ok", 1),),
-    ))
+    js = FakeJobSpySource(
+        JobSpyResult(
+            jobs=[_job(job_id="jobspy-x:1", source="jobspy-x", company="X")],
+            outcomes=(SiteOutcome("indeed", "ok", 1),),
+        )
+    )
     store = FakeRunStore()
     sinks: list[RecordingSink] = []
 
@@ -116,8 +118,13 @@ def test_happy_path(tmp_path, ctx):
         return s
 
     report = run(
-        _config(companies_path=companies), sink_factory=factory, run_store=store,
-        ctx=ctx, registry=(p1, p2), jobspy_source=js, sleep=lambda s: None,
+        _config(companies_path=companies),
+        sink_factory=factory,
+        run_store=store,
+        ctx=ctx,
+        registry=(p1, p2),
+        jobspy_source=js,
+        sleep=lambda s: None,
     )
 
     assert report.status == "ok"
@@ -137,9 +144,13 @@ def test_fetcherror_makes_partial_other_companies_still_run(tmp_path, ctx):
     p1 = FakeProvider("p1", error=FetchError("boom"))
     p2 = FakeProvider("p2", jobs=[_job(job_id="p2:1")])
     report = run(
-        _config(companies_path=companies), sink_factory=lambda r: RecordingSink(),
-        run_store=FakeRunStore(), ctx=ctx, registry=(p1, p2),
-        jobspy_source=FakeJobSpySource(), sleep=lambda s: None,
+        _config(companies_path=companies),
+        sink_factory=lambda r: RecordingSink(),
+        run_store=FakeRunStore(),
+        ctx=ctx,
+        registry=(p1, p2),
+        jobspy_source=FakeJobSpySource(),
+        sleep=lambda s: None,
     )
     assert [c.status for c in report.companies] == ["error", "ok"]
     assert report.status == "partial"
@@ -149,9 +160,13 @@ def test_blocked_makes_partial(tmp_path, ctx):
     companies = _companies_yaml(tmp_path, [("Acme", "p1")])
     p1 = FakeProvider("p1", error=Blocked("blocked", cooldown_key="p1host", until=0.0))
     report = run(
-        _config(companies_path=companies), sink_factory=lambda r: RecordingSink(),
-        run_store=FakeRunStore(), ctx=ctx, registry=(p1,),
-        jobspy_source=FakeJobSpySource(), sleep=lambda s: None,
+        _config(companies_path=companies),
+        sink_factory=lambda r: RecordingSink(),
+        run_store=FakeRunStore(),
+        ctx=ctx,
+        registry=(p1,),
+        jobspy_source=FakeJobSpySource(),
+        sleep=lambda s: None,
     )
     assert report.companies[0].status == "blocked"
     assert report.status == "partial"
@@ -161,9 +176,13 @@ def test_provider_bug_is_caught_as_error_not_a_crash(tmp_path, ctx):
     companies = _companies_yaml(tmp_path, [("Acme", "p1")])
     p1 = FakeProvider("p1", error=RuntimeError("provider bug"))
     report = run(
-        _config(companies_path=companies), sink_factory=lambda r: RecordingSink(),
-        run_store=FakeRunStore(), ctx=ctx, registry=(p1,),
-        jobspy_source=FakeJobSpySource(), sleep=lambda s: None,
+        _config(companies_path=companies),
+        sink_factory=lambda r: RecordingSink(),
+        run_store=FakeRunStore(),
+        ctx=ctx,
+        registry=(p1,),
+        jobspy_source=FakeJobSpySource(),
+        sleep=lambda s: None,
     )
     assert report.companies[0].status == "error"
     assert report.status == "partial"
@@ -172,8 +191,12 @@ def test_provider_bug_is_caught_as_error_not_a_crash(tmp_path, ctx):
 def test_unroutable_stays_ok_but_is_reported(tmp_path, ctx):
     companies = _companies_yaml(tmp_path, [("Ghost", "nobody")])
     report = run(
-        _config(companies_path=companies), sink_factory=lambda r: RecordingSink(),
-        run_store=FakeRunStore(), ctx=ctx, registry=(), jobspy_source=FakeJobSpySource(),
+        _config(companies_path=companies),
+        sink_factory=lambda r: RecordingSink(),
+        run_store=FakeRunStore(),
+        ctx=ctx,
+        registry=(),
+        jobspy_source=FakeJobSpySource(),
         sleep=lambda s: None,
     )
     assert report.companies[0].status == "unroutable"
@@ -189,9 +212,13 @@ def test_404_is_gone_not_error_and_stays_ok(tmp_path, ctx):
     p1 = FakeProvider("p1", error=HTTPError("not found", status=404))
     p2 = FakeProvider("p2", jobs=[_job(job_id="p2:1")])
     report = run(
-        _config(companies_path=companies), sink_factory=lambda r: RecordingSink(),
-        run_store=FakeRunStore(), ctx=ctx, registry=(p1, p2),
-        jobspy_source=FakeJobSpySource(), sleep=lambda s: None,
+        _config(companies_path=companies),
+        sink_factory=lambda r: RecordingSink(),
+        run_store=FakeRunStore(),
+        ctx=ctx,
+        registry=(p1, p2),
+        jobspy_source=FakeJobSpySource(),
+        sleep=lambda s: None,
     )
     assert [c.status for c in report.companies] == ["gone", "ok"]
     assert report.status == "ok"
@@ -203,9 +230,13 @@ def test_non_404_http_error_still_makes_partial(tmp_path, ctx):
     companies = _companies_yaml(tmp_path, [("Acme", "p1")])
     p1 = FakeProvider("p1", error=HTTPError("server error", status=500))
     report = run(
-        _config(companies_path=companies), sink_factory=lambda r: RecordingSink(),
-        run_store=FakeRunStore(), ctx=ctx, registry=(p1,),
-        jobspy_source=FakeJobSpySource(), sleep=lambda s: None,
+        _config(companies_path=companies),
+        sink_factory=lambda r: RecordingSink(),
+        run_store=FakeRunStore(),
+        ctx=ctx,
+        registry=(p1,),
+        jobspy_source=FakeJobSpySource(),
+        sleep=lambda s: None,
     )
     assert report.companies[0].status == "error"
     assert report.status == "partial"
@@ -214,8 +245,13 @@ def test_non_404_http_error_still_makes_partial(tmp_path, ctx):
 def test_empty_jobspy_site_is_ok_not_partial(ctx):
     js = FakeJobSpySource(JobSpyResult(jobs=[], outcomes=(SiteOutcome("google", "empty", 0),)))
     report = run(
-        _config(), sink_factory=lambda r: RecordingSink(), run_store=FakeRunStore(),
-        ctx=ctx, registry=(), jobspy_source=js, sleep=lambda s: None,
+        _config(),
+        sink_factory=lambda r: RecordingSink(),
+        run_store=FakeRunStore(),
+        ctx=ctx,
+        registry=(),
+        jobspy_source=js,
+        sleep=lambda s: None,
     )
     assert report.status == "ok"
 
@@ -223,8 +259,13 @@ def test_empty_jobspy_site_is_ok_not_partial(ctx):
 def test_jobspy_blocked_makes_partial(ctx):
     js = FakeJobSpySource(JobSpyResult(jobs=[], outcomes=(SiteOutcome("naukri", "blocked", 0, "406"),)))
     report = run(
-        _config(), sink_factory=lambda r: RecordingSink(), run_store=FakeRunStore(),
-        ctx=ctx, registry=(), jobspy_source=js, sleep=lambda s: None,
+        _config(),
+        sink_factory=lambda r: RecordingSink(),
+        run_store=FakeRunStore(),
+        ctx=ctx,
+        registry=(),
+        jobspy_source=js,
+        sleep=lambda s: None,
     )
     assert report.status == "partial"
 
@@ -235,8 +276,13 @@ def test_jobspy_exception_does_not_lose_company_results(tmp_path, ctx):
     js = FakeJobSpySource(raise_=RuntimeError("jobspy bug"))
     store = FakeRunStore()
     report = run(
-        _config(companies_path=companies), sink_factory=lambda r: RecordingSink(),
-        run_store=store, ctx=ctx, registry=(p1,), jobspy_source=js, sleep=lambda s: None,
+        _config(companies_path=companies),
+        sink_factory=lambda r: RecordingSink(),
+        run_store=store,
+        ctx=ctx,
+        registry=(p1,),
+        jobspy_source=js,
+        sleep=lambda s: None,
     )
     assert report.companies[0].status == "ok"
     assert report.jobspy[0].status == "error"
@@ -251,8 +297,13 @@ def test_pacing_sleeps_between_companies_not_before_the_first(tmp_path, ctx):
     slept: list[float] = []
     cfg = _config(companies_path=companies, pacing=Pacing(between_companies=2.0, jitter=0.0))
     run(
-        cfg, sink_factory=lambda r: RecordingSink(), run_store=FakeRunStore(), ctx=ctx,
-        registry=(p,), jobspy_source=FakeJobSpySource(), sleep=slept.append,
+        cfg,
+        sink_factory=lambda r: RecordingSink(),
+        run_store=FakeRunStore(),
+        ctx=ctx,
+        registry=(p,),
+        jobspy_source=FakeJobSpySource(),
+        sleep=slept.append,
         rng=random.Random(0),
     )
     assert slept == [2.0, 2.0]
@@ -265,9 +316,14 @@ def test_resume_skips_done_companies(tmp_path, ctx):
     handle = RunHandle(run_id="R1", companies_done={"A"}, resumed=True)
     store = FakeRunStore(resume_handle=handle)
     report = run(
-        _config(companies_path=companies), sink_factory=lambda r: RecordingSink(),
-        run_store=store, ctx=ctx, registry=(p,), jobspy_source=FakeJobSpySource(),
-        resume=True, sleep=lambda s: None,
+        _config(companies_path=companies),
+        sink_factory=lambda r: RecordingSink(),
+        run_store=store,
+        ctx=ctx,
+        registry=(p,),
+        jobspy_source=FakeJobSpySource(),
+        resume=True,
+        sleep=lambda s: None,
     )
     statuses = {c.name: c.status for c in report.companies}
     assert statuses == {"A": "skipped", "B": "ok"}
@@ -280,8 +336,14 @@ def test_resume_skips_jobspy_when_already_done(ctx):
     store = FakeRunStore(resume_handle=handle)
     js = FakeJobSpySource()
     report = run(
-        _config(), sink_factory=lambda r: RecordingSink(), run_store=store, ctx=ctx,
-        registry=(), jobspy_source=js, resume=True, sleep=lambda s: None,
+        _config(),
+        sink_factory=lambda r: RecordingSink(),
+        run_store=store,
+        ctx=ctx,
+        registry=(),
+        jobspy_source=js,
+        resume=True,
+        sleep=lambda s: None,
     )
     assert js.calls == 0
     assert report.jobspy == ()
@@ -290,8 +352,14 @@ def test_resume_skips_jobspy_when_already_done(ctx):
 def test_no_unfinished_run_on_resume_starts_fresh(ctx):
     store = FakeRunStore(resume_handle=None)
     report = run(
-        _config(), sink_factory=lambda r: RecordingSink(), run_store=store, ctx=ctx,
-        registry=(), jobspy_source=FakeJobSpySource(), resume=True, sleep=lambda s: None,
+        _config(),
+        sink_factory=lambda r: RecordingSink(),
+        run_store=store,
+        ctx=ctx,
+        registry=(),
+        jobspy_source=FakeJobSpySource(),
+        resume=True,
+        sleep=lambda s: None,
     )
     assert report.resumed is False
 
@@ -300,8 +368,13 @@ def test_no_unfinished_run_on_resume_starts_fresh(ctx):
 def test_cooldowns_loaded_and_on_trip_wired(ctx):
     store = FakeRunStore(cooldowns={"h": time.time() + 1000})
     run(
-        _config(), sink_factory=lambda r: RecordingSink(), run_store=store, ctx=ctx,
-        registry=(), jobspy_source=FakeJobSpySource(), sleep=lambda s: None,
+        _config(),
+        sink_factory=lambda r: RecordingSink(),
+        run_store=store,
+        ctx=ctx,
+        registry=(),
+        jobspy_source=FakeJobSpySource(),
+        sleep=lambda s: None,
     )
     assert "h" in ctx.http.cooldowns.active()
     assert ctx.http.cooldowns.on_trip == store.save_cooldown
@@ -322,8 +395,11 @@ def test_run_closes_the_ctx_it_creates(monkeypatch):
     monkeypatch.setattr(orch_mod, "HttpClient", TrackingClient)
 
     run(
-        _config(), sink_factory=lambda r: RecordingSink(), run_store=FakeRunStore(),
-        jobspy_source=FakeJobSpySource(), sleep=lambda s: None,
+        _config(),
+        sink_factory=lambda r: RecordingSink(),
+        run_store=FakeRunStore(),
+        jobspy_source=FakeJobSpySource(),
+        sleep=lambda s: None,
     )  # no ctx passed
 
     assert len(created) == 1
@@ -332,8 +408,13 @@ def test_run_closes_the_ctx_it_creates(monkeypatch):
 
 def test_run_does_not_close_an_injected_ctx(ctx):
     run(
-        _config(), sink_factory=lambda r: RecordingSink(), run_store=FakeRunStore(),
-        ctx=ctx, registry=(), jobspy_source=FakeJobSpySource(), sleep=lambda s: None,
+        _config(),
+        sink_factory=lambda r: RecordingSink(),
+        run_store=FakeRunStore(),
+        ctx=ctx,
+        registry=(),
+        jobspy_source=FakeJobSpySource(),
+        sleep=lambda s: None,
     )
     assert ctx.http._client.is_closed is False
 
@@ -353,8 +434,12 @@ def test_unexpected_crash_marks_run_failed_and_reraises(tmp_path, ctx):
     store = FakeRunStore()
     with pytest.raises(RuntimeError, match="sink bug"):
         run(
-            _config(companies_path=companies), sink_factory=lambda r: BadSink(),
-            run_store=store, ctx=ctx, registry=(p,), jobspy_source=FakeJobSpySource(),
+            _config(companies_path=companies),
+            sink_factory=lambda r: BadSink(),
+            run_store=store,
+            ctx=ctx,
+            registry=(p,),
+            jobspy_source=FakeJobSpySource(),
             sleep=lambda s: None,
         )
     assert store.finished[-1]["status"] == "failed"
@@ -367,8 +452,12 @@ def test_report_to_json_round_trips(tmp_path, ctx):
     companies = _companies_yaml(tmp_path, [("A", "p")])
     p = FakeProvider("p", jobs=[_job(job_id="p:1")])
     report = run(
-        _config(companies_path=companies), sink_factory=lambda r: RecordingSink(),
-        run_store=FakeRunStore(), ctx=ctx, registry=(p,), jobspy_source=FakeJobSpySource(),
+        _config(companies_path=companies),
+        sink_factory=lambda r: RecordingSink(),
+        run_store=FakeRunStore(),
+        ctx=ctx,
+        registry=(p,),
+        jobspy_source=FakeJobSpySource(),
         sleep=lambda s: None,
     )
     parsed = json.loads(report.to_json())
