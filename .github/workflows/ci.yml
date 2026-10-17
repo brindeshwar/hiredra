@@ -2,9 +2,11 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    # ci-check/**: throwaway branches that prove a guard or the secret scan FAILS on a planted
+    # violation, without opening a PR. They are deleted right after the run.
+    branches: [main, "ci-check/**"]
   pull_request:
-  workflow_dispatch: # manual runs on any branch (used to verify the guards on throwaway branches)
+  workflow_dispatch:
 
 permissions:
   contents: read
