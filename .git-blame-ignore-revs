@@ -1,0 +1,5 @@
+# Pure-formatting commits, hidden from `git blame` (GitHub reads this file automatically).
+# Local use: git config blame.ignoreRevsFile .git-blame-ignore-revs
+
+# style: one-time ruff format of the whole codebase (H1)
+c418e63ef6afb9054460a8f87d11fe039dcb519d
