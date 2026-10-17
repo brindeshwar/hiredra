@@ -247,3 +247,74 @@ def test_run_funnel_flags_onsite_unknown_place_via_job_events():
     assert events2[0]["detail"] == "location: unknown"
 
     conn.close()
+
+
+# --- Hiredra additions (M0.4 finding): workplace words, flag emoji, Washington D.C. ---
+import pytest  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    ("location", "country"),
+    [
+        ("San Francisco Office", "US"),
+        ("New York HQ", "US"),
+        ("New York, NY (HQ)", "US"),
+        ("Palo Alto Office", "US"),
+        ("Emeryville HQ", "US"),
+        ("London office", "GB"),
+        ("Zurich HQ", "CH"),
+        ("Sofia Office", "BG"),
+        ("Lisbon Offices", "PT"),
+        ("Berlin Headquarters", "DE"),
+        ("Bengaluru Office", "IN"),
+        ("Pune Campus", "IN"),
+        ("Hyderabad Hub", "IN"),
+        ("SF Bay Area", "US"),
+        ("San Francisco Bay Area", "US"),
+    ],
+)
+def test_a_trailing_workplace_word_no_longer_hides_the_city(location, country):
+    assert parse(location)["countries"] == [country]
+
+
+def test_workplace_cities_get_the_right_india_verdict():
+    assert eligibility("India", "Bengaluru Office")[0] is True
+    assert eligibility("India", "San Francisco Office") == (False, "restricted to US")
+
+
+@pytest.mark.parametrize("location", ["HQ", "Head Office", "Office", "Main Campus"])
+def test_a_workplace_word_alone_stays_unknown(location):
+    assert parse(location)["countries"] == []
+    assert eligibility("India", location)[0] is None  # never guessed: kept as unknown by the funnel
+
+
+def test_washington_dc_records_the_country():
+    assert parse("Washington, D.C.")["countries"] == ["US"]
+    assert parse("Washington, DC")["countries"] == ["US"]
+    assert eligibility("India", "Washington, D.C.")[0] is False
+
+
+@pytest.mark.parametrize(
+    ("location", "countries"),
+    [
+        ("Lyon \U0001f1eb\U0001f1f7", ["FR"]),
+        ("Berlin \U0001f1e9\U0001f1ea, Remote", ["DE"]),
+        ("\U0001f1ec\U0001f1e7", ["GB"]),
+    ],
+)
+def test_a_flag_emoji_is_an_explicit_country(location, countries):
+    assert parse(location)["countries"] == countries
+
+
+def test_a_flag_beats_a_city_inferred_elsewhere():
+    # Explicit beats inferred, as for a written country: "Paris" alone infers FR, the flag says US.
+    assert parse("Paris \U0001f1fa\U0001f1f8")["countries"] == ["US"]
+
+
+def test_a_workplace_word_must_be_its_own_word():
+    assert parse("Parishq")["countries"] == []  # not "Paris" + "hq"
+
+
+def test_the_flag_is_removed_from_the_city_name():
+    assert parse("Lyon \U0001f1eb\U0001f1f7")["cities"] == ["Lyon"]
+    assert parse("\U0001f1ec\U0001f1e7")["cities"] == []
