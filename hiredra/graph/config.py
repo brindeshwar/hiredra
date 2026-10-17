@@ -17,11 +17,15 @@ import yaml
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_CONFIG_PATH = _REPO_ROOT / "config" / "graph.yml"
 
+#: Keys a section may leave out. ``fit.calibration_id`` is written by ``calibrate --write``
+#: (S5.1); until the first calibration there is none.
+_OPTIONAL: dict[str, set[str]] = {"fit": {"calibration_id"}}
+
 _SECTIONS: dict[str, set[str]] = {
     "embedding": {"model", "dimensions", "prefix", "inputs_per_request"},
     "limits": {"requests_per_minute", "tokens_per_minute", "requests_per_day", "headroom"},
     "dedup": {"threshold", "review_cosine", "auto_cosine"},
-    "fit": {"have", "adj"},
+    "fit": {"have", "adj", "calibration_id"},
     "harvest": {
         "export_base_url",
         "export_date",
@@ -68,6 +72,7 @@ class GraphConfig:
     headroom: float = 0.90
     review_cosine: float = 0.93
     auto_cosine: float = 0.96
+    calibration_id: str | None = None  # "step5-<date>" once Step 5 has set have/adj
 
     @property
     def rpm_budget(self) -> int:
@@ -112,7 +117,7 @@ def load_graph_config(path: Path | str = DEFAULT_CONFIG_PATH) -> GraphConfig:
         unknown = set(body) - allowed
         if unknown:
             raise ValueError(f"graph config: unknown key(s) {sorted(unknown)} in {section!r}")
-        missing = allowed - set(body)
+        missing = allowed - set(body) - _OPTIONAL.get(section, set())
         if missing:
             raise ValueError(f"graph config: missing key(s) {sorted(missing)} in {section!r}")
 
@@ -141,6 +146,7 @@ def load_graph_config(path: Path | str = DEFAULT_CONFIG_PATH) -> GraphConfig:
         auto_cosine=float(dedup["auto_cosine"]),
         have=float(fit["have"]),
         adj=float(fit["adj"]),
+        calibration_id=str(fit["calibration_id"]) if fit.get("calibration_id") else None,
         harvest=harvest,
         canary_skills=_str_list(gate["canary_skills"], "gate.canary_skills"),
         canary_min_cosine=float(gate["canary_min_cosine"]),
