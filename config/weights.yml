@@ -1,0 +1,31 @@
+# config/weights.yml -- Step 6 scoring weights (docs/scoring.md sec 2, plan unit S6.1).
+# Owner-editable. Loading is STRICT: an unknown or missing key is an error.
+#
+#   score = w_domain * domain_fit + w_skills * coverage - w_gap * gap_distance
+#
+# There is no legitimacy term (D2): suspect / likely_ghost postings and low-confidence
+# extractions go to the review list instead. The STARTING values below are provisional;
+# Step 7's weight calibration (30 hand-rated jobs) replaces them and sets calibration_id.
+
+calibration_id: placeholder        # Step 7 sets e.g. step7-2026-12-xx
+
+# The LLM's domain bucket -> a step value in [0, 1]. agent_llm = 1.0 and other = 0.0 are
+# fixed (D15); Step 7 searches backend in {0.5, 0.75, 1.0}, data/ml in {0.25, 0.5} and
+# generic_swe in {0, 0.25}.
+domain_fit: {agent_llm: 1.0, backend: 0.5, data: 0.5, ml: 0.5, generic_swe: 0.0, other: 0.0}
+
+w_domain: 1.0
+w_skills: 1.0
+w_gap: 0.5
+
+# A skill counts as covered when its fit is at least this. null = the midpoint of
+# (fit.adj, fit.have) from config/graph.yml, worked out at load. Must sit strictly between
+# them (D1): at or below adj, gap_distance would only count hard misses.
+cover_bar: null
+
+# A good-to-have skill weighs this much (a required one weighs 1.0), in coverage and gap.
+good_to_have_factor: 0.4
+
+# The quality floor (D13): jobs at or above it are promoted to tailoring. null = nothing is
+# promoted yet (Step 8 refuses to start). Jobs below it stay scored and visible.
+apply_line: null
