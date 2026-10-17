@@ -875,6 +875,61 @@ def iter_skill_vocab(conn: sqlite3.Connection) -> list[dict]:
     return [dict(r) for r in conn.execute("SELECT * FROM skill_vocab ORDER BY name")]
 
 
+def apply_profile_overlay(
+    conn: sqlite3.Connection,
+    *,
+    mine: Mapping[str, str],
+    new_nodes: Mapping[str, str],
+    aliases: Iterable[tuple[str, str]],
+) -> None:
+    """Rebuild the ``mine`` flags from the master profile, in ONE transaction (PF1).
+
+    Every node first loses ``mine``/``level`` (the graph is rebuilt from the profile file, the
+    source-of-truth rule). Then each existing node in ``mine`` ({name: level}) gets them back,
+    each name in ``new_nodes`` ({name: level}) is created as a ``source='profile'`` node, and
+    each ``(alias, canonical)`` is recorded. Before committing, the alias invariant is
+    re-checked (no string is both a node and an alias; no alias points at another alias); any
+    violation rolls the whole overlay back. ``ValueError`` if a ``mine`` name is not a node or
+    a new name already exists.
+    """
+    now = _now()
+    with conn:
+        conn.execute("UPDATE skill_vocab SET mine = 0, level = NULL WHERE mine = 1 OR level IS NOT NULL")
+        for name, level in mine.items():
+            cur = conn.execute("UPDATE skill_vocab SET mine = 1, level = ? WHERE name = ?", (level, name))
+            if cur.rowcount != 1:
+                raise ValueError(f"profile overlay: {name!r} is not a node")
+        for name, level in new_nodes.items():
+            if conn.execute("SELECT 1 FROM skill_vocab WHERE name = ?", (name,)).fetchone():
+                raise ValueError(f"profile overlay: new node {name!r} already exists")
+            conn.execute(
+                "INSERT INTO skill_vocab (name, first_seen_at, seen_count, source, mine, level) "
+                "VALUES (?, ?, 0, 'profile', 1, ?)",
+                (name, now, level),
+            )
+        for alias, canonical in aliases:
+            existing = conn.execute("SELECT canonical FROM skill_alias WHERE alias = ?", (alias,)).fetchone()
+            if existing is not None:
+                if existing["canonical"] != canonical:
+                    raise ValueError(f"profile overlay: alias {alias!r} already points at {existing['canonical']!r}")
+                continue
+            conn.execute(
+                "INSERT INTO skill_alias (alias, canonical, created_at) VALUES (?, ?, ?)", (alias, canonical, now)
+            )
+        both = conn.execute("SELECT alias FROM skill_alias WHERE alias IN (SELECT name FROM skill_vocab)").fetchall()
+        chains = conn.execute(
+            "SELECT alias FROM skill_alias WHERE canonical IN (SELECT alias FROM skill_alias)"
+        ).fetchall()
+        dangling = conn.execute(
+            "SELECT alias FROM skill_alias WHERE canonical NOT IN (SELECT name FROM skill_vocab)"
+        ).fetchall()
+        if both or chains or dangling:
+            raise ValueError(
+                "profile overlay broke the alias invariant: "
+                f"node+alias {[r[0] for r in both]}, chains {[r[0] for r in chains]}, dangling {[r[0] for r in dangling]}"
+            )
+
+
 def list_skill_aliases(conn: sqlite3.Connection) -> dict[str, list[str]]:
     """``{canonical: [aliases…]}`` (aliases sorted), only for nodes that have any."""
     out: dict[str, list[str]] = {}
