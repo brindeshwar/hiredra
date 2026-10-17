@@ -33,7 +33,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB_PATH: Path = _REPO_ROOT / "data" / "hiredra.db"
 
 _SCHEMA_PATH = Path(__file__).with_name("schema.sql")
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 #: run statuses (see schema `runs.status`).
 RUN_STATUSES: tuple[str, ...] = ("running", "ok", "partial", "failed")
@@ -141,6 +141,8 @@ def init_db(conn: sqlite3.Connection) -> None:
         _migrate_v4(conn)
     if version < 5:
         _migrate_v5(conn)
+    if version < 6:
+        _migrate_v6(conn)
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
     conn.commit()
 
@@ -342,6 +344,30 @@ def _migrate_v5(conn: sqlite3.Connection) -> None:
         raise RuntimeError(f"v5 migration broke a foreign key: {bad_fk}")
 
 
+#: The v6 ``jobs`` additions, in order (same text as schema.sql's CREATE TABLE).
+_JOBS_V6_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("review_reason", "TEXT"),
+    ("released_at", "TEXT"),
+    ("scored_at", "TEXT"),
+    ("score_version", "TEXT"),
+    ("score_embed_tag", "TEXT"),
+    ("score_skills_hash", "TEXT"),
+    ("score_profile_hash", "TEXT"),
+)
+
+
+def _migrate_v6(conn: sqlite3.Connection) -> None:
+    """v5 -> v6: the scoring-run columns on ``jobs`` (all nullable, added in place like v5).
+    The ``(status, score)`` index uses v1 columns only, so ``schema.sql`` creates it."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
+    for name, ddl in _JOBS_V6_COLUMNS:
+        if name not in cols:
+            conn.execute(f"ALTER TABLE jobs ADD COLUMN {name} {ddl}")
+    bad_fk = conn.execute("PRAGMA foreign_key_check").fetchall()
+    if bad_fk:
+        raise RuntimeError(f"v6 migration broke a foreign key: {bad_fk}")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # writes
 # ─────────────────────────────────────────────────────────────────────────────
@@ -461,6 +487,45 @@ def set_status(
             detail=detail,
             at=now,
         )
+
+
+def set_score(
+    conn: sqlite3.Connection,
+    job_id: str,
+    *,
+    score: float,
+    features: str,
+    review_reason: str | None,
+    score_version: str,
+    embed_tag: str,
+    skills_hash: str,
+    profile_hash: str,
+) -> None:
+    """Store one scoring result and its four reproducibility stamps (v6). Not a status change:
+    the caller moves ``extracted`` -> ``scored`` with ``set_status``."""
+    now = _now()
+    with conn:
+        cur = conn.execute(
+            "UPDATE jobs SET score = ?, score_features = ?, review_reason = ?, scored_at = ?, score_version = ?, "
+            "score_embed_tag = ?, score_skills_hash = ?, score_profile_hash = ?, updated_at = ? WHERE job_id = ?",
+            (score, features, review_reason, now, score_version, embed_tag, skills_hash, profile_hash, now, job_id),
+        )
+        if cur.rowcount != 1:
+            raise KeyError(f"no job with job_id {job_id!r}")
+
+
+def release_job(conn: sqlite3.Connection, job_id: str) -> None:
+    """The owner's override (D13): promote a scored job out of the review list and/or from below
+    the apply line. Only a ``scored`` job can be released; a note event records it."""
+    now = _now()
+    with conn:
+        row = conn.execute("SELECT status FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+        if row is None:
+            raise KeyError(f"no job with job_id {job_id!r}")
+        if row["status"] != "scored":
+            raise ValueError(f"job {job_id!r} is {row['status']!r}; only a scored job can be released")
+        conn.execute("UPDATE jobs SET released_at = ?, updated_at = ? WHERE job_id = ?", (now, now, job_id))
+        _add_event(conn, job_id, "note", detail="scoring: released by the owner", at=now)
 
 
 def set_years_required(conn: sqlite3.Connection, job_id: str, years: int | None) -> None:

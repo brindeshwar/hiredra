@@ -76,7 +76,17 @@ CREATE TABLE IF NOT EXISTS jobs (
     -- overwritten. NULL for JobSpy rows (no board, no list).
     company_slug      TEXT,                    -- the ATS board slug (rebuilds the board for liveness)
     list_tag          TEXT,                    -- the company list's tag: confirmed | unknown | NULL
-    extraction_version TEXT                    -- model + prompt + schema that wrote the extraction (M0.1)
+    extraction_version TEXT,                   -- model + prompt + schema that wrote the extraction (M0.1)
+
+    -- scoring run (v6). The four stamps decide a rescore: a job is re-scored when its
+    -- score_version, score_embed_tag or score_skills_hash differs from the current one.
+    review_reason      TEXT,                   -- JSON list (suspect / likely_ghost / low_confidence) or NULL
+    released_at        TEXT,                   -- the owner's single override (D13): out of review / above the line
+    scored_at          TEXT,
+    score_version      TEXT,                   -- weights calibration_id:sha8 (incl. fit.have / fit.adj)
+    score_embed_tag    TEXT,                   -- the embedding version the fit used
+    score_skills_hash  TEXT,                   -- the profile Skills section hash (a change -> rescore)
+    score_profile_hash TEXT                    -- the whole profile file hash (tracing only)
 );
 
 CREATE INDEX IF NOT EXISTS idx_jobs_status        ON jobs (status);
@@ -84,6 +94,7 @@ CREATE INDEX IF NOT EXISTS idx_jobs_source        ON jobs (source);
 CREATE INDEX IF NOT EXISTS idx_jobs_company_title ON jobs (company, title);   -- dedup path 2
 CREATE INDEX IF NOT EXISTS idx_jobs_outcome       ON jobs (outcome);
 CREATE INDEX IF NOT EXISTS idx_jobs_date_posted   ON jobs (date_posted);
+CREATE INDEX IF NOT EXISTS idx_jobs_status_score  ON jobs (status, score);   -- ranked lists (v6)
 
 -- ---------------------------------------------------------------
 -- job_events -- append-only. One row per re-sighting / status

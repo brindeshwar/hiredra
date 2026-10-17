@@ -65,7 +65,7 @@ def test_v4_to_v5_adds_columns_and_keeps_every_row(tmp_path):
 
     conn = db.connect(path)
     db.init_db(conn)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION == 5
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION  # v4 -> v5 -> v6 in one init_db
     assert _V5_COLS <= _cols(conn)
     assert conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 2
     assert conn.execute("SELECT COUNT(*) FROM job_events").fetchone()[0] == 3
