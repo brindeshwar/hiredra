@@ -71,7 +71,9 @@ dedup:
 fit:
   # PLACEHOLDER thresholds for the per-skill fit mechanic (docs/scoring.md
   # sec 4): s >= have -> 1.0 ; adj <= s < have -> s ; s < adj -> 0.0.
-  # NOT calibrated -- Step 5's F1 sweep sets the real values for this model.
+  # NOT calibrated -- Step 5's F1 sweep sets the real values for this model:
+  # `python -m hiredra.graph calibrate --write` rewrites have/adj and adds
+  # a calibration_id key, step5-<date> (the regression test then guards them).
   have: 0.90
   adj: 0.70
 

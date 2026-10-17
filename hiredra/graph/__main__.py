@@ -7,6 +7,8 @@
     python -m hiredra.graph sync --reembed-all        # FALLBACK: clear every vector, re-embed under one method
     python -m hiredra.graph merges [--show-low]       # DRY RUN: propose merges in three bands, write the review file
     python -m hiredra.graph merges --apply            # apply exactly the entries marked "approve": true
+    python -m hiredra.graph calibrate --suggest       # blind real-pair suggestions (a,b only) for labeling
+    python -m hiredra.graph calibrate [--write]       # Step 5: sweep HAVE/ADJ on the pair file (dry run without --write)
 
 `merges` never changes the database unless `--apply` is given. The dry-run sorts
 pairs into AUTO (pre-approved), ALIAS (your alias file, pre-approved) and REVIEW
@@ -21,8 +23,9 @@ Every command opens the DB through `init_db`, which migrates an older schema.
 from __future__ import annotations
 
 import argparse
+import json
 import sys
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from pathlib import Path
 
 from hiredra.graph.config import DEFAULT_CONFIG_PATH, load_graph_config
@@ -303,6 +306,70 @@ def _cmd_merges(conn, cfg, args) -> int:
 
 
 #: commands that write to the DB or spend Google budget take the run lock
+def _cmd_calibrate(conn, cfg, args) -> int:
+    from hiredra.graph import calibrate as cal
+    from hiredra.graph.embedder import classify_failure
+
+    if args.suggest:
+        try:
+            pairs, sidecar = cal.suggest_pairs(conn, cfg, n=args.n, seed=args.seed)
+        except ValueError as exc:
+            _log(f"NOT RUN: {exc}")
+            return 1
+        sidecar_path = Path(args.sidecar_path)
+        sidecar_path.parent.mkdir(parents=True, exist_ok=True)
+        sidecar_path.write_text(json.dumps(sidecar, indent=1), encoding="utf-8")
+        # stdout carries ONLY the pairs: no cosine, no band, no count (F5 blind labeling)
+        print("a,b")
+        for a, b in pairs:
+            print(f"{a},{b}")
+        print("(the cosine bands are in the private sidecar -- do not open it before labeling)", file=sys.stderr)
+        return 0
+
+    try:
+        pairs = cal.load_pairs(args.pairs)
+    except (OSError, cal.PairFileError) as exc:
+        _log(f"NOT RUN: {exc}")
+        return 1
+
+    usage = _usage(cfg, args)
+
+    def embedder():
+        from hiredra.graph.embedder import build_embedder
+
+        return build_embedder(cfg, usage=usage)
+
+    try:
+        cosines = cal.pair_cosines(conn, cfg, pairs, embedder, cache_path=args.cosines_path)
+    except Exception as exc:
+        kind = classify_failure(exc)
+        if kind is None:
+            raise
+        _log(f"STOPPED ({kind}): {exc} -- cosines computed so far are cached; re-run later")
+        return 2
+
+    result = cal.calibrate(pairs, cosines)
+    cid = cal.calibration_id_for(date.today())
+    report = cal.render_report(result, pairs, cosines, cfg, cid)
+    _log(
+        f"HAVE={result.have:.2f} ADJ={result.adj:.2f} holdout F1: HAVE {result.holdout['have']['all'].f1:.3f}, "
+        f"ADJ {result.holdout['adj']['all'].f1:.3f}"
+    )
+    for flag in result.flags:
+        _log(f"  {flag}")
+    if result.broken:
+        return 3
+    if not args.write:
+        _log("DRY RUN: nothing written. Re-run with --write to update config/graph.yml and save the report.")
+        return 0
+    reports = Path(args.reports_dir)
+    reports.mkdir(parents=True, exist_ok=True)
+    (reports / f"{cid}.md").write_text(report, encoding="utf-8")
+    cal.write_fit_config(args.config, result.have, result.adj, cid)
+    _log(f"wrote fit.have / fit.adj / fit.calibration_id={cid} to {args.config}, report {reports / f'{cid}.md'}")
+    return 0
+
+
 def _lock_label(args) -> str | None:
     if args.command in ("sync", "consistency"):
         return args.command
@@ -310,6 +377,8 @@ def _lock_label(args) -> str | None:
         return "harvest"
     if args.command == "merges" and args.apply:
         return "merges --apply"
+    if args.command == "calibrate" and not args.suggest:
+        return "calibrate"
     return None
 
 
@@ -351,7 +420,23 @@ def main(argv: list[str] | None = None) -> int:
     m.add_argument("--review-path", default=str(DEFAULT_REVIEW_PATH))
     m.add_argument("--alias-file", default=str(DEFAULT_ALIAS_PATH), help="owner-editable canonical: [aliases] list")
     m.add_argument("--never-merge-file", default=str(DEFAULT_NEVER_MERGE_PATH), help="owner-editable never-merge pairs")
+    k = sub.add_parser("calibrate")
+    k.add_argument("--suggest", action="store_true", help="print blind real-pair suggestions (a,b only)")
+    k.add_argument("--n", type=int, default=60, help="suggestions to draw (spread evenly across cosine bands)")
+    k.add_argument("--seed", type=int, default=0)
+    k.add_argument("--pairs", default=None, help="the labeled pair file (default calibration/skill_pairs.csv)")
+    k.add_argument("--write", action="store_true", help="update config/graph.yml and save the report")
+    k.add_argument("--cosines-path", default=None, help="cosine cache + regression snapshot")
+    k.add_argument("--sidecar-path", default=None, help="private suggest sidecar (cosine bands)")
+    k.add_argument("--reports-dir", default=None)
     args = ap.parse_args(argv)
+    if args.command == "calibrate":
+        from hiredra.graph import calibrate as cal
+
+        args.pairs = args.pairs or str(cal.DEFAULT_PAIRS_PATH)
+        args.cosines_path = args.cosines_path or str(cal.DEFAULT_COSINES_PATH)
+        args.sidecar_path = args.sidecar_path or str(cal.DEFAULT_SIDECAR_PATH)
+        args.reports_dir = args.reports_dir or str(cal.DEFAULT_REPORTS_DIR)
 
     args.never_merge_file = getattr(args, "never_merge_file", str(DEFAULT_NEVER_MERGE_PATH))
     cfg = load_graph_config(args.config)
@@ -361,6 +446,7 @@ def main(argv: list[str] | None = None) -> int:
         "consistency": _cmd_consistency,
         "sync": _cmd_sync,
         "merges": _cmd_merges,
+        "calibrate": _cmd_calibrate,
     }
 
     def run() -> int:
