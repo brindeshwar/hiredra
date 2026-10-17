@@ -7,6 +7,8 @@
     python -m hiredra.graph sync --reembed-all        # FALLBACK: clear every vector, re-embed under one method
     python -m hiredra.graph merges [--show-low]       # DRY RUN: propose merges in three bands, write the review file
     python -m hiredra.graph merges --apply            # apply exactly the entries marked "approve": true
+    python -m hiredra.graph overlay                   # DRY RUN: match the master profile's skills, write the links file
+    python -m hiredra.graph overlay --apply           # rebuild the `mine` nodes from the profile (approved links only)
     python -m hiredra.graph calibrate --suggest       # blind real-pair suggestions (a,b only) for labeling
     python -m hiredra.graph calibrate [--write]       # Step 5: sweep HAVE/ADJ on the pair file (dry run without --write)
 
@@ -306,6 +308,74 @@ def _cmd_merges(conn, cfg, args) -> int:
 
 
 #: commands that write to the DB or spend Google budget take the run lock
+def _cmd_overlay(conn, cfg, args) -> int:
+    from hiredra.graph import overlay as ov
+    from hiredra.graph.embedder import classify_failure
+    from hiredra.profile import ProfileError, parse_skills
+
+    try:
+        profile = parse_skills(args.profile)
+    except FileNotFoundError:
+        _log(f"NOT RUN: no master profile at {args.profile} -- export it from the source doc first (owner task O1a)")
+        return 1
+    except (OSError, ProfileError) as exc:
+        _log(f"NOT RUN: {exc}")
+        return 1
+    for warning in profile.warnings:
+        _log(f"warning: {warning}")
+
+    if args.apply:
+        try:
+            r = ov.apply_overlay(conn, profile, args.links_path, args.overlay_path)
+        except (ov.OverlayError, ValueError) as exc:
+            _log(f"NOT APPLIED: {exc}")
+            return 1
+        c = r.counts
+        _log(
+            f"overlay applied: {len(r.mine) + len(r.new_nodes)} mine node(s) -- exact {c['exact']}, hyphen "
+            f"{c['hyphen']}, alias {c['alias']}, linked {c['linked']}, new {c['new']}; {len(r.aliases)} alias(es) added"
+        )
+        for node, tokens in r.collisions.items():
+            _log(f"  collision: {', '.join(tokens)} all resolve to {node!r} -- tidy the profile in the source doc")
+        _log(f"state written: {args.overlay_path}. Next: `python -m hiredra.graph sync` embeds the new profile nodes.")
+        return 0
+
+    usage = _usage(cfg, args)
+
+    def embedder():
+        from hiredra.graph.embedder import build_embedder
+
+        return build_embedder(cfg, usage=usage)
+
+    try:
+        plan = ov.plan_overlay(conn, cfg, profile, embedder)
+    except Exception as exc:
+        kind = classify_failure(exc)
+        if kind is None:
+            raise
+        _log(f"STOPPED ({kind}): {exc} -- nothing was written")
+        return 2
+    ov.write_links(plan, args.links_path)
+    _log("PROFILE OVERLAY -- DRY RUN, nothing in the graph was changed")
+    for step, title in (
+        ("exact", "will apply: exact node name"),
+        ("hyphen", "will apply: hyphens as spaces"),
+        ("alias", "will apply: recorded alias"),
+        ("vector", f'PROPOSED link (cosine >= {ov.LINK_COSINE}; set "approve": true to accept)'),
+        ("new", "new profile node (no match)"),
+    ):
+        matches = plan.by_step(step)
+        _log(f"\n{title}: {len(matches)}")
+        for m in matches:
+            arrow = f" -> {m.node}" if m.node and m.node != m.token else ""
+            cos = f"  (cos {m.cosine:.3f})" if m.cosine is not None else ""
+            _log(f"    [{m.tier}] {m.token}{arrow}{cos}")
+    for node, tokens in plan.collisions().items():
+        _log(f"  collision: {', '.join(tokens)} all resolve to {node!r}")
+    _log(f"\nlinks file written: {args.links_path}. Approve the links you want, then `overlay --apply`.")
+    return 0
+
+
 def _cmd_calibrate(conn, cfg, args) -> int:
     from hiredra.graph import calibrate as cal
     from hiredra.graph.embedder import classify_failure
@@ -379,6 +449,8 @@ def _lock_label(args) -> str | None:
         return "merges --apply"
     if args.command == "calibrate" and not args.suggest:
         return "calibrate"
+    if args.command == "overlay":
+        return "overlay --apply" if args.apply else "overlay"
     return None
 
 
@@ -420,6 +492,11 @@ def main(argv: list[str] | None = None) -> int:
     m.add_argument("--review-path", default=str(DEFAULT_REVIEW_PATH))
     m.add_argument("--alias-file", default=str(DEFAULT_ALIAS_PATH), help="owner-editable canonical: [aliases] list")
     m.add_argument("--never-merge-file", default=str(DEFAULT_NEVER_MERGE_PATH), help="owner-editable never-merge pairs")
+    o = sub.add_parser("overlay")
+    o.add_argument("--apply", action="store_true", help="rebuild the mine nodes (only approved links are used)")
+    o.add_argument("--profile", default=None, help="the master profile export (default data/master_profile.md)")
+    o.add_argument("--links-path", default=None)
+    o.add_argument("--overlay-path", default=None)
     k = sub.add_parser("calibrate")
     k.add_argument("--suggest", action="store_true", help="print blind real-pair suggestions (a,b only)")
     k.add_argument("--n", type=int, default=60, help="suggestions to draw (spread evenly across cosine bands)")
@@ -430,6 +507,13 @@ def main(argv: list[str] | None = None) -> int:
     k.add_argument("--sidecar-path", default=None, help="private suggest sidecar (cosine bands)")
     k.add_argument("--reports-dir", default=None)
     args = ap.parse_args(argv)
+    if args.command == "overlay":
+        from hiredra.graph import overlay as ov
+        from hiredra.profile import DEFAULT_PROFILE_PATH
+
+        args.profile = args.profile or str(DEFAULT_PROFILE_PATH)
+        args.links_path = args.links_path or str(ov.DEFAULT_LINKS_PATH)
+        args.overlay_path = args.overlay_path or str(ov.DEFAULT_OVERLAY_PATH)
     if args.command == "calibrate":
         from hiredra.graph import calibrate as cal
 
@@ -447,6 +531,7 @@ def main(argv: list[str] | None = None) -> int:
         "sync": _cmd_sync,
         "merges": _cmd_merges,
         "calibrate": _cmd_calibrate,
+        "overlay": _cmd_overlay,
     }
 
     def run() -> int:
