@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 
-import pytest
 
 from hiredra import extraction
 from hiredra.storage import connect, get_events, get_job, get_skill_vocab, init_db, upsert_job

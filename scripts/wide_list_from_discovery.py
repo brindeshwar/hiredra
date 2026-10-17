@@ -82,7 +82,7 @@ def main(argv: list[str] | None = None) -> int:
     out_path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
 
     print(f"wrote {out_path}: {len(rows)} companies ({confirmed} confirmed, {unknown} unknown-only)")
-    print(f"  by ats: " + ", ".join(f"{a}={len(by_ats.get(a) or [])}" for a in ats_order))
+    print("  by ats: " + ", ".join(f"{a}={len(by_ats.get(a) or [])}" for a in ats_order))
     return 0
 
 

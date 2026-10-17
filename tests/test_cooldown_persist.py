@@ -108,7 +108,6 @@ def test_save_cooldown_extends_never_shortens(conn):
 
 def test_registry_persists_via_on_trip_and_reloads(conn):
     """The wiring the orchestrator does: on_trip -> save, then load on next run."""
-    import time
 
     r1 = CooldownRegistry()  # wall clock
     r1.on_trip = lambda k, u, reason: db.save_cooldown(conn, k, u, reason)

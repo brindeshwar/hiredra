@@ -1,0 +1,49 @@
+name: Work unit
+description: One unit from the project plan (feature, debt, docs or chore).
+title: "[UNIT-ID] "
+body:
+  - type: input
+    id: unit
+    attributes:
+      label: Unit ID
+      description: The plan's unit ID, for example M0.1 or AP2.
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal / Why
+      description: What it delivers and the reason it exists.
+    validations:
+      required: true
+  - type: textarea
+    id: accept
+    attributes:
+      label: Acceptance criteria
+      description: Checks anyone can run to say "done". One per line, as a checklist.
+      value: |
+        - [ ]
+    validations:
+      required: true
+  - type: input
+    id: depends
+    attributes:
+      label: Depends on
+      description: Unit IDs or issue numbers that must finish first.
+  - type: input
+    id: quota
+    attributes:
+      label: Quota impact
+      description: Free-tier cost (FL = flash-lite requests, EMB = embedding requests), or 0.
+  - type: dropdown
+    id: effort
+    attributes:
+      label: Effort
+      options: ["S (< 3 h)", "M (3-8 h)", "L (> 8 h, slice it)"]
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Confidence notes
+      description: Which design decisions are LOCKED, PROVISIONAL or NEEDS REAL DATA.

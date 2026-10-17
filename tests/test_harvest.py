@@ -18,7 +18,7 @@ from hiredra.graph.harvest import (
     read_enrichment_data,
     sanity_reject_reason,
 )
-from hiredra.storage import add_alias, add_market_skill, connect, get_skill_vocab, init_db, iter_skill_vocab
+from hiredra.storage import add_market_skill, connect, get_skill_vocab, init_db, iter_skill_vocab
 
 
 def _cfg(**over) -> HarvestConfig:

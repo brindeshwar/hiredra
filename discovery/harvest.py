@@ -28,7 +28,6 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 import duckdb
-import yaml
 
 from hiredra.filter import load_filter_config, run_funnel
 from hiredra.sourcing._html import html_to_text
