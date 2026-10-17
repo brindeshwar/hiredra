@@ -67,7 +67,7 @@ def _salary(job: dict) -> str | None:
 class AshbyProvider:
     name = "ashby"
 
-    def _board_url(self, entry: CompanyEntry) -> str | None:
+    def board_url(self, entry: CompanyEntry) -> str | None:
         if entry.provider and entry.provider != self.name:
             return None
         if entry.api:
@@ -83,10 +83,10 @@ class AshbyProvider:
         return _API.format(slug=slug) if slug else None
 
     def detect(self, entry: CompanyEntry) -> bool:
-        return self._board_url(entry) is not None
+        return self.board_url(entry) is not None
 
     def fetch(self, entry: CompanyEntry, ctx: FetchContext) -> list[Job]:
-        base = self._board_url(entry)
+        base = self.board_url(entry)
         if base is None:
             raise FetchError(f"ashby: cannot resolve a board for {entry.name!r}")
         assert_allowed_url(base, _ALLOWED_HOSTS, self.name)

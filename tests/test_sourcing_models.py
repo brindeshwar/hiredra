@@ -119,6 +119,9 @@ class _FakeProvider:
     def detect(self, entry: CompanyEntry) -> bool:
         return entry.provider == "fake" or bool(entry.careers_url)
 
+    def board_url(self, entry: CompanyEntry) -> str | None:
+        return entry.careers_url
+
     def fetch(self, entry: CompanyEntry, ctx: FetchContext) -> list[Job]:
         return [Job(url="u://1", title="Role", company=entry.name, source=self.name)]
 

@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from hiredra.sourcing.config import RunConfig, load_companies
 from hiredra.sourcing.http import Blocked, FetchError, HTTPError, HttpClient
 from hiredra.sourcing.jobspy_source import JobSpySource, SiteOutcome
-from hiredra.sourcing.provider import CompanyEntry, FetchContext, Provider
+from hiredra.sourcing.provider import CompanyEntry, FetchContext, Provider, company_slug
 from hiredra.sourcing.registry import REGISTRY, route
 from hiredra.sourcing.runstore import RunStore
 from hiredra.sourcing.sink import Sink, SinkStats
@@ -173,7 +173,12 @@ def run(
                         )
                     )
                 else:
-                    sink.consume(jobs_c)
+                    tag = entry.extra.get("tag") if entry.extra else None
+                    sink.consume(
+                        jobs_c,
+                        company_slug=company_slug(provider, entry),
+                        list_tag=str(tag) if tag else None,
+                    )
                     outcomes.append(CompanyOutcome(entry.name, "ok", provider.name, len(jobs_c)))
 
             companies_done.add(entry.name)

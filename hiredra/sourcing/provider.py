@@ -14,6 +14,7 @@ from __future__ import annotations
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
+from urllib.parse import urlsplit
 
 from hiredra.sourcing.http import HttpClient
 from hiredra.sourcing.job import Job
@@ -63,6 +64,36 @@ class Provider(Protocol):
         """Does THIS provider handle ``entry``? (cheap, no network)"""
         ...
 
+    def board_url(self, entry: CompanyEntry) -> str | None:
+        """The board's API URL for ``entry``, or ``None`` if it can't be resolved (no network).
+
+        ``detect`` and ``fetch`` use it, and so does anything that must find the same board
+        again later from stored facts (liveness, ``company_slug``).
+        """
+        ...
+
     def fetch(self, entry: CompanyEntry, ctx: FetchContext) -> list[Job]:
         """Hit the source, map raw records to ``Job`` objects, return them."""
         ...
+
+
+#: The path segment that comes right before the slug in each provider's board URL:
+#: greenhouse ``/v1/boards/{slug}/jobs``, lever ``/v0/postings/{slug}``,
+#: ashby ``/posting-api/job-board/{slug}``.
+_SLUG_MARKERS = ("boards", "postings", "job-board")
+
+
+def company_slug(provider: Provider, entry: CompanyEntry) -> str | None:
+    """The board slug for ``entry``: ``extra["slug"]`` when the list gives one, else read
+    from ``provider.board_url(entry)``. ``None`` if neither works (the caller stores NULL)."""
+    slug = entry.extra.get("slug") if entry.extra else None
+    if slug:
+        return str(slug)
+    board = provider.board_url(entry)
+    if not board:
+        return None
+    segments = [s for s in urlsplit(board).path.split("/") if s]
+    for marker in _SLUG_MARKERS:
+        if marker in segments[:-1]:
+            return segments[segments.index(marker) + 1]
+    return None

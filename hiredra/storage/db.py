@@ -23,7 +23,7 @@ from __future__ import annotations
 import secrets
 import sqlite3
 import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -33,7 +33,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_DB_PATH: Path = _REPO_ROOT / "data" / "hiredra.db"
 
 _SCHEMA_PATH = Path(__file__).with_name("schema.sql")
-SCHEMA_VERSION = 4
+SCHEMA_VERSION = 5
 
 #: run statuses (see schema `runs.status`).
 RUN_STATUSES: tuple[str, ...] = ("running", "ok", "partial", "failed")
@@ -139,6 +139,8 @@ def init_db(conn: sqlite3.Connection) -> None:
         _migrate_v3(conn)
     if version < 4:
         _migrate_v4(conn)
+    if version < 5:
+        _migrate_v5(conn)
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
     conn.commit()
 
@@ -318,6 +320,28 @@ def _migrate_v4(conn: sqlite3.Connection) -> None:
         raise RuntimeError(f"v4 migration broke a foreign key: {bad_fk}")
 
 
+#: The v5 ``jobs`` additions, in order (same text as schema.sql's CREATE TABLE).
+_JOBS_V5_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("company_slug", "TEXT"),
+    ("list_tag", "TEXT"),
+    ("extraction_version", "TEXT"),
+)
+
+
+def _migrate_v5(conn: sqlite3.Connection) -> None:
+    """v4 -> v5: add the provenance columns to ``jobs`` (all nullable, so ``ALTER TABLE ADD
+    COLUMN`` works in place, the same way v4 did). Each is added only if absent, so a fresh DB
+    (whose schema.sql already has them) and a re-run are no-ops. Existing rows get NULL; the
+    ``backfill-slugs`` command fills slug and tag afterwards."""
+    cols = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
+    for name, ddl in _JOBS_V5_COLUMNS:
+        if name not in cols:
+            conn.execute(f"ALTER TABLE jobs ADD COLUMN {name} {ddl}")
+    bad_fk = conn.execute("PRAGMA foreign_key_check").fetchall()
+    if bad_fk:
+        raise RuntimeError(f"v5 migration broke a foreign key: {bad_fk}")
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # writes
 # ─────────────────────────────────────────────────────────────────────────────
@@ -380,6 +404,28 @@ def upsert_job(
             _touch(conn, job_id, detail="re-sighted", now=now)
 
     return job_id
+
+
+def fill_provenance(
+    conn: sqlite3.Connection,
+    job_ids: Iterable[str],
+    *,
+    company_slug: str | None,
+    list_tag: str | None,
+) -> None:
+    """Set ``company_slug`` / ``list_tag`` on each job where it is still NULL.
+
+    Never overwrites a stored value: the first sighting's provenance wins, so a later fetch
+    from a differently tagged list can't rewrite history. Changes no other column.
+    """
+    if company_slug is None and list_tag is None:
+        return
+    with conn:
+        conn.executemany(
+            "UPDATE jobs SET company_slug = COALESCE(company_slug, ?), list_tag = COALESCE(list_tag, ?) "
+            "WHERE job_id = ?",
+            [(company_slug, list_tag, job_id) for job_id in job_ids],
+        )
 
 
 def set_status(

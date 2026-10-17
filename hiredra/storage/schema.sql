@@ -70,7 +70,13 @@ CREATE TABLE IF NOT EXISTS jobs (
     first_seen_at     TEXT NOT NULL,           -- first time this job_id was fetched (ISO-8601 UTC)
     last_seen_at      TEXT NOT NULL,           -- most recent re-fetch
     updated_at        TEXT NOT NULL,           -- last write of any kind
-    first_seen_run    TEXT                     -- runs.run_id of the run that first fetched it (v2)
+    first_seen_run    TEXT,                    -- runs.run_id of the run that first fetched it (v2)
+
+    -- provenance (v5). Set when fetched from a company list; filled only while NULL, never
+    -- overwritten. NULL for JobSpy rows (no board, no list).
+    company_slug      TEXT,                    -- the ATS board slug (rebuilds the board for liveness)
+    list_tag          TEXT,                    -- the company list's tag: confirmed | unknown | NULL
+    extraction_version TEXT                    -- model + prompt + schema that wrote the extraction (M0.1)
 );
 
 CREATE INDEX IF NOT EXISTS idx_jobs_status        ON jobs (status);
