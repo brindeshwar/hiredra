@@ -48,9 +48,7 @@ def test_result_is_immutable():
 
 def test_provider_to_persist_round_trip(conn, http_factory, greenhouse_payload):
     http = http_factory(lambda req: httpx.Response(200, json=greenhouse_payload))
-    jobs = GreenhouseProvider().fetch(
-        CompanyEntry(name="Acme", extra={"slug": "acme"}), FetchContext(http=http)
-    )
+    jobs = GreenhouseProvider().fetch(CompanyEntry(name="Acme", extra={"slug": "acme"}), FetchContext(http=http))
     result = persist_jobs(conn, jobs)
 
     assert result.inserted == len(jobs) == 2

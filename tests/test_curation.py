@@ -22,11 +22,14 @@ def _file(tmp_path, text, name="f.yml"):
 
 # ── aliases ──────────────────────────────────────────────────────────────────
 def test_aliases_load_and_fold_names(tmp_path):
-    p = _file(tmp_path, """
+    p = _file(
+        tmp_path,
+        """
         aliases:
           Kubernetes: [K8S, "Kube  Native"]
           go: [golang]
-    """)
+    """,
+    )
     assert load_aliases(p) == {"kubernetes": ("k8s", "kube native"), "go": ("golang",)}
 
 
@@ -47,7 +50,7 @@ def test_an_empty_alias_file_is_empty(tmp_path):
         ("aliases:\n  go: golang\n", "non-empty list"),
         ("aliases:\n  go: []\n", "non-empty list"),
         ("aliases:\n  go: [go]\n", "alias of itself"),
-        ("aliases:\n  go: [GO]\n", "alias of itself"),                       # folded before comparing
+        ("aliases:\n  go: [GO]\n", "alias of itself"),  # folded before comparing
         ("aliases:\n  a: [x]\n  b: [x]\n", "alias of both"),
         ("aliases:\n  a: [x]\n  x: [y]\n", "both a canonical and an alias"),  # would make a chain
         ("aliases:\n  a: [ '' ]\n", "empty or non-text"),
@@ -68,14 +71,17 @@ def test_a_canonical_listed_twice_is_rejected(tmp_path):
 
 # ── never-merge ──────────────────────────────────────────────────────────────
 def test_never_merge_pairs_load_unordered_and_folded(tmp_path):
-    p = _file(tmp_path, """
+    p = _file(
+        tmp_path,
+        """
         never_merge:
           - [SQL, sql server]
           - [react, React Native]
-    """)
+    """,
+    )
     pairs = load_never_merge(p)
     assert pairs == {frozenset(("sql", "sql server")), frozenset(("react", "react native"))}
-    assert frozenset(("sql server", "sql")) in pairs                          # order does not matter
+    assert frozenset(("sql server", "sql")) in pairs  # order does not matter
 
 
 def test_a_missing_or_empty_never_merge_file_is_empty(tmp_path):
@@ -108,13 +114,19 @@ def test_the_shipped_alias_file_is_valid_and_conservative():
     # ambiguous abbreviations are deliberately absent
     every_alias = {a for v in aliases.values() for a in v}
     assert every_alias.isdisjoint({"ai", "ci", "node", "ux"})
-    assert not (set(aliases) & every_alias)                                    # one hop, no chains
+    assert not (set(aliases) & every_alias)  # one hop, no chains
 
 
 def test_the_shipped_never_merge_file_is_valid_and_keeps_the_c_family_apart():
     pairs = load_never_merge(DEFAULT_NEVER_MERGE_PATH)
-    for a, b in [("sql", "sql server"), ("react", "react native"), ("c", "c++"), ("c", "c#"), ("c++", "c#"),
-                 ("machine learning", "deep learning")]:
+    for a, b in [
+        ("sql", "sql server"),
+        ("react", "react native"),
+        ("c", "c++"),
+        ("c", "c#"),
+        ("c++", "c#"),
+        ("machine learning", "deep learning"),
+    ]:
         assert frozenset((a, b)) in pairs
 
 

@@ -1,7 +1,7 @@
 """``python -m hiredra.storage <init|status> [--db PATH]``
 
-  init    create (or migrate) the SQLite DB file — idempotent
-  status  print the funnel snapshot (job count per status)
+init    create (or migrate) the SQLite DB file — idempotent
+status  print the funnel snapshot (job count per status)
 """
 
 from __future__ import annotations

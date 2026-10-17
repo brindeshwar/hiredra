@@ -74,9 +74,7 @@ def read_enrichment_data(url: str) -> Iterator[dict]:
         if url.startswith(("http://", "https://")):
             con.execute("INSTALL httpfs; LOAD httpfs;")
         safe = url.replace("'", "''")
-        cur = con.execute(
-            f"SELECT enrichment_json FROM read_parquet('{safe}') WHERE enrichment_json IS NOT NULL"
-        )
+        cur = con.execute(f"SELECT enrichment_json FROM read_parquet('{safe}') WHERE enrichment_json IS NOT NULL")
         while True:
             rows = cur.fetchmany(2000)
             if not rows:
@@ -205,7 +203,9 @@ def harvest(
             report.per_ats[ats] = {"enriched": enriched, "in_family": in_family}
             report.enriched_jobs += enriched
             report.in_family_jobs += in_family
-            log(f"  {ats}: {enriched} enriched, {in_family} in target role families ({time.monotonic() - started:.0f}s)")
+            log(
+                f"  {ats}: {enriched} enriched, {in_family} in target role families ({time.monotonic() - started:.0f}s)"
+            )
             break
 
     report.distinct_tokens = len(df)

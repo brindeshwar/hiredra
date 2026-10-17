@@ -86,7 +86,11 @@ class RunLock:
             ) from None
         # we hold it: leave a note after the locked byte (append mode writes at EOF, so cut back to 1 byte first)
         fh.truncate(1)
-        note = {"pid": os.getpid(), "what": self.what, "since": datetime.now(timezone.utc).isoformat(timespec="seconds")}
+        note = {
+            "pid": os.getpid(),
+            "what": self.what,
+            "since": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        }
         fh.write(json.dumps(note).encode("utf-8"))
         fh.flush()
         self._fh = fh

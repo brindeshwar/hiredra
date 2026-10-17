@@ -19,8 +19,15 @@ DIM = 16
 
 def _cfg(**over) -> GraphConfig:
     base = dict(
-        model="gemini-embedding-2", dimensions=DIM, prefix="", inputs_per_request=50, requests_per_minute=100,
-        dedup_threshold=0.9, have=0.9, adj=0.7, canary_min_cosine=0.999,
+        model="gemini-embedding-2",
+        dimensions=DIM,
+        prefix="",
+        inputs_per_request=50,
+        requests_per_minute=100,
+        dedup_threshold=0.9,
+        have=0.9,
+        adj=0.7,
+        canary_min_cosine=0.999,
     )
     base.update(over)
     return GraphConfig(**base)
@@ -53,7 +60,7 @@ class Fake:
             elif self.mode == "batch_size_matters" and len(texts) > 1:
                 out.append(_perturbed(t, 0.5))
             elif self.mode == "order_matters" and i > 0 and texts[0] > texts[-1]:
-                out.append(_perturbed(t, 0.5))            # the reversed run only
+                out.append(_perturbed(t, 0.5))  # the reversed run only
             else:
                 out.append(_unit(t))
         return np.stack(out)
@@ -80,7 +87,7 @@ NAMES = [f"skill-{i:02d}" for i in range(30)]
 # ── the sample ───────────────────────────────────────────────────────────────
 def test_the_sample_is_evenly_spread_sorted_and_deterministic():
     picks = pick_sample(list(reversed(NAMES)), 5)
-    assert picks == pick_sample(NAMES, 5)                      # input order does not matter
+    assert picks == pick_sample(NAMES, 5)  # input order does not matter
     assert picks == sorted(picks) and picks[0] == NAMES[0] and picks[-1] == NAMES[-1]
     assert len(picks) == 5 and len(set(picks)) == 5
 
@@ -98,7 +105,7 @@ def test_a_consistent_embedder_passes_all_three_ways(conn):
     assert r.consistent is True and r.error is None and r.skipped_reason is None
     assert [c.name for c in r.conditions] == ["batch", "one_by_one", "reversed"]
     assert all(c.min_cosine == pytest.approx(1.0, abs=1e-5) for c in r.conditions)
-    assert r.requests_used == 18                               # 3 ways x 6 skills, each input = 1 counted request
+    assert r.requests_used == 18  # 3 ways x 6 skills, each input = 1 counted request
 
 
 def test_it_makes_one_batch_call_then_single_calls_then_one_reversed_batch(conn):
@@ -107,9 +114,9 @@ def test_it_makes_one_batch_call_then_single_calls_then_one_reversed_batch(conn)
     emb = Fake()
     r = check_batch_consistency(conn, cfg, emb, sample=4)
     sample = list(r.sample)
-    assert emb.calls[0] == sample                              # the whole sample in ONE request
-    assert emb.calls[1:5] == [[n] for n in sample]             # then one request per skill
-    assert emb.calls[5] == sample[::-1]                        # then the same batch, reversed
+    assert emb.calls[0] == sample  # the whole sample in ONE request
+    assert emb.calls[1:5] == [[n] for n in sample]  # then one request per skill
+    assert emb.calls[5] == sample[::-1]  # then the same batch, reversed
     assert len(emb.calls) == 6
 
 
@@ -147,7 +154,7 @@ def test_the_threshold_comes_from_config(conn, threshold, expected):
 
     class Slightly:
         def __call__(self, texts):
-            return np.stack([_perturbed(t, 0.02) for t in texts])   # cosine ~0.9998 to the stored vectors
+            return np.stack([_perturbed(t, 0.02) for t in texts])  # cosine ~0.9998 to the stored vectors
 
     r = check_batch_consistency(conn, cfg, Slightly(), sample=4)
     assert r.consistent is expected

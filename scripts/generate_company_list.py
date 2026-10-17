@@ -80,12 +80,7 @@ def main(argv: list[str] | None = None) -> int:
     kept_entries, kept_keys = _existing_keys(keep_path)
 
     data = json.loads(Path(args.slugs).read_text(encoding="utf-8"))
-    pool = [
-        (ats, slug)
-        for ats in _ATS
-        for slug in data["ats"][ats]
-        if (ats, slug) not in kept_keys
-    ]
+    pool = [(ats, slug) for ats in _ATS for slug in data["ats"][ats] if (ats, slug) not in kept_keys]
 
     n = max(0, args.total - len(kept_entries))
     if n > len(pool):

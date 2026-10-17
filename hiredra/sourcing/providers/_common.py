@@ -21,8 +21,7 @@ def assert_allowed_url(url: str, allowed_hosts: frozenset[str], provider: str) -
         raise FetchError(f"{provider}: refusing non-HTTPS url {url!r}", url=url)
     if parts.hostname not in allowed_hosts:
         raise FetchError(
-            f"{provider}: refusing untrusted host {parts.hostname!r} "
-            f"(allowed: {', '.join(sorted(allowed_hosts))})",
+            f"{provider}: refusing untrusted host {parts.hostname!r} (allowed: {', '.join(sorted(allowed_hosts))})",
             url=url,
         )
 
@@ -70,9 +69,7 @@ def iso_date(value: Any) -> str | None:
 
 _REMOTE_RE = re.compile(r"\bremote\b|\banywhere\b|\bwork from home\b|\bwfh\b", re.I)
 _WORKPLACE_REMOTE = frozenset({"remote"})
-_WORKPLACE_NOT_REMOTE = frozenset(
-    {"hybrid", "on-site", "onsite", "on site", "in-office", "in office"}
-)
+_WORKPLACE_NOT_REMOTE = frozenset({"hybrid", "on-site", "onsite", "on site", "in-office", "in office"})
 
 
 def infer_remote(text: str, *, workplace_type: str | None = None) -> bool | None:

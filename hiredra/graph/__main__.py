@@ -58,8 +58,10 @@ def _warn_if_no_df(conn, weights, args) -> None:
     """Without the harvest's frequency file, embed order and merge-survivor choice
     silently fall back to shorter-name / alphabetical -- say so."""
     if not weights and conn.execute("SELECT 1 FROM skill_vocab WHERE source = 'market' LIMIT 1").fetchone():
-        _log(f"WARNING: no market-frequency file at {args.df_path}; embed order and merge survivors "
-             f"fall back to shorter name / alphabetical. Re-run `harvest` to recreate it.")
+        _log(
+            f"WARNING: no market-frequency file at {args.df_path}; embed order and merge survivors "
+            f"fall back to shorter name / alphabetical. Re-run `harvest` to recreate it."
+        )
 
 
 def _after_reset() -> str:
@@ -70,9 +72,15 @@ def _after_reset() -> str:
 _RESUME_HINT = {
     "daily_budget": _after_reset,
     "daily_quota": _after_reset,
-    "transient": lambda: "Google or the network kept failing after retries; the data is fine. Run `sync` again in a few minutes.",
-    "api_error": lambda: "Google rejected the request (check GEMINI_API_KEY, the model name and access). Fix that first, then run `sync` again.",
-    "bad_response": lambda: "Google returned vectors we can't use (wrong count or size). Read the error above before re-running: it may repeat.",
+    "transient": lambda: (
+        "Google or the network kept failing after retries; the data is fine. Run `sync` again in a few minutes."
+    ),
+    "api_error": lambda: (
+        "Google rejected the request (check GEMINI_API_KEY, the model name and access). Fix that first, then run `sync` again."
+    ),
+    "bad_response": lambda: (
+        "Google returned vectors we can't use (wrong count or size). Read the error above before re-running: it may repeat."
+    ),
 }
 
 
@@ -91,9 +99,11 @@ def _cmd_status(conn, cfg, args) -> int:
     _log(f"aliases   : {st['aliases']}")
     _log(f"queue     : {len(skills_needing_embedding(conn, cfg.embed_tag))} node(s) need embedding")
     _log(f"today     : {_usage(cfg, args).summary()}")
-    _log(f"limits    : Google {cfg.requests_per_minute} req/min, {cfg.tokens_per_minute} tokens/min, "
-         f"{cfg.requests_per_day} req/day (each input in a batch = 1 request); we stay at "
-         f"{cfg.rpm_budget}/{cfg.tpm_budget}/{cfg.rpd_budget}")
+    _log(
+        f"limits    : Google {cfg.requests_per_minute} req/min, {cfg.tokens_per_minute} tokens/min, "
+        f"{cfg.requests_per_day} req/day (each input in a batch = 1 request); we stay at "
+        f"{cfg.rpm_budget}/{cfg.tpm_budget}/{cfg.rpd_budget}"
+    )
     return 0
 
 
@@ -101,8 +111,13 @@ def _cmd_harvest(conn, cfg, args) -> int:
     if cfg.harvest is None:
         raise SystemExit("graph config has no harvest section")
     report = harvest(
-        conn, cfg.harvest, export_date=args.export_date, dry_run=args.dry_run, log=_log,
-        df_path=Path(args.df_path), allow_partial=args.allow_partial,
+        conn,
+        cfg.harvest,
+        export_date=args.export_date,
+        dry_run=args.dry_run,
+        log=_log,
+        df_path=Path(args.df_path),
+        allow_partial=args.allow_partial,
     )
     _log("")
     _log(f"HARVEST {'(dry run -- nothing written) ' if report.dry_run else ''}from export {report.export_date}")
@@ -155,8 +170,10 @@ def _cmd_consistency(conn, cfg, args) -> int:
         return 0
     _log("INCONSISTENT: the same skill gives a different vector depending on how it is sent.")
     _log("Do NOT embed the pending skills yet -- that would mix two kinds of vector in one index.")
-    _log("Fallback: `python -m hiredra.graph sync --reembed-all` clears every vector and re-embeds all "
-         "nodes under ONE method (about two days at the daily budget), most common skills first.")
+    _log(
+        "Fallback: `python -m hiredra.graph sync --reembed-all` clears every vector and re-embeds all "
+        "nodes under ONE method (about two days at the daily budget), most common skills first."
+    )
     return 3
 
 
@@ -173,24 +190,31 @@ def _cmd_sync(conn, cfg, args) -> int:
         cleared = invalidate_skill_vectors(conn)
         _log(f"--reembed-all: cleared {cleared} stored vectors; the whole index will be re-embedded")
     embed = build_embedder(cfg, usage=usage)
-    _log(f"embed tag {cfg.embed_tag}; {cfg.inputs_per_request} skills per request, pacing "
-         f"{cfg.rpm_budget} req/min and {cfg.tpm_budget} tokens/min (each skill = 1 request)")
+    _log(
+        f"embed tag {cfg.embed_tag}; {cfg.inputs_per_request} skills per request, pacing "
+        f"{cfg.rpm_budget} req/min and {cfg.tpm_budget} tokens/min (each skill = 1 request)"
+    )
     _log(f"today: {usage.summary()}")
     gate = ensure_index_current(
         conn, cfg, embed, limit=args.limit, weights=weights, daily_remaining=usage.remaining, log=_log
     )
     e = gate.embed
     _log("")
-    _log(f"queue at start {e.queue_size}; attempted {e.attempted}; embedded {e.embedded} "
-         f"in {e.chunks} chunk(s), {e.elapsed_s:.0f}s; still needing embedding: {e.remaining}")
+    _log(
+        f"queue at start {e.queue_size}; attempted {e.attempted}; embedded {e.embedded} "
+        f"in {e.chunks} chunk(s), {e.elapsed_s:.0f}s; still needing embedding: {e.remaining}"
+    )
     _log(f"index now: {gate.after}")
     _log(f"today: {usage.summary()}")
     if e.stopped:
         _log(f"STOPPED ({e.stopped}): {e.error}")
         _log("Every finished chunk is saved. " + _RESUME_HINT[e.stopped]())
         return 2
-    _log("READY -- the whole index is embedded under the live version." if gate.ready
-         else "not ready yet" + (f" (run `sync` again{'' if args.limit is None else ', without --limit'})"))
+    _log(
+        "READY -- the whole index is embedded under the live version."
+        if gate.ready
+        else "not ready yet" + (f" (run `sync` again{'' if args.limit is None else ', without --limit'})")
+    )
     return 0
 
 
@@ -223,8 +247,10 @@ def _cmd_merges(conn, cfg, args) -> int:
         except (FileNotFoundError, ValueError) as exc:
             _log(f"NOT APPLIED: {exc}")
             return 1
-        _log(f"\napplied {len(report.applied)} merge(s), skipped {len(report.skipped)}, "
-             f"left {report.not_approved} not approved; review file archived to {report.archived_to}")
+        _log(
+            f"\napplied {len(report.applied)} merge(s), skipped {len(report.skipped)}, "
+            f"left {report.not_approved} not approved; review file archived to {report.archived_to}"
+        )
         return 0
 
     weights = load_df(args.df_path)
@@ -233,31 +259,46 @@ def _cmd_merges(conn, cfg, args) -> int:
     write_review(report, review)
 
     auto, alias, rev = report.by_band("auto"), report.by_band("alias"), report.by_band("review")
-    _log(f"MERGE PROPOSALS -- DRY RUN, nothing was changed  ({report.nodes_considered} embedded nodes considered, "
-         f"{report.nodes_skipped} not eligible yet for the cosine bands)")
+    _log(
+        f"MERGE PROPOSALS -- DRY RUN, nothing was changed  ({report.nodes_considered} embedded nodes considered, "
+        f"{report.nodes_skipped} not eligible yet for the cosine bands)"
+    )
     _log('Only entries marked "approve": true in the review file are ever applied.')
-    _print_band("AUTO -- pre-approved (approve: true)", auto,
-                f"same spelling, or cosine >= {cfg.auto_cosine} and not a specialization / version variant")
+    _print_band(
+        "AUTO -- pre-approved (approve: true)",
+        auto,
+        f"same spelling, or cosine >= {cfg.auto_cosine} and not a specialization / version variant",
+    )
     _print_band("ALIAS FILE -- your entries, pre-approved (approve: true)", alias, "config/skill_aliases.yml")
-    _print_band('REVIEW -- NOT approved (approve: false); set "approve": true to merge one', rev,
-                f"cosine >= {cfg.review_cosine}" + (f" (incl. the {cfg.dedup_threshold}-{cfg.review_cosine} low band)" if args.show_low else ""))
+    _print_band(
+        'REVIEW -- NOT approved (approve: false); set "approve": true to merge one',
+        rev,
+        f"cosine >= {cfg.review_cosine}"
+        + (f" (incl. the {cfg.dedup_threshold}-{cfg.review_cosine} low band)" if args.show_low else ""),
+    )
     if report.hidden_low:
-        _log(f"\n  hidden: {report.hidden_low} more review-type pair(s) between {cfg.dedup_threshold} and "
-             f"{cfg.review_cosine} -- about half were wrong on the first real data. `merges --show-low` lists them.")
+        _log(
+            f"\n  hidden: {report.hidden_low} more review-type pair(s) between {cfg.dedup_threshold} and "
+            f"{cfg.review_cosine} -- about half were wrong on the first real data. `merges --show-low` lists them."
+        )
     for a, c, why in report.alias_notes:
         _log(f"  alias file: {a!r} -> {c!r} not proposed: {why}")
     if report.never_blocked:
         _log(f"  never-merge list: {report.never_blocked} pair(s) suppressed")
 
     _log("\n" + "=" * 96)
-    _log(f"{len(auto)} AUTO + {len(alias)} ALIAS (pre-approved)   |   {len(rev)} REVIEW (unapproved)   |   "
-         f"{report.hidden_low} hidden low-band")
+    _log(
+        f"{len(auto)} AUTO + {len(alias)} ALIAS (pre-approved)   |   {len(rev)} REVIEW (unapproved)   |   "
+        f"{report.hidden_low} hidden low-band"
+    )
     _log(f"\nNEAR MISSES just under {report.threshold} (NOT proposed; for judging the threshold):")
     for a, b, c in report.near_misses:
         _log(f"    {a:<34} ~ {b:<34} cos {c:.3f}")
     _log(f"\nreview file written: {review}")
-    _log('Edit it (set "approve" on the entries you want, delete the ones you do not), then run '
-         "`python -m hiredra.graph merges --apply`. Nothing applies until you do.")
+    _log(
+        'Edit it (set "approve" on the entries you want, delete the ones you do not), then run '
+        "`python -m hiredra.graph merges --apply`. Nothing applies until you do."
+    )
     return 0
 
 
@@ -284,18 +325,29 @@ def main(argv: list[str] | None = None) -> int:
     h = sub.add_parser("harvest")
     h.add_argument("--dry-run", action="store_true")
     h.add_argument("--export-date", default=None)
-    h.add_argument("--allow-partial", action="store_true",
-                   help="write nodes even if a file failed (document frequencies then cover a subset)")
+    h.add_argument(
+        "--allow-partial",
+        action="store_true",
+        help="write nodes even if a file failed (document frequencies then cover a subset)",
+    )
     c = sub.add_parser("consistency")
     c.add_argument("--sample", type=int, default=8, help="skills to compare (uses 3 x N counted requests)")
     s = sub.add_parser("sync")
     s.add_argument("--limit", type=int, default=None, help="embed at most N skills this run")
-    s.add_argument("--reembed-all", action="store_true",
-                   help="FALLBACK: clear every stored vector first, then re-embed everything under one method")
+    s.add_argument(
+        "--reembed-all",
+        action="store_true",
+        help="FALLBACK: clear every stored vector first, then re-embed everything under one method",
+    )
     m = sub.add_parser("merges")
-    m.add_argument("--apply", action="store_true", help='apply the entries marked "approve": true (never without a dry-run file)')
-    m.add_argument("--show-low", action="store_true",
-                   help="also list review-type pairs in the hidden low band (threshold .. review_cosine)")
+    m.add_argument(
+        "--apply", action="store_true", help='apply the entries marked "approve": true (never without a dry-run file)'
+    )
+    m.add_argument(
+        "--show-low",
+        action="store_true",
+        help="also list review-type pairs in the hidden low band (threshold .. review_cosine)",
+    )
     m.add_argument("--review-path", default=str(DEFAULT_REVIEW_PATH))
     m.add_argument("--alias-file", default=str(DEFAULT_ALIAS_PATH), help="owner-editable canonical: [aliases] list")
     m.add_argument("--never-merge-file", default=str(DEFAULT_NEVER_MERGE_PATH), help="owner-editable never-merge pairs")
@@ -304,8 +356,11 @@ def main(argv: list[str] | None = None) -> int:
     args.never_merge_file = getattr(args, "never_merge_file", str(DEFAULT_NEVER_MERGE_PATH))
     cfg = load_graph_config(args.config)
     handlers = {
-        "status": _cmd_status, "harvest": _cmd_harvest, "consistency": _cmd_consistency,
-        "sync": _cmd_sync, "merges": _cmd_merges,
+        "status": _cmd_status,
+        "harvest": _cmd_harvest,
+        "consistency": _cmd_consistency,
+        "sync": _cmd_sync,
+        "merges": _cmd_merges,
     }
 
     def run() -> int:

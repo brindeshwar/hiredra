@@ -21,9 +21,7 @@ def conn():
 def fake_clock(monkeypatch):
     """Deterministic, monotonically increasing timestamps."""
     counter = itertools.count(1)
-    monkeypatch.setattr(
-        db, "_now", lambda: f"2026-09-09T00:00:{next(counter):02d}+00:00"
-    )
+    monkeypatch.setattr(db, "_now", lambda: f"2026-09-09T00:00:{next(counter):02d}+00:00")
 
 
 def _job(**over):
@@ -50,11 +48,7 @@ def _job(**over):
 def test_init_db_is_idempotent_and_versioned(conn):
     db.init_db(conn)  # second run must not raise
     assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION
-    tables = {
-        r[0] for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        )
-    }
+    tables = {r[0] for r in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
     assert {"jobs", "job_events"} <= tables
 
 
@@ -114,10 +108,10 @@ def test_resight_bumps_last_seen_and_logs_but_does_not_regress(conn):
     db.upsert_job(conn, _job(title="DIFFERENT", status="fetched", score=99))
 
     row = db.get_job(conn, "gh-1")
-    assert row["status"] == "scored"            # never regressed
-    assert row["score"] is None                 # ledger space untouched
-    assert row["outcome"] == "interview"        # outcome untouched
-    assert row["title"] == "Backend Engineer"   # content written once
+    assert row["status"] == "scored"  # never regressed
+    assert row["score"] is None  # ledger space untouched
+    assert row["outcome"] == "interview"  # outcome untouched
+    assert row["title"] == "Backend Engineer"  # content written once
     assert row["first_seen_at"] == first_seen
     assert row["last_seen_at"] > first_seen
 
@@ -143,10 +137,12 @@ def test_set_status_records_from_and_to(conn):
 
     status_events = [e for e in db.get_events(conn, "gh-1") if e["kind"] == "status"]
     assert (status_events[0]["from_status"], status_events[0]["to_status"]) == (
-        "fetched", "filtered",
+        "fetched",
+        "filtered",
     )
     assert (status_events[-1]["from_status"], status_events[-1]["to_status"]) == (
-        "filtered", "dropped",
+        "filtered",
+        "dropped",
     )
 
 
@@ -187,7 +183,7 @@ def test_record_outcome_sets_fields_and_keeps_status(conn):
     db.record_outcome(conn, "gh-1", "offer", detail="verbal", at="2026-10-01T00:00:00+00:00")
 
     row = db.get_job(conn, "gh-1")
-    assert row["status"] == "applied"           # unchanged
+    assert row["status"] == "applied"  # unchanged
     assert row["outcome"] == "offer"
     assert row["outcome_at"] == "2026-10-01T00:00:00+00:00"
     assert row["outcome_detail"] == "verbal"
@@ -197,7 +193,8 @@ def test_record_outcome_sets_fields_and_keeps_status(conn):
 def test_set_extraction_stores_all_four_fields(conn):
     db.upsert_job(conn, _job())
     db.set_extraction(
-        conn, "gh-1",
+        conn,
+        "gh-1",
         skills='[{"name": "python", "requirement": "required"}]',
         domain_bucket="backend",
         legitimacy="legitimate",
@@ -213,7 +210,11 @@ def test_set_extraction_stores_all_four_fields(conn):
 def test_set_extraction_allows_null_bucket_and_legitimacy_for_a_skip(conn):
     db.upsert_job(conn, _job())
     db.set_extraction(
-        conn, "gh-1", skills="[]", domain_bucket=None, legitimacy=None,
+        conn,
+        "gh-1",
+        skills="[]",
+        domain_bucket=None,
+        legitimacy=None,
         extraction_confidence="low",
     )
     row = db.get_job(conn, "gh-1")
@@ -224,7 +225,11 @@ def test_set_extraction_allows_null_bucket_and_legitimacy_for_a_skip(conn):
 def test_set_extraction_on_missing_job_raises(conn):
     with pytest.raises(KeyError):
         db.set_extraction(
-            conn, "nope", skills="[]", domain_bucket=None, legitimacy=None,
+            conn,
+            "nope",
+            skills="[]",
+            domain_bucket=None,
+            legitimacy=None,
             extraction_confidence="low",
         )
 
@@ -320,8 +325,8 @@ def test_migrate_v3_rebuilds_jobs_and_preserves_job_events_fk():
     assert {"skills", "domain_bucket", "legitimacy", "extraction_confidence"} <= cols
 
     row = db.get_job(raw, "j1")
-    assert row["status"] == "filtered"    # pre-existing data survived the rebuild
-    assert row["skills"] is None          # new columns default NULL, never guessed
+    assert row["status"] == "filtered"  # pre-existing data survived the rebuild
+    assert row["skills"] is None  # new columns default NULL, never guessed
     assert row["domain_bucket"] is None
 
     events = db.get_events(raw, "j1")

@@ -41,8 +41,7 @@ from tenacity import (
 log = logging.getLogger("hiredra.sourcing.http")
 
 _DEFAULT_UA = (
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-    "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 )
 
 # "The board is blocking us" -- cool the host down, never retry.
@@ -55,16 +54,16 @@ _TRANSIENT_STATUSES = frozenset({500, 502, 504})
 class HttpConfig:
     """Tuning knobs. Defaults are starting points, tuned by experiment (sec. 4)."""
 
-    timeout: float = 15.0             # per-request seconds
-    attempts: int = 3                 # total tries (1 + 2 retries) on transient failure
-    backoff_base: float = 1.0         # exponential-with-jitter: ~1s, 2s, 4s
+    timeout: float = 15.0  # per-request seconds
+    attempts: int = 3  # total tries (1 + 2 retries) on transient failure
+    backoff_base: float = 1.0  # exponential-with-jitter: ~1s, 2s, 4s
     backoff_max: float = 30.0
-    cooldown_seconds: float = 900.0   # host cooldown after a block (15 min)
-    max_cooldown: float = 3600.0      # clamp for a hostile Retry-After
-    user_agent: str = _DEFAULT_UA     # polite, not anti-bot evasion (decisions.md #21)
-    proxy: str | None = None          # OFF by default (decisions.md #20)
-    follow_redirects: bool = False    # SSRF-safe default; providers opt in per-request
-    sniff_challenges: bool = True     # narrow body-pattern bot-challenge detection
+    cooldown_seconds: float = 900.0  # host cooldown after a block (15 min)
+    max_cooldown: float = 3600.0  # clamp for a hostile Retry-After
+    user_agent: str = _DEFAULT_UA  # polite, not anti-bot evasion (decisions.md #21)
+    proxy: str | None = None  # OFF by default (decisions.md #20)
+    follow_redirects: bool = False  # SSRF-safe default; providers opt in per-request
+    sniff_challenges: bool = True  # narrow body-pattern bot-challenge detection
 
 
 # ── exceptions ──────────────────────────────────────────────────────────────
@@ -117,7 +116,7 @@ class Blocked(FetchError):
 # A working ATS API can therefore never trip this. A missed challenge is cheaper
 # than a false "blocked" on a live board (ATS APIs don't serve challenge pages).
 _CHALLENGE_PATTERNS: tuple[re.Pattern[str], ...] = (
-    re.compile(r"<title>\s*just a moment\.\.\.\s*</title>", re.I),                # Cloudflare
+    re.compile(r"<title>\s*just a moment\.\.\.\s*</title>", re.I),  # Cloudflare
     re.compile(r"attention required!\s*\|\s*cloudflare", re.I),
     re.compile(r"cf-browser-verification|_cf_chl_opt|/cdn-cgi/challenge-platform/", re.I),
     re.compile(r"checking your browser before accessing", re.I),
@@ -280,11 +279,7 @@ class HttpClient:
         needs a longer one). Left ``None``, the config default applies.
         """
         key = cooldown_key or urlsplit(url).netloc or url
-        follow = (
-            self.config.follow_redirects
-            if follow_redirects is None
-            else follow_redirects
-        )
+        follow = self.config.follow_redirects if follow_redirects is None else follow_redirects
 
         self.cooldowns.check(key, url=url)
 
@@ -301,20 +296,14 @@ class HttpClient:
             try:
                 resp = self._client.request(method, url, **req_kwargs)
             except httpx.TransportError as err:
-                raise TransientError(
-                    f"{method} {url}: {type(err).__name__}", url=url
-                ) from err
+                raise TransientError(f"{method} {url}: {type(err).__name__}", url=url) from err
             except httpx.RequestError as err:
-                raise FetchError(
-                    f"{method} {url}: {type(err).__name__}", url=url
-                ) from err
+                raise FetchError(f"{method} {url}: {type(err).__name__}", url=url) from err
             return self._guard(resp, key=key, url=url, follow=follow)
 
         retrying = Retrying(
             stop=stop_after_attempt(self.config.attempts),
-            wait=wait_exponential_jitter(
-                initial=self.config.backoff_base, max=self.config.backoff_max
-            ),
+            wait=wait_exponential_jitter(initial=self.config.backoff_base, max=self.config.backoff_max),
             retry=retry_if_exception_type(TransientError),
             sleep=self._sleep,
             reraise=True,
@@ -346,18 +335,14 @@ class HttpClient:
             )
         return self.config.cooldown_seconds
 
-    def _guard(
-        self, resp: httpx.Response, *, key: str, url: str, follow: bool
-    ) -> httpx.Response:
+    def _guard(self, resp: httpx.Response, *, key: str, url: str, follow: bool) -> httpx.Response:
         status = resp.status_code
 
         if status in _BLOCK_STATUSES:
             retry_after = _parse_retry_after(resp.headers.get("retry-after"))
             seconds = self._cooldown_len(retry_after)
             until = self.cooldowns.trip(key, seconds, reason=f"HTTP {status}")
-            log.warning(
-                "http: %s blocked (HTTP %d) -- cooling down %.0fs", key, status, seconds
-            )
+            log.warning("http: %s blocked (HTTP %d) -- cooling down %.0fs", key, status, seconds)
             raise Blocked(
                 f"{url}: HTTP {status} (blocked)",
                 cooldown_key=key,
@@ -383,9 +368,7 @@ class HttpClient:
         if self.config.sniff_challenges and _looks_like_challenge(resp):
             seconds = self._cooldown_len(None)
             until = self.cooldowns.trip(key, seconds, reason="challenge page")
-            log.warning(
-                "http: %s served a challenge page -- cooling down %.0fs", key, seconds
-            )
+            log.warning("http: %s served a challenge page -- cooling down %.0fs", key, seconds)
             raise Blocked(
                 f"{url}: challenge page (HTTP {status})",
                 cooldown_key=key,

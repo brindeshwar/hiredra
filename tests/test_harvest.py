@@ -83,7 +83,7 @@ def test_job_skills_tolerates_missing_and_null_lists():
         ("ci/cd", None),
         ("node.js", None),
         ("distributed systems", None),
-        ("a b c d", None),                       # exactly max_words
+        ("a b c d", None),  # exactly max_words
         ("a b c d e", "too_many_words"),
         ("x" * 41, "too_long"),
         ("x" * 40, None),
@@ -93,7 +93,7 @@ def test_job_skills_tolerates_missing_and_null_lists():
         ("https://example.com/skill", "url_or_email"),
         ("www.example.com", "url_or_email"),
         ("me@example.com", "url_or_email"),
-        ("http", None),                          # a real skill, not a URL
+        ("http", None),  # a real skill, not a URL
         ("https", None),
         ("http/2", None),
     ],
@@ -104,19 +104,21 @@ def test_sanity_reject_reason(name, expected):
 
 # ── the funnel ───────────────────────────────────────────────────────────────
 def test_funnel_counts_and_filters(conn, tmp_path):
-    reader = FakeReader({
-        "ashby": [
-            _job(req=["python", "kubernetes"], pref=["docker"]),
-            _job(req=["Python", "kubernetes"]),
-            _job(req=["python", "kubernetes", "rare-skill"]),
-            _job(family="sales", req=["salesforce", "salesforce", "salesforce"]),   # wrong family: ignored
-        ],
-        "lever": [
-            _job(family="data", req=["python", "docker", "sql"]),
-            _job(req=["docker", "a b c d e f"]),                                       # too many words
-            _job(req=["docker"]),
-        ],
-    })
+    reader = FakeReader(
+        {
+            "ashby": [
+                _job(req=["python", "kubernetes"], pref=["docker"]),
+                _job(req=["Python", "kubernetes"]),
+                _job(req=["python", "kubernetes", "rare-skill"]),
+                _job(family="sales", req=["salesforce", "salesforce", "salesforce"]),  # wrong family: ignored
+            ],
+            "lever": [
+                _job(family="data", req=["python", "docker", "sql"]),
+                _job(req=["docker", "a b c d e f"]),  # too many words
+                _job(req=["docker"]),
+            ],
+        }
+    )
     r = harvest(conn, _cfg(), reader=reader, df_path=tmp_path / "df.json")
 
     assert r.per_ats == {"ashby": {"enriched": 4, "in_family": 3}, "lever": {"enriched": 3, "in_family": 3}}
@@ -126,16 +128,18 @@ def test_funnel_counts_and_filters(conn, tmp_path):
     assert r.after_min_df == 3
     assert r.candidates == 3
     assert r.df == {"docker": 4, "python": 4, "kubernetes": 3}
-    assert list(r.df) == ["docker", "python", "kubernetes"]      # ordered by df desc, then name
+    assert list(r.df) == ["docker", "python", "kubernetes"]  # ordered by df desc, then name
     assert "salesforce" not in r.df
     assert r.inserted == 3 and r.already_known == 0 and r.failed == []
 
 
 def test_document_frequency_counts_a_job_once_however_often_it_repeats_a_skill(conn, tmp_path):
-    reader = FakeReader({
-        "ashby": [_job(req=["python", "python", "Python"], pref=["python"])],   # one job, four mentions
-        "lever": [],
-    })
+    reader = FakeReader(
+        {
+            "ashby": [_job(req=["python", "python", "Python"], pref=["python"])],  # one job, four mentions
+            "lever": [],
+        }
+    )
     r = harvest(conn, _cfg(min_df=1), reader=reader, df_path=tmp_path / "df.json")
     assert r.df == {"python": 1}
 
@@ -152,7 +156,7 @@ def test_min_df_is_the_breadth_lever(conn, tmp_path):
 
 def test_role_families_are_the_other_breadth_lever(conn, tmp_path):
     reader = FakeReader({"ashby": [_job(family="ml_ai", req=["pytorch"])] * 3, "lever": []})
-    assert harvest(conn, _cfg(), reader=reader, dry_run=True, df_path=None).df == {}   # ml_ai not in the cfg
+    assert harvest(conn, _cfg(), reader=reader, dry_run=True, df_path=None).df == {}  # ml_ai not in the cfg
     reader = FakeReader({"ashby": [_job(family="ml_ai", req=["pytorch"])] * 3, "lever": []})
     wider = _cfg(role_families=("software_engineering", "ml_ai"))
     assert harvest(conn, wider, reader=reader, dry_run=True, df_path=None).df == {"pytorch": 3}
@@ -189,14 +193,15 @@ def test_existing_nodes_and_merged_aliases_are_not_touched_or_resurrected(conn, 
     add_market_skill(conn, "fast api")
     conn.commit()
     from hiredra.storage import merge_skill
+
     merge_skill(conn, "fast api", "fastapi")
 
     reader = FakeReader({"ashby": [_job(req=["python", "fast api", "docker"])] * 3, "lever": []})
     r = harvest(conn, _cfg(), reader=reader, df_path=tmp_path / "df.json")
 
-    assert r.inserted == 1 and r.already_known == 2          # docker new; python node + 'fast api' alias known
+    assert r.inserted == 1 and r.already_known == 2  # docker new; python node + 'fast api' alias known
     assert get_skill_vocab(conn, "python")["seen_count"] == 9 and get_skill_vocab(conn, "python")["source"] == "jd"
-    assert get_skill_vocab(conn, "fast api") is None          # alias not resurrected as a node
+    assert get_skill_vocab(conn, "fast api") is None  # alias not resurrected as a node
 
 
 def test_dry_run_writes_nothing(conn, tmp_path):
@@ -231,7 +236,7 @@ def test_a_failing_file_is_reported_and_others_still_count(conn, tmp_path):
     assert "RuntimeError" in r.per_ats["ashby"]["error"] and "503" in r.per_ats["ashby"]["error"]
     assert r.per_ats["ashby"]["attempts"] == 3
     assert r.per_ats["lever"] == {"enriched": 3, "in_family": 3}
-    assert r.df == {"python": 3}                       # computed from what did read...
+    assert r.df == {"python": 3}  # computed from what did read...
 
 
 def test_any_failed_file_means_nothing_is_written_by_default(conn, tmp_path):
@@ -253,17 +258,19 @@ def test_allow_partial_writes_what_did_read(conn, tmp_path):
 def test_a_file_that_fails_midway_contributes_nothing(conn, tmp_path):
     def flaky(url):
         if url.endswith("/ashby.parquet"):
+
             def rows():
                 yield _job(req=["python", "go"])
                 yield _job(req=["python", "go"])
                 yield _job(req=["python", "go"])
                 raise ConnectionError("connection reset half way through the file")
+
             return rows()
         return iter([_job(req=["rust"])] * 3)
 
     r = _run(conn, tmp_path, flaky, attempts=1)
     assert r.failed == ["ashby"]
-    assert r.df == {"rust": 3}                          # NOT python/go: the 3 rows read before the reset are discarded
+    assert r.df == {"rust": 3}  # NOT python/go: the 3 rows read before the reset are discarded
     assert (r.enriched_jobs, r.in_family_jobs) == (3, 3)
 
 
@@ -280,10 +287,17 @@ def test_a_transient_failure_is_retried_and_counted_once(conn, tmp_path):
 
     slept: list[float] = []
     lines: list[str] = []
-    r = harvest(conn, _cfg(), reader=reader, df_path=tmp_path / "df.json", retry_wait_s=7.0,
-                sleep=slept.append, log=lines.append)
+    r = harvest(
+        conn,
+        _cfg(),
+        reader=reader,
+        df_path=tmp_path / "df.json",
+        retry_wait_s=7.0,
+        sleep=slept.append,
+        log=lines.append,
+    )
     assert r.failed == [] and r.written and calls["ashby"] == 2
-    assert r.df == {"python": 3}                        # not doubled by the retry
+    assert r.df == {"python": 3}  # not doubled by the retry
     assert slept == [7.0] and any("attempt 2/3" in ln for ln in lines)
 
 
@@ -295,9 +309,16 @@ def test_it_gives_up_after_the_configured_attempts(conn, tmp_path):
         raise TimeoutError("nope")
 
     slept: list[float] = []
-    r = harvest(conn, _cfg(ats=("ashby",)), reader=reader, df_path=tmp_path / "df.json",
-                attempts=4, retry_wait_s=2.0, sleep=slept.append)
-    assert len(calls) == 4 and slept == [2.0, 2.0, 2.0]   # no sleep after the final attempt
+    r = harvest(
+        conn,
+        _cfg(ats=("ashby",)),
+        reader=reader,
+        df_path=tmp_path / "df.json",
+        attempts=4,
+        retry_wait_s=2.0,
+        sleep=slept.append,
+    )
+    assert len(calls) == 4 and slept == [2.0, 2.0, 2.0]  # no sleep after the final attempt
     assert r.failed == ["ashby"] and r.per_ats["ashby"]["attempts"] == 4
 
 
@@ -331,7 +352,7 @@ def test_export_date_latest_is_resolved_through_the_worker_listing(conn, tmp_pat
 
 def test_an_explicit_export_date_skips_the_listing(conn, tmp_path):
     reader = FakeReader({"ashby": [], "lever": []})
-    r = harvest(conn, _cfg(), reader=reader, df_path=tmp_path / "df.json")   # no client passed: would fail if it listed
+    r = harvest(conn, _cfg(), reader=reader, df_path=tmp_path / "df.json")  # no client passed: would fail if it listed
     assert r.export_date == "2026-09-19"
 
 
@@ -356,14 +377,17 @@ def _write_parquet(path, rows):
 def test_read_enrichment_data_streams_only_enriched_rows_with_a_data_object(tmp_path):
     good = json.dumps({"schema_version": 1, "data": {"role_family": "data", "skills_required": ["sql"]}})
     p = tmp_path / "x.parquet"
-    _write_parquet(p, [
-        good,
-        None,                                              # not enriched -> filtered in SQL
-        "{not valid json",                                 # malformed -> skipped
-        json.dumps({"schema_version": 1}),                 # no `data` -> skipped
-        json.dumps({"data": "not-a-dict"}),                # wrong shape -> skipped
-        json.dumps({"data": {"role_family": "data", "skills_required": ["python"]}}),
-    ])
+    _write_parquet(
+        p,
+        [
+            good,
+            None,  # not enriched -> filtered in SQL
+            "{not valid json",  # malformed -> skipped
+            json.dumps({"schema_version": 1}),  # no `data` -> skipped
+            json.dumps({"data": "not-a-dict"}),  # wrong shape -> skipped
+            json.dumps({"data": {"role_family": "data", "skills_required": ["python"]}}),
+        ],
+    )
     out = list(read_enrichment_data(str(p)))
     assert out == [
         {"role_family": "data", "skills_required": ["sql"]},
@@ -377,5 +401,5 @@ def test_harvest_end_to_end_through_the_real_reader_on_a_local_file(conn, tmp_pa
         (tmp_path / "2026-09-19" / "jobs").mkdir(parents=True, exist_ok=True)
         _write_parquet(tmp_path / "2026-09-19" / "jobs" / f"{name}.parquet", rows if name == "ashby" else [])
     cfg = _cfg(export_base_url=(tmp_path).as_posix())
-    r = harvest(conn, cfg, df_path=tmp_path / "df.json")          # default reader = the real duckdb one
+    r = harvest(conn, cfg, df_path=tmp_path / "df.json")  # default reader = the real duckdb one
     assert r.df == {"kubernetes": 3, "python": 3} and r.inserted == 2

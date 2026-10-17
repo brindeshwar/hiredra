@@ -292,9 +292,7 @@ def cmd_export(_args: argparse.Namespace) -> int:
     EXPORT_DIR.mkdir(parents=True, exist_ok=True)
     conn = connect(str(DB_PATH))
     try:
-        jobs = conn.execute(
-            "select job_id, company, source, url, status, status_detail from jobs"
-        ).fetchall()
+        jobs = conn.execute("select job_id, company, source, url, status, status_detail from jobs").fetchall()
         unknown_ids = {
             row["job_id"]
             for row in conn.execute(
@@ -314,7 +312,7 @@ def cmd_export(_args: argparse.Namespace) -> int:
     # boards, the url-derived slug 200s.
     rows: dict[tuple[str, str], tuple[str, str]] = {}  # (ats, slug) -> (company, tag)
     for job_id, company, source, url, status, status_detail in jobs:
-        ats = source[len("open-jobs-"):] if source.startswith("open-jobs-") else source
+        ats = source[len("open-jobs-") :] if source.startswith("open-jobs-") else source
         if ats not in ATS:
             continue
         dropped_on_location = status == "dropped" and (status_detail or "").startswith("location:")

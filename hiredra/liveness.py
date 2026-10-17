@@ -36,17 +36,15 @@ from hiredra.storage import add_note, iter_jobs, set_status
 
 @dataclass
 class LivenessStats:
-    checked: int = 0         # every status='filtered' job examined
+    checked: int = 0  # every status='filtered' job examined
     boards_checked: int = 0  # distinct company boards re-fetched (ATS jobs only)
-    live: int = 0            # confirmed still in the board's current listing
-    gone: int = 0            # dropped: absent from a fresh listing, or the whole board 404'd
-    unchecked: int = 0       # no board mechanism for this job (JobSpy, or an unresolvable board) -- kept, noted
-    ambiguous: int = 0       # board recheck inconclusive (blocked/timeout/other error) -- kept, unchanged
+    live: int = 0  # confirmed still in the board's current listing
+    gone: int = 0  # dropped: absent from a fresh listing, or the whole board 404'd
+    unchecked: int = 0  # no board mechanism for this job (JobSpy, or an unresolvable board) -- kept, noted
+    ambiguous: int = 0  # board recheck inconclusive (blocked/timeout/other error) -- kept, unchanged
 
 
-def check_liveness(
-    conn, ctx: FetchContext | None = None, registry: Sequence[Provider] = REGISTRY
-) -> LivenessStats:
+def check_liveness(conn, ctx: FetchContext | None = None, registry: Sequence[Provider] = REGISTRY) -> LivenessStats:
     """Re-verify every 'filtered' job is still live, one fetch per board."""
     stats = LivenessStats()
     owns_ctx = ctx is None

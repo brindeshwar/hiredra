@@ -29,11 +29,11 @@ def html_to_text(value: str | None) -> str:
     """Best-effort plain text from (possibly double-encoded) HTML. ``""`` for falsy input."""
     if not value:
         return ""
-    text = html.unescape(str(value))       # entity-escaped markup -> real tags
+    text = html.unescape(str(value))  # entity-escaped markup -> real tags
     text = _SCRIPT_STYLE.sub("", text)
     text = _NEWLINE_TAGS.sub("\n", text)
-    text = _TAG.sub("", text)              # drop remaining tags
-    text = html.unescape(text)             # now decode the text-level entities
+    text = _TAG.sub("", text)  # drop remaining tags
+    text = html.unescape(text)  # now decode the text-level entities
     text = _INLINE_WS.sub(" ", text)
     text = "\n".join(line.strip() for line in text.splitlines())
     text = _BLANK_LINES.sub("\n\n", text)

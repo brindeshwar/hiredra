@@ -100,9 +100,7 @@ def test_staff_engineer_is_caught_by_the_senior_term():
 
 
 def test_member_of_technical_staff_survives_the_title_term_check():
-    term = funnel.has_senior_title_term(
-        "Member of Technical Staff - MTS", CONFIG.senior_title_terms
-    )
+    term = funnel.has_senior_title_term("Member of Technical Staff - MTS", CONFIG.senior_title_terms)
     assert term is None
 
 
@@ -113,9 +111,7 @@ def test_mts_abbreviation_alone_also_survives():
 
 def test_senior_member_of_technical_staff_is_still_caught_via_senior():
     # neutralizing "staff" doesn't neutralize other senior terms in the title
-    term = funnel.has_senior_title_term(
-        "Senior Member of Technical Staff", CONFIG.senior_title_terms
-    )
+    term = funnel.has_senior_title_term("Senior Member of Technical Staff", CONFIG.senior_title_terms)
     assert term == "senior"
 
 
@@ -153,9 +149,7 @@ def test_seniority_gate_drops_on_title_term_even_with_low_years():
 
 
 def test_seniority_gate_drops_on_anti_signal_phrase_with_no_years_stated():
-    r = funnel.passes_seniority_gate(
-        "Backend Engineer", "You will mentor junior engineers on the team.", CONFIG
-    )
+    r = funnel.passes_seniority_gate("Backend Engineer", "You will mentor junior engineers on the team.", CONFIG)
     assert not r.keep and "anti-signal phrase" in r.reason
     assert r.years is None  # still populated (as None) even though it's what drops it
 
@@ -194,12 +188,11 @@ def test_role_type_block_wins_on_both():
 def test_run_funnel_advances_and_drops_with_reasons():
     conn = connect(":memory:")
     init_db(conn)
-    upsert_job(conn, _job(job_id="keep1", url="u1", title="Backend Engineer",
-                           description="Great team, no years stated."))
-    upsert_job(conn, _job(job_id="drop-sen", url="u2", title="Engineering Manager",
-                           description="5+ years required."))
-    upsert_job(conn, _job(job_id="drop-role", url="u3", title="Content Writer",
-                           description="Write great content."))
+    upsert_job(
+        conn, _job(job_id="keep1", url="u1", title="Backend Engineer", description="Great team, no years stated.")
+    )
+    upsert_job(conn, _job(job_id="drop-sen", url="u2", title="Engineering Manager", description="5+ years required."))
+    upsert_job(conn, _job(job_id="drop-role", url="u3", title="Content Writer", description="Write great content."))
 
     stats = funnel.run_funnel(conn, CONFIG)
 

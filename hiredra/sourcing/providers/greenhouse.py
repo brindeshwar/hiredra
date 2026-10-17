@@ -94,9 +94,7 @@ class GreenhouseProvider:
                         source=self.name,
                         description=html_to_text(j.get("content")) or None,
                         location=location,
-                        date_posted=iso_date(
-                            j.get("first_published") or j.get("updated_at")
-                        ),
+                        date_posted=iso_date(j.get("first_published") or j.get("updated_at")),
                         is_remote=infer_remote(f"{location or ''} {title}"),
                     )
                 )

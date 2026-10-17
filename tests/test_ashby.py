@@ -51,13 +51,13 @@ def test_fetch_maps_jobs(http_factory, ashby_payload):
     assert j0.date_posted == "2026-08-20"
     assert j0.job_type == "FullTime"
     assert j0.salary == "$180K - $220K"
-    assert j0.is_remote is False                       # workplaceType "Onsite" -> explicit False
+    assert j0.is_remote is False  # workplaceType "Onsite" -> explicit False
 
 
 def test_remote_from_workplace_type(http_factory, ashby_payload):
     http = http_factory(lambda req: httpx.Response(200, json=ashby_payload))
     jobs = AB.fetch(_entry(), FetchContext(http=http))
-    assert jobs[1].is_remote is True                   # workplaceType "Remote"
+    assert jobs[1].is_remote is True  # workplaceType "Remote"
 
 
 def test_longer_timeout_is_requested(http_factory, ashby_payload):
@@ -81,9 +81,7 @@ def test_includeCompensation_and_host(http_factory, ashby_payload):
 
     http = http_factory(handler)
     AB.fetch(_entry(), FetchContext(http=http))
-    assert seen["url"] == (
-        "https://api.ashbyhq.com/posting-api/job-board/acme?includeCompensation=true"
-    )
+    assert seen["url"] == ("https://api.ashbyhq.com/posting-api/job-board/acme?includeCompensation=true")
 
 
 def test_empty_board(http_factory):

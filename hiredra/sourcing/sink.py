@@ -25,7 +25,7 @@ from hiredra.storage import db
 
 @dataclass(frozen=True, slots=True)
 class SinkStats:
-    fetched: int = 0            # raw Job count handed in
+    fetched: int = 0  # raw Job count handed in
     collapsed_in_run: int = 0
     matched_in_store: int = 0
     persisted_new: int = 0

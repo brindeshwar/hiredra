@@ -83,7 +83,9 @@ def main() -> int:
         check(r.nearest == exact and r.fit == 1.0, f"{exact}: exact match, fit = 1.0")
     k8s = by_skill["kubernetes"]
     check(k8s.nearest == "docker", "kubernetes: nearest owner skill is docker")
-    check(cfg.adj <= k8s.similarity < cfg.have, f"kubernetes: similarity {k8s.similarity:.4f} lands in the adjacent band")
+    check(
+        cfg.adj <= k8s.similarity < cfg.have, f"kubernetes: similarity {k8s.similarity:.4f} lands in the adjacent band"
+    )
     check(k8s.fit == k8s.similarity, "kubernetes: adjacent fit equals the similarity itself (no flattening)")
     kafka = by_skill["kafka"]
     check(kafka.fit == 0.0, f"kafka: fit floors to 0.0 (similarity {kafka.similarity:.4f} was below ADJ)")

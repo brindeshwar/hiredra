@@ -36,8 +36,14 @@ _ROW = {
     "is_remote": False,
     "description": "Build APIs. Python, FastAPI.",
 }
-_ROW2 = {**_ROW, "id": "in-def", "job_url": "https://in.indeed.com/viewjob?jk=def",
-         "title": "AI Engineer, Remote", "is_remote": True, "job_url_direct": None}
+_ROW2 = {
+    **_ROW,
+    "id": "in-def",
+    "job_url": "https://in.indeed.com/viewjob?jk=def",
+    "title": "AI Engineer, Remote",
+    "is_remote": True,
+    "job_url_direct": None,
+}
 
 
 class FakeScrape:
@@ -78,8 +84,7 @@ def ctx(http_factory):
 def test_maps_rows_to_jobs(ctx):
     fake = FakeScrape()
     fake.by_site["indeed"] = pd.DataFrame([_ROW, _ROW2])
-    src, _ = _source(fake, sites=("indeed",),
-                     default_query=SiteQuery(search_terms=("backend engineer",)))
+    src, _ = _source(fake, sites=("indeed",), default_query=SiteQuery(search_terms=("backend engineer",)))
     result = src.fetch(ctx)
 
     assert [o.status for o in result.outcomes] == ["ok"]
@@ -91,17 +96,21 @@ def test_maps_rows_to_jobs(ctx):
     assert j0.date_posted == "2026-09-01"
     assert j0.job_type == "fulltime"
     assert j0.salary == "INR 1,500,000-2,500,000 /yearly"
-    assert j0.is_remote is None                    # JobSpy False -> not trusted, no keyword
-    assert j1.is_remote is True                    # "AI Engineer, Remote" keyword + JobSpy True
+    assert j0.is_remote is None  # JobSpy False -> not trusted, no keyword
+    assert j1.is_remote is True  # "AI Engineer, Remote" keyword + JobSpy True
 
 
 def test_nan_fields_become_none(ctx):
-    row = {**_ROW, "description": None, "min_amount": float("nan"),
-           "max_amount": float("nan"), "job_url_direct": float("nan")}
+    row = {
+        **_ROW,
+        "description": None,
+        "min_amount": float("nan"),
+        "max_amount": float("nan"),
+        "job_url_direct": float("nan"),
+    }
     fake = FakeScrape()
     fake.by_site["indeed"] = pd.DataFrame([row])
-    src, _ = _source(fake, sites=("indeed",),
-                     default_query=SiteQuery(search_terms=("x",)))
+    src, _ = _source(fake, sites=("indeed",), default_query=SiteQuery(search_terms=("x",)))
     job = src.fetch(ctx).jobs[0]
     assert job.description is None and job.salary is None and job.apply_url is None
 
@@ -109,8 +118,7 @@ def test_nan_fields_become_none(ctx):
 def test_malformed_row_skipped(ctx):
     fake = FakeScrape()
     fake.by_site["indeed"] = pd.DataFrame([{**_ROW, "company": None}])
-    src, _ = _source(fake, sites=("indeed",),
-                     default_query=SiteQuery(search_terms=("x",)))
+    src, _ = _source(fake, sites=("indeed",), default_query=SiteQuery(search_terms=("x",)))
     result = src.fetch(ctx)
     assert result.jobs == [] and result.outcomes[0].status == "empty"
 
@@ -139,8 +147,7 @@ def test_linkedin_uses_its_own_query(ctx):
 
 def test_linkedin_falls_back_to_default_when_no_linkedin_query(ctx):
     fake = FakeScrape()
-    src, _ = _source(fake, sites=("linkedin",), linkedin_query=None,
-                     default_query=SiteQuery(search_terms=("shared",)))
+    src, _ = _source(fake, sites=("linkedin",), linkedin_query=None, default_query=SiteQuery(search_terms=("shared",)))
     src.fetch(ctx)
     assert [c["search_term"] for c in fake.site_calls("linkedin")] == ["shared"]
 
@@ -150,6 +157,7 @@ def _blocks_via_log(logger_name: str, message: str):
     def _handler(**kw):
         logging.getLogger(logger_name).error(message)
         return pd.DataFrame()
+
     return _handler
 
 
@@ -158,8 +166,7 @@ def test_blocked_via_log_trips_cooldown(ctx):
     fake.by_site["linkedin"] = _blocks_via_log(
         "JobSpy:LinkedIn", "429 Response - Blocked by LinkedIn for too many requests"
     )
-    src, _ = _source(fake, sites=("linkedin",),
-                     linkedin_query=SiteQuery(search_terms=("x",)))
+    src, _ = _source(fake, sites=("linkedin",), linkedin_query=SiteQuery(search_terms=("x",)))
     result = src.fetch(ctx)
 
     assert result.outcomes[0].status == "blocked"
@@ -194,9 +201,7 @@ def test_naukri_406_recaptcha_is_a_block_not_empty(ctx):
         "JobSpy:Naukri",
         'Naukri API response status code 406 - {"message":"recaptcha required","statusCode":406}',
     )
-    src, _ = _source(fake, sites=("naukri",),
-                     default_query=SiteQuery(search_terms=("x",)),
-                     cooldown_long=21600.0)
+    src, _ = _source(fake, sites=("naukri",), default_query=SiteQuery(search_terms=("x",)), cooldown_long=21600.0)
     result = src.fetch(ctx)
     assert result.outcomes[0].status == "blocked"
     assert "jobspy-naukri" in ctx.http.cooldowns.active()  # long cooldown, not "empty"
@@ -205,9 +210,13 @@ def test_naukri_406_recaptcha_is_a_block_not_empty(ctx):
 def test_blocked_via_exception_uses_long_cooldown_for_glassdoor(ctx):
     fake = FakeScrape()
     fake.by_site["glassdoor"] = RuntimeError("403 Forbidden - access denied")
-    src, _ = _source(fake, sites=("glassdoor",),
-                     default_query=SiteQuery(search_terms=("x",)),
-                     cooldown_long=21600.0, cooldown_short=1800.0)
+    src, _ = _source(
+        fake,
+        sites=("glassdoor",),
+        default_query=SiteQuery(search_terms=("x",)),
+        cooldown_long=21600.0,
+        cooldown_short=1800.0,
+    )
     result = src.fetch(ctx)
 
     assert result.outcomes[0].status == "blocked"
@@ -217,8 +226,7 @@ def test_blocked_via_exception_uses_long_cooldown_for_glassdoor(ctx):
 
 def test_empty_is_not_a_block(ctx):
     fake = FakeScrape()  # returns empty DataFrame, logs nothing
-    src, _ = _source(fake, sites=("indeed",),
-                     default_query=SiteQuery(search_terms=("x", "y")))
+    src, _ = _source(fake, sites=("indeed",), default_query=SiteQuery(search_terms=("x", "y")))
     result = src.fetch(ctx)
     assert result.outcomes[0].status == "empty"
     assert ctx.http.cooldowns.active() == {}
@@ -228,21 +236,21 @@ def test_non_block_error_is_isolated(ctx):
     fake = FakeScrape()
     fake.by_site["indeed"] = ValueError("bad param")
     fake.by_site["google"] = pd.DataFrame([_ROW])
-    src, _ = _source(fake, sites=("indeed", "google"),
-                     default_query=SiteQuery(search_terms=("x",)))
+    src, _ = _source(fake, sites=("indeed", "google"), default_query=SiteQuery(search_terms=("x",)))
     result = src.fetch(ctx)
 
     statuses = {o.site: o.status for o in result.outcomes}
     assert statuses == {"indeed": "error", "google": "ok"}
     assert len(result.jobs) == 1
-    assert ctx.http.cooldowns.active() == {}   # a non-block error never cools down
+    assert ctx.http.cooldowns.active() == {}  # a non-block error never cools down
 
 
 # ── google single-call + pacing + guards ───────────────────────────────────
 def test_google_single_call_when_google_search_term_set(ctx):
     fake = FakeScrape()
     src, _ = _source(
-        fake, sites=("google",),
+        fake,
+        sites=("google",),
         default_query=SiteQuery(
             search_terms=("a", "b", "c"),
             google_search_term="software engineer jobs india fresher",
@@ -256,11 +264,15 @@ def test_google_single_call_when_google_search_term_set(ctx):
 
 def test_between_sites_delay(ctx):
     fake = FakeScrape()
-    src, slept = _source(fake, sites=("indeed", "linkedin", "google"), between_sites_delay=4.0,
-                         default_query=SiteQuery(search_terms=("x",)),
-                         linkedin_query=SiteQuery(search_terms=("x",)))
+    src, slept = _source(
+        fake,
+        sites=("indeed", "linkedin", "google"),
+        between_sites_delay=4.0,
+        default_query=SiteQuery(search_terms=("x",)),
+        linkedin_query=SiteQuery(search_terms=("x",)),
+    )
     src.fetch(ctx)
-    assert slept == [4.0, 4.0]   # one gap between each of the 3 sites
+    assert slept == [4.0, 4.0]  # one gap between each of the 3 sites
 
 
 def test_empty_sites_raises(ctx):
@@ -273,8 +285,7 @@ def test_empty_sites_raises(ctx):
 def test_fetch_to_persist(ctx):
     fake = FakeScrape()
     fake.by_site["indeed"] = pd.DataFrame([_ROW, _ROW2])
-    src, _ = _source(fake, sites=("indeed",),
-                     default_query=SiteQuery(search_terms=("x",)))
+    src, _ = _source(fake, sites=("indeed",), default_query=SiteQuery(search_terms=("x",)))
     result = src.fetch(ctx)
 
     conn = db.connect(":memory:")

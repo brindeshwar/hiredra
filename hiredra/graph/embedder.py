@@ -149,12 +149,12 @@ def _is_transient(exc: BaseException) -> bool:
 def classify_failure(exc: BaseException) -> str | None:
     """What kind of failure is this? Used to tell an expected stop from a bug.
 
-      "daily_quota"  Google's daily cap (or our local budget): wait for the reset.
-      "transient"    429 / 5xx / network trouble that outlasted the retries: re-run later.
-      "api_error"    Google answered and said no (bad key, bad request, no access).
-      "bad_response" Google answered with something unusable (wrong count/size/zero vector).
-      None           anything else: an unknown exception is most likely a BUG, so callers
-                     must re-raise it rather than turn it into a status line.
+    "daily_quota"  Google's daily cap (or our local budget): wait for the reset.
+    "transient"    429 / 5xx / network trouble that outlasted the retries: re-run later.
+    "api_error"    Google answered and said no (bad key, bad request, no access).
+    "bad_response" Google answered with something unusable (wrong count/size/zero vector).
+    None           anything else: an unknown exception is most likely a BUG, so callers
+                   must re-raise it rather than turn it into a status line.
     """
     if isinstance(exc, DailyQuotaExceeded) or _is_daily_quota(exc):
         return "daily_quota"
@@ -189,9 +189,7 @@ def _default_client(cfg: GraphConfig, api_key: str | None):
     load_dotenv()
     key = api_key or os.environ.get("GEMINI_API_KEY")
     if not key:
-        raise RuntimeError(
-            "GEMINI_API_KEY is not set (check .env) -- required to build the embedder."
-        )
+        raise RuntimeError("GEMINI_API_KEY is not set (check .env) -- required to build the embedder.")
     return GoogleGenerativeAIEmbeddings(
         model=cfg.model,
         google_api_key=key,
@@ -287,14 +285,10 @@ def build_embedder(
                     ) from exc
                 raise
             if len(vectors) != len(chunk):
-                raise EmbeddingError(
-                    f"asked for {len(chunk)} embeddings, got {len(vectors)}"
-                )
+                raise EmbeddingError(f"asked for {len(chunk)} embeddings, got {len(vectors)}")
             for v in vectors:
                 if len(v) != cfg.dimensions:
-                    raise EmbeddingError(
-                        f"expected {cfg.dimensions}-dim vectors, got {len(v)}"
-                    )
+                    raise EmbeddingError(f"expected {cfg.dimensions}-dim vectors, got {len(v)}")
             rows.extend(vectors)
         return l2_normalize(np.array(rows, dtype=np.float32))
 

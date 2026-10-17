@@ -23,7 +23,13 @@ _SECTIONS: dict[str, set[str]] = {
     "dedup": {"threshold", "review_cosine", "auto_cosine"},
     "fit": {"have", "adj"},
     "harvest": {
-        "export_base_url", "export_date", "ats", "role_families", "min_df", "max_words", "max_chars",
+        "export_base_url",
+        "export_date",
+        "ats",
+        "role_families",
+        "min_df",
+        "max_words",
+        "max_chars",
     },
     "gate": {"canary_skills", "canary_min_cosine"},
 }
@@ -145,9 +151,7 @@ def load_graph_config(path: Path | str = DEFAULT_CONFIG_PATH) -> GraphConfig:
     if not 128 <= cfg.dimensions <= 3072:
         raise ValueError(f"graph config: embedding.dimensions must be 128-3072, got {cfg.dimensions}")
     if not 1 <= cfg.inputs_per_request <= 100:
-        raise ValueError(
-            f"graph config: embedding.inputs_per_request must be 1-100, got {cfg.inputs_per_request}"
-        )
+        raise ValueError(f"graph config: embedding.inputs_per_request must be 1-100, got {cfg.inputs_per_request}")
     if min(cfg.requests_per_minute, cfg.tokens_per_minute, cfg.requests_per_day) < 1:
         raise ValueError("graph config: limits.requests_per_minute / tokens_per_minute / requests_per_day must be >= 1")
     if not 0.0 < cfg.headroom <= 1.0:
@@ -165,9 +169,7 @@ def load_graph_config(path: Path | str = DEFAULT_CONFIG_PATH) -> GraphConfig:
             f"{cfg.dedup_threshold} / {cfg.review_cosine} / {cfg.auto_cosine}"
         )
     if not 0.0 < cfg.adj < cfg.have <= 1.0:
-        raise ValueError(
-            f"graph config: need 0 < fit.adj < fit.have <= 1, got adj={cfg.adj} have={cfg.have}"
-        )
+        raise ValueError(f"graph config: need 0 < fit.adj < fit.have <= 1, got adj={cfg.adj} have={cfg.have}")
     if not 0.0 < cfg.canary_min_cosine <= 1.0:
         raise ValueError(f"graph config: gate.canary_min_cosine must be in (0, 1], got {cfg.canary_min_cosine}")
     # ats names go into a URL path; keep them to a safe charset

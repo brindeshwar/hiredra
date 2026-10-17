@@ -210,10 +210,15 @@ def propose_merges(
 
     def proposal(dup_row, surv_row, cosine, band, reason) -> MergeProposal:
         return MergeProposal(
-            dup=dup_row["name"] if dup_row else "", survivor=surv_row["name"], cosine=cosine,
-            dup_seen=dup_row["seen_count"] if dup_row else 0, survivor_seen=surv_row["seen_count"],
-            dup_df=w.get(dup_row["name"], 0) if dup_row else 0, survivor_df=w.get(surv_row["name"], 0),
-            band=band, reason=reason,
+            dup=dup_row["name"] if dup_row else "",
+            survivor=surv_row["name"],
+            cosine=cosine,
+            dup_seen=dup_row["seen_count"] if dup_row else 0,
+            survivor_seen=surv_row["seen_count"],
+            dup_df=w.get(dup_row["name"], 0) if dup_row else 0,
+            survivor_df=w.get(surv_row["name"], 0),
+            band=band,
+            reason=reason,
         )
 
     # -- ALIAS band: the owner's own list; needs no vectors --------------------
@@ -234,14 +239,26 @@ def propose_merges(
                 continue
             row = by_name.get(alias)
             if row is None:
-                report.proposals.append(MergeProposal(
-                    dup=alias, survivor=canonical, cosine=None, survivor_seen=c_row["seen_count"],
-                    survivor_df=w.get(canonical, 0), band="alias", reason="alias file (not a node: alias only)"))
+                report.proposals.append(
+                    MergeProposal(
+                        dup=alias,
+                        survivor=canonical,
+                        cosine=None,
+                        survivor_seen=c_row["seen_count"],
+                        survivor_df=w.get(canonical, 0),
+                        band="alias",
+                        reason="alias file (not a node: alias only)",
+                    )
+                )
                 continue
             if row["mine"]:
                 report.alias_notes.append((alias, canonical, "the alias is a 'mine' skill (never merged away)"))
                 continue
-            cos = float(sims[index[alias], index[canonical]]) if sims is not None and alias in index and canonical in index else None
+            cos = (
+                float(sims[index[alias], index[canonical]])
+                if sims is not None and alias in index and canonical in index
+                else None
+            )
             report.proposals.append(proposal(row, c_row, cos, "alias", "alias file"))
             if alias in index:
                 assigned[index[alias]] = True
@@ -313,7 +330,7 @@ def write_review(report: ProposalReport, path: Path | str = DEFAULT_REVIEW_PATH)
                 "embed_tag": report.embed_tag,
                 "threshold": report.threshold,
                 "note": (
-                    "Only entries with \"approve\": true are applied. AUTO and ALIAS entries start true; REVIEW "
+                    'Only entries with "approve": true are applied. AUTO and ALIAS entries start true; REVIEW '
                     "entries start false -- set one to true to merge it. Delete an entry to drop it. Then run: "
                     "python -m hiredra.graph merges --apply"
                 ),

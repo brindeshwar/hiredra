@@ -79,21 +79,16 @@ def test_a_jd_sighting_of_a_market_node_bumps_the_count_but_keeps_its_source(con
 
 
 # ── schema CHECKs (fresh DB) ─────────────────────────────────────────────────
-@pytest.mark.parametrize(
-    "column,bad", [("source", "'bogus'"), ("mine", "2"), ("level", "'expert'")]
-)
+@pytest.mark.parametrize("column,bad", [("source", "'bogus'"), ("mine", "2"), ("level", "'expert'")])
 def test_checks_reject_bad_values(conn, column, bad):
     with pytest.raises(sqlite3.IntegrityError):
-        conn.execute(
-            f"INSERT INTO skill_vocab (name, first_seen_at, {column}) VALUES ('x', 't', {bad})"
-        )
+        conn.execute(f"INSERT INTO skill_vocab (name, first_seen_at, {column}) VALUES ('x', 't', {bad})")
 
 
 def test_profile_source_and_every_level_are_accepted(conn):
     for i, level in enumerate(("production", "built-with", "learned", "interview-ready")):
         conn.execute(
-            "INSERT INTO skill_vocab (name, first_seen_at, mine, level, source) "
-            "VALUES (?, 't', 1, ?, 'profile')",
+            "INSERT INTO skill_vocab (name, first_seen_at, mine, level, source) VALUES (?, 't', 1, ?, 'profile')",
             (f"s{i}", level),
         )
 
@@ -144,9 +139,9 @@ def test_alias_foreign_key_is_enforced_at_the_db_level(conn):
 
 # ── merge_skill ──────────────────────────────────────────────────────────────
 def test_merge_folds_counts_dates_and_records_the_alias(conn):
-    touch_skill_vocab(conn, "fastapi")          # seen_count 1
+    touch_skill_vocab(conn, "fastapi")  # seen_count 1
     touch_skill_vocab(conn, "fast api")
-    touch_skill_vocab(conn, "fast api")         # seen_count 2
+    touch_skill_vocab(conn, "fast api")  # seen_count 2
     _set(conn, "fastapi", first_seen_at="2026-05-01T00:00:00+00:00")
     _set(conn, "fast api", first_seen_at="2026-03-01T00:00:00+00:00")
 
@@ -223,7 +218,7 @@ def test_needing_embedding_excludes_current_and_includes_stale(conn):
         add_market_skill(conn, n)
     set_skill_vectors(conn, [("a", b"x"), ("b", b"x")], TAG)
     set_skill_vectors(conn, [("c", b"x")], "old-model|d768|prefix=none")
-    assert skills_needing_embedding(conn, TAG) == ["c"]                 # c is stale
+    assert skills_needing_embedding(conn, TAG) == ["c"]  # c is stale
     assert sorted(skills_needing_embedding(conn, "other-tag")) == ["a", "b", "c"]
 
 
@@ -265,13 +260,21 @@ def test_skill_index_status_counts_by_state_and_source(conn):
 
     for n in ("a", "b", "c", "d"):
         add_market_skill(conn, n)
-    touch_skill_vocab(conn, "jdskill")                       # source 'jd'
+    touch_skill_vocab(conn, "jdskill")  # source 'jd'
     set_skill_vectors(conn, [("a", b"x"), ("b", b"x")], TAG)
     set_skill_vectors(conn, [("c", b"x")], "old-model|d768|prefix=none")
     add_alias(conn, "alias-of-a", "a")
     st = skill_index_status(conn, TAG)
-    assert st == {"total": 5, "current": 2, "stale": 1, "unembedded": 2,
-                  "market": 4, "jd": 1, "profile": 0, "aliases": 1}
+    assert st == {
+        "total": 5,
+        "current": 2,
+        "stale": 1,
+        "unembedded": 2,
+        "market": 4,
+        "jd": 1,
+        "profile": 0,
+        "aliases": 1,
+    }
 
 
 def test_skill_index_status_on_an_empty_db_is_all_zero(conn):
@@ -286,7 +289,7 @@ def test_invalidate_skill_vectors_clears_every_vector_and_tag(conn):
     for n in ("a", "b", "c"):
         add_market_skill(conn, n)
     set_skill_vectors(conn, [("a", b"x"), ("b", b"y")], TAG)
-    assert invalidate_skill_vectors(conn) == 2               # 'c' never had one
+    assert invalidate_skill_vectors(conn) == 2  # 'c' never had one
     for n in ("a", "b", "c"):
         row = get_skill_vocab(conn, n)
         assert row["vector"] is None and row["embed_tag"] is None

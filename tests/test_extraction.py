@@ -198,6 +198,7 @@ def test_run_extraction_skip_threshold_is_measured_post_preprocessing():
     assert get_job(conn, job_id)["extraction_confidence"] == "low"
     conn.close()
 
+
 # --- run_extraction: normal call path ----------------------------------------
 def test_run_extraction_writes_all_four_fields_and_advances_status():
     conn = connect(":memory:")
@@ -226,9 +227,13 @@ def test_run_extraction_canonicalizes_skill_names_through_the_vocab():
     conn = connect(":memory:")
     init_db(conn)
     job_id = _filtered_job(conn)
-    chain = _FakeChain(result=_result(skills=[
-        extraction.SkillItem(name="  FastAPI  ", requirement="required"),
-    ]))
+    chain = _FakeChain(
+        result=_result(
+            skills=[
+                extraction.SkillItem(name="  FastAPI  ", requirement="required"),
+            ]
+        )
+    )
 
     extraction.run_extraction(conn, CONFIG, chain=chain)
 

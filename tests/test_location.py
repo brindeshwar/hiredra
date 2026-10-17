@@ -37,9 +37,7 @@ def test_remote_restricted_to_another_country_is_not_eligible():
 
 
 def test_remote_restricted_via_jd_text_is_not_eligible():
-    ok, reason = eligibility(
-        "India", "Remote", "This role is US-based only. Must be located in the United States."
-    )
+    ok, reason = eligibility("India", "Remote", "This role is US-based only. Must be located in the United States.")
     assert ok is False and "US" in reason
 
 
@@ -148,18 +146,42 @@ def test_run_funnel_location_stage_runs_first_and_counts_unknown(monkeypatch):
 
     conn = connect(":memory:")
     init_db(conn)
-    upsert_job(conn, {
-        "job_id": "in1", "url": "u1", "title": "Backend Engineer", "company": "Acme",
-        "source": "greenhouse", "location": "Bengaluru, India", "description": "No years stated.",
-    })
-    upsert_job(conn, {
-        "job_id": "us1", "url": "u2", "title": "Backend Engineer", "company": "Acme",
-        "source": "greenhouse", "location": "Remote (US)", "description": "No years stated.",
-    })
-    upsert_job(conn, {
-        "job_id": "unk1", "url": "u3", "title": "Backend Engineer", "company": "Acme",
-        "source": "greenhouse", "location": None, "description": "No years stated.",
-    })
+    upsert_job(
+        conn,
+        {
+            "job_id": "in1",
+            "url": "u1",
+            "title": "Backend Engineer",
+            "company": "Acme",
+            "source": "greenhouse",
+            "location": "Bengaluru, India",
+            "description": "No years stated.",
+        },
+    )
+    upsert_job(
+        conn,
+        {
+            "job_id": "us1",
+            "url": "u2",
+            "title": "Backend Engineer",
+            "company": "Acme",
+            "source": "greenhouse",
+            "location": "Remote (US)",
+            "description": "No years stated.",
+        },
+    )
+    upsert_job(
+        conn,
+        {
+            "job_id": "unk1",
+            "url": "u3",
+            "title": "Backend Engineer",
+            "company": "Acme",
+            "source": "greenhouse",
+            "location": None,
+            "description": "No years stated.",
+        },
+    )
 
     stats = funnel.run_funnel(conn, CONFIG)
 
@@ -181,18 +203,34 @@ def test_run_funnel_flags_onsite_unknown_place_via_job_events():
 
     conn = connect(":memory:")
     init_db(conn)
-    upsert_job(conn, {
-        "job_id": "hyb1", "url": "u1", "title": "Backend Engineer", "company": "Acme",
-        "source": "ashby", "location": "Hybrid", "description": "No years stated.",
-    })
+    upsert_job(
+        conn,
+        {
+            "job_id": "hyb1",
+            "url": "u1",
+            "title": "Backend Engineer",
+            "company": "Acme",
+            "source": "ashby",
+            "location": "Hybrid",
+            "description": "No years stated.",
+        },
+    )
     # a genuinely place-less AND arrangement-less unknown -- real bug found via the
     # discovery harvest run: onsite_unknown_place was incrementing for every
     # "location: unknown" note, not just this onsite/hybrid sub-case, because
     # both share a truthy `note` field.
-    upsert_job(conn, {
-        "job_id": "unk1", "url": "u2", "title": "Backend Engineer", "company": "Acme",
-        "source": "ashby", "location": None, "description": "No years stated.",
-    })
+    upsert_job(
+        conn,
+        {
+            "job_id": "unk1",
+            "url": "u2",
+            "title": "Backend Engineer",
+            "company": "Acme",
+            "source": "ashby",
+            "location": None,
+            "description": "No years stated.",
+        },
+    )
 
     stats = funnel.run_funnel(conn, CONFIG)
 

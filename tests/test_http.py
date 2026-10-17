@@ -183,9 +183,7 @@ def test_block_is_not_retried():
 
 
 def test_retry_after_seconds_sets_cooldown_length():
-    client, clock, _ = make_client(
-        lambda req: httpx.Response(429, headers={"retry-after": "50"})
-    )
+    client, clock, _ = make_client(lambda req: httpx.Response(429, headers={"retry-after": "50"}))
     with pytest.raises(Blocked) as ei:
         client.get_json("https://b.example.com/x")
     assert ei.value.until == pytest.approx(clock.t + 50)
@@ -229,10 +227,7 @@ def test_explicit_cooldown_key_overrides_host():
 
 
 # ── challenge detection: must never trip on a real API response ────────────
-_CHALLENGE_HTML = (
-    "<html><head><title>Just a moment...</title></head>"
-    "<body>/cdn-cgi/challenge-platform/</body></html>"
-)
+_CHALLENGE_HTML = "<html><head><title>Just a moment...</title></head><body>/cdn-cgi/challenge-platform/</body></html>"
 
 
 def test_challenge_html_body_is_blocked():
@@ -264,9 +259,7 @@ def test_json_response_is_never_sniffed_even_if_it_mentions_a_challenge():
 def test_plain_json_string_body_with_wrong_content_type_still_safe():
     # some ATS return JSON as text/plain; a JSON array can't match a challenge regex
     client, _, _ = make_client(
-        lambda req: httpx.Response(
-            200, headers={"content-type": "text/plain"}, text='[{"title":"Engineer"}]'
-        )
+        lambda req: httpx.Response(200, headers={"content-type": "text/plain"}, text='[{"title":"Engineer"}]')
     )
     assert client.get_json("https://api.example.com/x") == [{"title": "Engineer"}]
 

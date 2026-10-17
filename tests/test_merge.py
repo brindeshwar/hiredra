@@ -27,8 +27,14 @@ DIM = 8
 
 def _cfg(**over) -> GraphConfig:
     base = dict(
-        model="gemini-embedding-2", dimensions=DIM, prefix="", inputs_per_request=50, requests_per_minute=100,
-        dedup_threshold=0.9, have=0.9, adj=0.7,
+        model="gemini-embedding-2",
+        dimensions=DIM,
+        prefix="",
+        inputs_per_request=50,
+        requests_per_minute=100,
+        dedup_threshold=0.9,
+        have=0.9,
+        adj=0.7,
     )
     base.update(over)
     return GraphConfig(**base)
@@ -86,9 +92,14 @@ def test_two_near_identical_spellings_produce_one_proposal(conn):
 @pytest.mark.parametrize(
     "cosine,listed_by_default,listed_with_show_low",
     [
-        (0.96, True, True), (0.95, True, True), (0.93, True, True),          # AUTO / REVIEW: always listed
-        (0.9299, False, True), (0.9001, False, True), (0.90, False, True),   # low band: hidden unless asked
-        (0.8999, False, False), (0.85, False, False),                        # below the threshold: never
+        (0.96, True, True),
+        (0.95, True, True),
+        (0.93, True, True),  # AUTO / REVIEW: always listed
+        (0.9299, False, True),
+        (0.9001, False, True),
+        (0.90, False, True),  # low band: hidden unless asked
+        (0.8999, False, False),
+        (0.85, False, False),  # below the threshold: never
     ],
 )
 def test_threshold_and_band_boundaries(conn, cosine, listed_by_default, listed_with_show_low):
@@ -102,11 +113,11 @@ def test_threshold_and_band_boundaries(conn, cosine, listed_by_default, listed_w
 def test_the_react_vs_react_native_class_below_threshold_is_not_proposed_but_is_a_near_miss(conn):
     cfg = _cfg()
     _node(conn, cfg, "react", _at(1.0), seen=9)
-    _node(conn, cfg, "react native", _at(0.765), seen=1)   # the real measured cosine
+    _node(conn, cfg, "react native", _at(0.765), seen=1)  # the real measured cosine
     _node(conn, cfg, "next.js", _at(0.87, axis=2), seen=1)
     r = propose_merges(conn, cfg)
     assert r.proposals == []
-    assert [(a, b) for a, b, _ in r.near_misses] == [("react", "next.js")]   # 0.87 is in [0.85, 0.90); 0.765 is not
+    assert [(a, b) for a, b, _ in r.near_misses] == [("react", "next.js")]  # 0.87 is in [0.85, 0.90); 0.765 is not
 
 
 def test_survivor_priority_is_mine_then_seen_then_df_then_shorter_then_alpha(conn):
@@ -129,8 +140,8 @@ def test_df_breaks_seen_count_ties_and_shorter_name_breaks_df_ties(conn):
     _node(conn, cfg, "node.js", vec)
     _node(conn, cfg, "nodejs", vec)
     weights = {"node.js": 5, "nodejs": 90}
-    assert _pairs(propose_merges(conn, cfg, weights=weights)) == [("node.js", "nodejs")]    # higher df survives
-    assert _pairs(propose_merges(conn, cfg)) == [("node.js", "nodejs")]                     # tie: shorter name survives
+    assert _pairs(propose_merges(conn, cfg, weights=weights)) == [("node.js", "nodejs")]  # higher df survives
+    assert _pairs(propose_merges(conn, cfg)) == [("node.js", "nodejs")]  # tie: shorter name survives
 
 
 def test_alphabetical_is_the_last_tiebreak(conn):
@@ -143,7 +154,7 @@ def test_alphabetical_is_the_last_tiebreak(conn):
 def test_a_mine_node_is_never_proposed_as_the_duplicate(conn):
     cfg = _cfg()
     _node(conn, cfg, "python", _at(1.0), seen=0, mine=True)
-    _node(conn, cfg, "python3", _at(0.97), seen=99)         # far busier, but the survivor is still `python`
+    _node(conn, cfg, "python3", _at(0.97), seen=99)  # far busier, but the survivor is still `python`
     assert _pairs(propose_merges(conn, cfg)) == [("python3", "python")]
 
 
@@ -164,7 +175,7 @@ def test_star_clustering_never_chains_a_to_c_through_b(conn):
     _node(conn, cfg, "b", b, seen=2)
     _node(conn, cfg, "c", c, seen=1)
     r = propose_merges(conn, cfg)
-    assert _pairs(r) == [("b", "a")]                         # c stays: it is only close to b, which is a dup
+    assert _pairs(r) == [("b", "a")]  # c stays: it is only close to b, which is a dup
     assert all(m.dup != "c" for m in r.proposals)
 
 
@@ -190,7 +201,7 @@ def test_unembedded_and_stale_nodes_are_not_eligible(conn):
     _node(conn, cfg, "a", _at(1.0))
     _node(conn, cfg, "b", _at(0.97))
     add_market_skill(conn, "no-vector-yet")
-    _node(conn, _cfg(prefix="other: "), "stale-one", _at(0.99))          # tagged under another config
+    _node(conn, _cfg(prefix="other: "), "stale-one", _at(0.99))  # tagged under another config
     r = propose_merges(conn, cfg)
     assert (r.nodes_considered, r.nodes_skipped) == (2, 2)
     assert _pairs(r) == [("b", "a")]
@@ -248,8 +259,10 @@ def test_review_file_is_readable_json_grouped_by_survivor(conn, tmp_path):
     assert doc["embed_tag"] == cfg.embed_tag and doc["threshold"] == 0.9
     # AUTO first, then REVIEW; within a band grouped by survivor
     assert [(p["band"], p["dup"], p["survivor"]) for p in doc["proposals"]] == [
-        ("auto", "fast api", "fastapi"), ("review", "k8s", "kubernetes")]
-    assert [p["approve"] for p in doc["proposals"]] == [True, False]      # AUTO pre-approved, REVIEW is not
+        ("auto", "fast api", "fastapi"),
+        ("review", "k8s", "kubernetes"),
+    ]
+    assert [p["approve"] for p in doc["proposals"]] == [True, False]  # AUTO pre-approved, REVIEW is not
     assert {"cosine", "reason", "dup_seen", "survivor_seen", "dup_df", "survivor_df"} <= set(doc["proposals"][0])
     assert "approve" in doc["note"] and "Delete an entry" in doc["note"]
 
@@ -268,11 +281,11 @@ def test_apply_merges_only_the_approved_pairs_and_archives_the_file(conn, tmp_pa
     path = write_review(_proposed(conn, cfg), tmp_path / "r.json")
     r = apply_review(conn, cfg, path)
 
-    assert r.applied == [("fast api", "fastapi")] and r.skipped == []         # AUTO went in...
-    assert r.not_approved == 1                                                # ...the REVIEW pair did not
+    assert r.applied == [("fast api", "fastapi")] and r.skipped == []  # AUTO went in...
+    assert r.not_approved == 1  # ...the REVIEW pair did not
     assert resolve_alias(conn, "fast api") == "fastapi" and resolve_alias(conn, "k8s") is None
     assert get_skill_vocab(conn, "k8s") is not None
-    assert get_skill_vocab(conn, "fastapi")["seen_count"] == 6          # 5 + 1
+    assert get_skill_vocab(conn, "fastapi")["seen_count"] == 6  # 5 + 1
     assert not path.exists() and r.archived_to.exists() and ".applied-" in r.archived_to.name
 
 
@@ -292,9 +305,9 @@ def test_pairs_the_reviewer_deleted_are_not_merged_even_if_pre_approved(conn, tm
     cfg = _cfg()
     path = write_review(_proposed(conn, cfg), tmp_path / "r.json")
     doc = json.loads(path.read_text(encoding="utf-8"))
-    doc["proposals"] = [p for p in doc["proposals"] if p["dup"] != "fast api"]   # reviewer drops the AUTO pair
+    doc["proposals"] = [p for p in doc["proposals"] if p["dup"] != "fast api"]  # reviewer drops the AUTO pair
     for entry in doc["proposals"]:
-        entry["approve"] = True                                                   # and ticks the REVIEW one
+        entry["approve"] = True  # and ticks the REVIEW one
     path.write_text(json.dumps(doc), encoding="utf-8")
 
     r = apply_review(conn, cfg, path)
@@ -308,7 +321,7 @@ def test_apply_without_a_review_file_is_refused(conn, tmp_path):
     before = iter_skill_vocab(conn)
     with pytest.raises(FileNotFoundError, match="dry-run"):
         apply_review(conn, cfg, tmp_path / "never-written.json")
-    assert iter_skill_vocab(conn) == before                    # nothing merged without a dry-run
+    assert iter_skill_vocab(conn) == before  # nothing merged without a dry-run
 
 
 def test_apply_refuses_a_file_from_another_embedding_version(conn, tmp_path):
@@ -318,7 +331,7 @@ def test_apply_refuses_a_file_from_another_embedding_version(conn, tmp_path):
     before = iter_skill_vocab(conn)
     with pytest.raises(ValueError, match="different|embedding version"):
         apply_review(conn, other, path)
-    assert iter_skill_vocab(conn) == before and path.exists()   # untouched, not archived
+    assert iter_skill_vocab(conn) == before and path.exists()  # untouched, not archived
 
 
 def test_apply_skips_a_hand_added_pair_below_the_threshold(conn, tmp_path):
@@ -326,10 +339,15 @@ def test_apply_skips_a_hand_added_pair_below_the_threshold(conn, tmp_path):
     _node(conn, cfg, "react", _at(1.0), seen=9)
     _node(conn, cfg, "react native", _at(0.765), seen=1)
     path = tmp_path / "r.json"
-    path.write_text(json.dumps({
-        "embed_tag": cfg.embed_tag,
-        "proposals": [{"dup": "react native", "survivor": "react", "approve": True}],   # reviewer force-added it
-    }), encoding="utf-8")
+    path.write_text(
+        json.dumps(
+            {
+                "embed_tag": cfg.embed_tag,
+                "proposals": [{"dup": "react native", "survivor": "react", "approve": True}],  # reviewer force-added it
+            }
+        ),
+        encoding="utf-8",
+    )
     r = apply_review(conn, cfg, path)
     assert r.applied == [] and "below the floor" in r.skipped[0][2]
     assert get_skill_vocab(conn, "react native") is not None
@@ -342,12 +360,20 @@ def test_apply_skips_missing_nodes_mine_dups_and_stale_vectors(conn, tmp_path):
     _node(conn, cfg, "kept", _at(0.99, axis=2))
     add_market_skill(conn, "unembedded")
     path = tmp_path / "r.json"
-    path.write_text(json.dumps({"embed_tag": cfg.embed_tag, "proposals": [
-        {"dup": "python", "survivor": "python3", "approve": True},          # dup is mine
-        {"dup": "ghost", "survivor": "python", "approve": True},            # dup gone
-        {"dup": "python3", "survivor": "ghost", "approve": True},           # survivor gone
-        {"dup": "unembedded", "survivor": "python", "approve": True},       # no vector
-    ]}), encoding="utf-8")
+    path.write_text(
+        json.dumps(
+            {
+                "embed_tag": cfg.embed_tag,
+                "proposals": [
+                    {"dup": "python", "survivor": "python3", "approve": True},  # dup is mine
+                    {"dup": "ghost", "survivor": "python", "approve": True},  # dup gone
+                    {"dup": "python3", "survivor": "ghost", "approve": True},  # survivor gone
+                    {"dup": "unembedded", "survivor": "python", "approve": True},  # no vector
+                ],
+            }
+        ),
+        encoding="utf-8",
+    )
     r = apply_review(conn, cfg, path)
     reasons = {(d, s): why for d, s, why in r.skipped}
     assert r.applied == []
@@ -369,7 +395,7 @@ def test_reapplying_after_a_crash_is_safe(conn, tmp_path):
     saved = path.read_text(encoding="utf-8")
     first = apply_review(conn, cfg, path)
     assert len(first.applied) == 2
-    path.write_text(saved, encoding="utf-8")                   # simulate "file was never archived"
+    path.write_text(saved, encoding="utf-8")  # simulate "file was never archived"
     second = apply_review(conn, cfg, path)
     assert second.applied == [] and all("no longer exists" in why for _, _, why in second.skipped)
     assert get_skill_vocab(conn, "fastapi")["seen_count"] == 6  # not double-counted

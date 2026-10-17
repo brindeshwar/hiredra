@@ -13,7 +13,13 @@ from hiredra.graph import __main__ as cli
 from hiredra.graph.embedder import DailyQuotaExceeded
 from hiredra.graph.harvest import harvest as real_harvest
 from hiredra.storage import (
-    add_market_skill, connect, get_skill_vocab, init_db, iter_skill_vocab, resolve_alias, skill_index_status,
+    add_market_skill,
+    connect,
+    get_skill_vocab,
+    init_db,
+    iter_skill_vocab,
+    resolve_alias,
+    skill_index_status,
 )
 
 DIM = 128
@@ -58,17 +64,38 @@ class FakeEmbedder:
 def env(tmp_path):
     cfg = tmp_path / "graph.yml"
     cfg.write_text(CONFIG, encoding="utf-8")
-    return {"db": tmp_path / "t.db", "cfg": cfg, "df": tmp_path / "df.json", "review": tmp_path / "review.json",
-            "usage": tmp_path / "usage.json", "lock": tmp_path / "graph.lock",
-            "alias": tmp_path / "aliases.yml", "never": tmp_path / "never.yml"}
+    return {
+        "db": tmp_path / "t.db",
+        "cfg": cfg,
+        "df": tmp_path / "df.json",
+        "review": tmp_path / "review.json",
+        "usage": tmp_path / "usage.json",
+        "lock": tmp_path / "graph.lock",
+        "alias": tmp_path / "aliases.yml",
+        "never": tmp_path / "never.yml",
+    }
 
 
 def run(env, *args):
     extra = []
-    if args and args[0] == "merges":   # tests never read the repo's real curation files
+    if args and args[0] == "merges":  # tests never read the repo's real curation files
         extra = ["--alias-file", str(env["alias"]), "--never-merge-file", str(env["never"])]
-    return cli.main(["--db", str(env["db"]), "--config", str(env["cfg"]), "--df-path", str(env["df"]),
-                     "--usage-path", str(env["usage"]), "--lock-path", str(env["lock"]), *args, *extra])
+    return cli.main(
+        [
+            "--db",
+            str(env["db"]),
+            "--config",
+            str(env["cfg"]),
+            "--df-path",
+            str(env["df"]),
+            "--usage-path",
+            str(env["usage"]),
+            "--lock-path",
+            str(env["lock"]),
+            *args,
+            *extra,
+        ]
+    )
 
 
 def _conn(env):
@@ -99,12 +126,15 @@ def test_status_counts_nodes_and_the_queue(env, capsys):
 def _patch_reader(monkeypatch, jobs):
     def fake(conn, cfg, **kw):
         return real_harvest(conn, cfg, reader=lambda url: iter(jobs), **kw)
+
     monkeypatch.setattr(cli, "harvest", fake)
 
 
 def _jobs(n=3):
-    return [{"role_family": "software_engineering", "skills_required": ["python", "docker"], "skills_preferred": []}
-            for _ in range(n)]
+    return [
+        {"role_family": "software_engineering", "skills_required": ["python", "docker"], "skills_preferred": []}
+        for _ in range(n)
+    ]
 
 
 def test_harvest_prints_the_funnel_and_writes_nodes(env, monkeypatch, capsys):
@@ -128,7 +158,10 @@ def test_harvest_dry_run_writes_nothing(env, monkeypatch, capsys):
 def test_harvest_exits_nonzero_and_says_so_when_a_file_failed(env, monkeypatch, capsys):
     def boom(url):
         raise RuntimeError("HTTP 503")
-    monkeypatch.setattr(cli, "harvest", lambda conn, cfg, **kw: real_harvest(conn, cfg, reader=boom, retry_wait_s=0, **kw))
+
+    monkeypatch.setattr(
+        cli, "harvest", lambda conn, cfg, **kw: real_harvest(conn, cfg, reader=boom, retry_wait_s=0, **kw)
+    )
     assert run(env, "harvest") == 1
     out = capsys.readouterr().out
     assert "FAILED FILES" in out and "NOTHING WRITTEN" in out
@@ -138,8 +171,11 @@ def test_harvest_exits_nonzero_and_says_so_when_a_file_failed(env, monkeypatch, 
 def test_harvest_allow_partial_writes_despite_a_failed_file(env, monkeypatch, capsys):
     def flaky(url):
         raise RuntimeError("HTTP 503")
-    monkeypatch.setattr(cli, "harvest", lambda conn, cfg, **kw: real_harvest(conn, cfg, reader=flaky, retry_wait_s=0, **kw))
-    assert run(env, "harvest", "--allow-partial") == 1          # still non-zero: the yield IS understated
+
+    monkeypatch.setattr(
+        cli, "harvest", lambda conn, cfg, **kw: real_harvest(conn, cfg, reader=flaky, retry_wait_s=0, **kw)
+    )
+    assert run(env, "harvest", "--allow-partial") == 1  # still non-zero: the yield IS understated
     assert "FAILED FILES" in capsys.readouterr().out
 
 
@@ -183,17 +219,20 @@ def test_sync_stops_with_exit_2_on_a_daily_quota_and_says_how_to_resume(env, mon
     for n in ("a", "b", "c", "d"):
         add_market_skill(c, n)
     c.close()
-    _patch_embedder(monkeypatch, FakeEmbedder(script={2: DailyQuotaExceeded("daily embedding quota exhausted (PerDay)")}))
+    _patch_embedder(
+        monkeypatch, FakeEmbedder(script={2: DailyQuotaExceeded("daily embedding quota exhausted (PerDay)")})
+    )
     assert run(env, "sync") == 2
     out = capsys.readouterr().out
     assert "STOPPED (daily_quota)" in out and "Run `sync` again" in out
-    assert skill_index_status(_conn(env), "gemini-embedding-2|d128|prefix=none")["current"] == 2   # progress kept
+    assert skill_index_status(_conn(env), "gemini-embedding-2|d128|prefix=none")["current"] == 2  # progress kept
 
 
 # ── merges ───────────────────────────────────────────────────────────────────
 def _two_near_dups(env):
     from hiredra.graph.config import load_graph_config
     from hiredra.graph.index import save_vectors
+
     cfg = load_graph_config(env["cfg"])
     c = _conn(env)
     for n, v, seen in (("fastapi", [1, 0], 5), ("fast api", [0.96, 0.28], 1), ("kafka", [0, 0, 1], 2)):
@@ -239,7 +278,7 @@ def test_reviewer_edits_are_honoured_through_the_cli(env, capsys):
     _two_near_dups(env)
     run(env, "merges", "--review-path", str(env["review"]))
     doc = json.loads(env["review"].read_text(encoding="utf-8"))
-    doc["proposals"] = []                                   # reviewer rejects everything
+    doc["proposals"] = []  # reviewer rejects everything
     env["review"].write_text(json.dumps(doc), encoding="utf-8")
     capsys.readouterr()
     assert run(env, "merges", "--apply", "--review-path", str(env["review"])) == 0
@@ -250,13 +289,16 @@ def test_reviewer_edits_are_honoured_through_the_cli(env, capsys):
 # ── today's budget, the exhausted-day guard, consistency, --reembed-all (build 4.3 fix) ──
 def _usage_obj(env):
     from hiredra.graph.usage import DailyUsage
-    return DailyUsage(900, path=env["usage"])           # same budget as the test config (1000 x 0.9)
+
+    return DailyUsage(900, path=env["usage"])  # same budget as the test config (1000 x 0.9)
 
 
 def _exploding_embedder(monkeypatch):
     """Any attempt to BUILD an embedder (i.e. to get ready to call the API) fails the test."""
+
     def boom(cfg, **kw):
         raise AssertionError("an embedder was built: the CLI was about to call the API")
+
     monkeypatch.setattr("hiredra.graph.embedder.build_embedder", boom)
 
 
@@ -285,7 +327,7 @@ def test_sync_stops_at_the_budget_before_googles_cap_and_says_how_to_resume(env,
     for n in ("a", "b", "c", "d", "e"):
         add_market_skill(c, n)
     c.close()
-    _usage_obj(env).record(897)                          # 3 requests left today
+    _usage_obj(env).record(897)  # 3 requests left today
     _patch_embedder(monkeypatch, FakeEmbedder())
     assert run(env, "sync") == 2
     out = capsys.readouterr().out
@@ -308,6 +350,7 @@ def test_sync_prints_the_units_and_pacing_in_googles_terms(env, monkeypatch, cap
 def _index_with_vectors(env, names):
     from hiredra.graph.config import load_graph_config
     from hiredra.graph.index import save_vectors
+
     cfg = load_graph_config(env["cfg"])
     c = _conn(env)
     for n in names:
@@ -327,7 +370,7 @@ def test_consistency_passes_and_says_batching_is_safe(env, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "CONSISTENT" in out and "batching does not change the vectors" in out
     assert "batch " in out and "one_by_one" in out and "reversed" in out
-    assert _usage_obj(env).used() == 0                   # fake embedder bypasses the real counter; nothing recorded
+    assert _usage_obj(env).used() == 0  # fake embedder bypasses the real counter; nothing recorded
 
 
 def test_consistency_failure_exits_3_and_prints_the_fallback_without_changing_anything(env, monkeypatch, capsys):
@@ -337,14 +380,14 @@ def test_consistency_failure_exits_3_and_prints_the_fallback_without_changing_an
     class Alone(FakeEmbedder):
         def __call__(self, texts):
             out = super().__call__(texts)
-            return -out if len(texts) == 1 else out       # a single-skill call gives a different vector
+            return -out if len(texts) == 1 else out  # a single-skill call gives a different vector
 
     _patch_embedder(monkeypatch, Alone())
     assert run(env, "consistency", "--sample", "4") == 3
     out = capsys.readouterr().out
     assert "INCONSISTENT" in out and "Do NOT embed the pending skills yet" in out
     assert "sync --reembed-all" in out and "two days" in out
-    assert iter_skill_vocab(_conn(env)) == before        # it only reports; it never re-embeds by itself
+    assert iter_skill_vocab(_conn(env)) == before  # it only reports; it never re-embeds by itself
 
 
 def test_consistency_refuses_with_no_api_call_when_the_day_is_exhausted(env, monkeypatch, capsys):
@@ -357,7 +400,7 @@ def test_consistency_refuses_with_no_api_call_when_the_day_is_exhausted(env, mon
 
 def test_consistency_refuses_if_the_budget_cannot_cover_it(env, monkeypatch, capsys):
     _index_with_vectors(env, NAMES12)
-    _usage_obj(env).record(890)                          # 10 left; the default check needs 24
+    _usage_obj(env).record(890)  # 10 left; the default check needs 24
     _exploding_embedder(monkeypatch)
     assert run(env, "consistency") == 2
     out = capsys.readouterr().out
@@ -380,7 +423,7 @@ def test_reembed_all_clears_every_vector_then_embeds_everything_again(env, monke
     assert run(env, "sync", "--reembed-all") == 0
     out = capsys.readouterr().out
     assert "cleared 6 stored vectors" in out and "READY" in out
-    assert sorted(n for call in emb.calls for n in call) == sorted(NAMES12[:6])   # all six re-sent
+    assert sorted(n for call in emb.calls for n in call) == sorted(NAMES12[:6])  # all six re-sent
 
 
 def test_sync_without_reembed_all_leaves_current_vectors_alone(env, monkeypatch, capsys):
@@ -388,7 +431,7 @@ def test_sync_without_reembed_all_leaves_current_vectors_alone(env, monkeypatch,
     emb = FakeEmbedder()
     _patch_embedder(monkeypatch, emb)
     run(env, "sync")
-    assert emb.calls == []           # everything is current and no canary node exists here: zero requests
+    assert emb.calls == []  # everything is current and no canary node exists here: zero requests
 
 
 def test_a_missing_frequency_file_warns_for_sync_and_merges(env, monkeypatch, capsys):
@@ -425,14 +468,19 @@ def _bands_db(env):
     kubernetes (alias target);  machine learning/deep learning close but on the never-merge list."""
     from hiredra.graph.config import load_graph_config
     from hiredra.graph.index import save_vectors
+
     cfg = load_graph_config(env["cfg"])
     c = _conn(env)
     nodes = [
-        ("fastapi", _vec(0, 1.0, 1), 9), ("fast api", _vec(0, 0.97, 1), 1),
-        ("cloud architecture", _vec(2, 1.0, 3), 9), ("cloud infrastructure", _vec(2, 0.94, 3), 1),
-        ("sql", _vec(4, 1.0, 5), 9), ("sql server", _vec(4, 0.925, 5), 1),
+        ("fastapi", _vec(0, 1.0, 1), 9),
+        ("fast api", _vec(0, 0.97, 1), 1),
+        ("cloud architecture", _vec(2, 1.0, 3), 9),
+        ("cloud infrastructure", _vec(2, 0.94, 3), 1),
+        ("sql", _vec(4, 1.0, 5), 9),
+        ("sql server", _vec(4, 0.925, 5), 1),
         ("kubernetes", _vec(6, 1.0, 7), 9),
-        ("machine learning", _vec(8, 1.0, 9), 9), ("deep learning", _vec(8, 0.95, 9), 1),
+        ("machine learning", _vec(8, 1.0, 9), 9),
+        ("deep learning", _vec(8, 0.95, 9), 1),
     ]
     for name, vec, seen in nodes:
         add_market_skill(c, name)
@@ -456,13 +504,16 @@ def test_merges_prints_the_three_bands_and_the_review_file_carries_approve_flags
     assert "AUTO -- pre-approved (approve: true)  --  1 pair(s)" in out and "<- fast api" in out
     assert "ALIAS FILE -- your entries, pre-approved (approve: true)  --  1 pair(s)" in out and "<- k8s" in out
     assert "REVIEW -- NOT approved (approve: false)" in out and "<- cloud infrastructure" in out
-    assert "hidden: 1 more review-type pair(s)" in out and "--show-low" in out       # sql ~ sql server
-    assert "sql server" not in out.split("REVIEW --")[1].split("hidden:")[0]          # ...not listed by default
+    assert "hidden: 1 more review-type pair(s)" in out and "--show-low" in out  # sql ~ sql server
+    assert "sql server" not in out.split("REVIEW --")[1].split("hidden:")[0]  # ...not listed by default
     assert "never-merge list: 1 pair(s) suppressed" in out and "deep learning" not in out.split("NEAR MISSES")[0]
     assert "1 AUTO + 1 ALIAS (pre-approved)   |   1 REVIEW (unapproved)   |   1 hidden low-band" in out
     entries = json.loads(env["review"].read_text(encoding="utf-8"))["proposals"]
     assert [(e["band"], e["dup"], e["approve"]) for e in entries] == [
-        ("auto", "fast api", True), ("alias", "k8s", True), ("review", "cloud infrastructure", False)]
+        ("auto", "fast api", True),
+        ("alias", "k8s", True),
+        ("review", "cloud infrastructure", False),
+    ]
 
 
 def test_show_low_lists_the_hidden_band_as_unapproved_review(env, capsys):
@@ -506,7 +557,7 @@ def test_ticking_a_review_entry_in_the_file_makes_apply_merge_it(env, capsys):
 def test_apply_honours_a_never_merge_entry_added_after_the_dry_run(env, capsys):
     _bands_db(env)
     run(env, "merges", "--review-path", str(env["review"]))
-    _write(env["never"], "never_merge:\n  - [fast api, fastapi]\n")          # the owner changes their mind
+    _write(env["never"], "never_merge:\n  - [fast api, fastapi]\n")  # the owner changes their mind
     capsys.readouterr()
     assert run(env, "merges", "--apply", "--review-path", str(env["review"])) == 0
     out = capsys.readouterr().out
@@ -514,12 +565,15 @@ def test_apply_honours_a_never_merge_entry_added_after_the_dry_run(env, capsys):
     assert get_skill_vocab(_conn(env), "fast api") is not None
 
 
-@pytest.mark.parametrize("which,text", [
-    ("alias", "aliases:\n  go: [go]\n"),                               # a self-alias
-    ("alias", "aliases:\n  a: [x]\n  b: [x]\n"),                        # one alias under two canonicals
-    ("never", "never_merge:\n  - [only-one]\n"),                        # not a pair
-    ("alias", "surprise: 1\n"),                                         # unknown key
-])
+@pytest.mark.parametrize(
+    "which,text",
+    [
+        ("alias", "aliases:\n  go: [go]\n"),  # a self-alias
+        ("alias", "aliases:\n  a: [x]\n  b: [x]\n"),  # one alias under two canonicals
+        ("never", "never_merge:\n  - [only-one]\n"),  # not a pair
+        ("alias", "surprise: 1\n"),  # unknown key
+    ],
+)
 def test_an_invalid_curation_file_gives_a_clear_message_not_a_traceback(env, capsys, which, text):
     _bands_db(env)
     _write(env[which], text)
@@ -529,7 +583,7 @@ def test_an_invalid_curation_file_gives_a_clear_message_not_a_traceback(env, cap
 
 
 def test_a_missing_curation_file_just_means_empty_lists(env, capsys):
-    _bands_db(env)                                           # env["alias"] / env["never"] were never written
+    _bands_db(env)  # env["alias"] / env["never"] were never written
     assert run(env, "merges", "--review-path", str(env["review"])) == 0
     assert "ALIAS FILE" in capsys.readouterr().out
 
@@ -544,24 +598,30 @@ def _wrap(cause):
 
 def _server_error():
     from google.genai.errors import ServerError
+
     return _wrap(ServerError(503, {"error": {"message": "unavailable"}}))
 
 
 def _client_error():
     from google.genai.errors import ClientError
+
     return _wrap(ClientError(403, {"error": {"message": "API key not valid"}}))
 
 
 def _bad_response():
     from hiredra.graph.embedder import EmbeddingError
+
     return EmbeddingError("expected 768-dim vectors, got 3")
 
 
-@pytest.mark.parametrize("label,make_exc,hint", [
-    ("transient", _server_error, "in a few minutes"),
-    ("api_error", _client_error, "check GEMINI_API_KEY"),
-    ("bad_response", _bad_response, "may repeat"),
-])
+@pytest.mark.parametrize(
+    "label,make_exc,hint",
+    [
+        ("transient", _server_error, "in a few minutes"),
+        ("api_error", _client_error, "check GEMINI_API_KEY"),
+        ("bad_response", _bad_response, "may repeat"),
+    ],
+)
 def test_each_stop_reason_prints_its_own_next_step_and_exits_2(env, monkeypatch, capsys, label, make_exc, hint):
     c = _conn(env)
     for n in ("a", "b", "c", "d"):
@@ -583,14 +643,15 @@ def test_an_unknown_exception_escapes_the_cli_but_finished_chunks_and_the_lock_a
     _patch_embedder(monkeypatch, FakeEmbedder(script={2: KeyError("bug in the embed path")}))
     with pytest.raises(KeyError, match="bug in the embed path"):
         run(env, "sync")
-    assert skill_index_status(_conn(env), "gemini-embedding-2|d128|prefix=none")["current"] == 2   # chunk 1 kept
-    with RunLock(env["lock"]):                                                                       # lock was released
+    assert skill_index_status(_conn(env), "gemini-embedding-2|d128|prefix=none")["current"] == 2  # chunk 1 kept
+    with RunLock(env["lock"]):  # lock was released
         pass
 
 
 # ── the run lock covers exactly the commands that write or spend budget ──────
 def _held(env):
     from hiredra.graph.lock import RunLock
+
     return RunLock(env["lock"], what="sync (another terminal)")
 
 
@@ -626,7 +687,7 @@ def test_read_only_commands_are_not_blocked_by_the_lock(env, monkeypatch, capsys
     _patch_reader(monkeypatch, _jobs())
     with _held(env):
         assert run(env, "status") == 0
-        assert run(env, "merges", "--review-path", str(env["review"])) == 0        # dry-run
+        assert run(env, "merges", "--review-path", str(env["review"])) == 0  # dry-run
         assert run(env, "harvest", "--dry-run") == 0
     assert "NOT RUN" not in capsys.readouterr().out
 
@@ -636,11 +697,11 @@ def test_the_lock_is_released_after_every_kind_of_finish(env, monkeypatch):
     add_market_skill(c, "a")
     c.close()
     _patch_embedder(monkeypatch, FakeEmbedder())
-    assert run(env, "sync") == 0                       # normal finish
+    assert run(env, "sync") == 0  # normal finish
     with _held(env):
         pass
     _usage_obj(env).mark_exhausted()
-    assert run(env, "sync") == 2                       # early refusal (non-zero exit)
+    assert run(env, "sync") == 2  # early refusal (non-zero exit)
     with _held(env):
         pass
 
@@ -657,14 +718,14 @@ def test_a_second_sync_started_while_the_first_runs_cannot_double_spend_the_budg
 
     class Reentrant(FakeEmbedder):
         def __call__(self, texts):
-            if "during-run-a" not in seen:               # while A is embedding its first chunk, start B
+            if "during-run-a" not in seen:  # while A is embedding its first chunk, start B
                 seen["during-run-a"] = run(env, "sync")  # B must be refused
             return super().__call__(texts)
 
     emb = Reentrant()
     monkeypatch.setattr("hiredra.graph.embedder.build_embedder", lambda cfg, **kw: emb)
     assert run(env, "sync") == 0
-    assert seen["during-run-a"] == 4                     # B was locked out
-    assert [n for call in emb.calls for n in call].count("a") == 1     # nothing was embedded twice
+    assert seen["during-run-a"] == 4  # B was locked out
+    assert [n for call in emb.calls for n in call].count("a") == 1  # nothing was embedded twice
     with RunLock(env["lock"]):
         pass
