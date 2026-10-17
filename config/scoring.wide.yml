@@ -18,7 +18,7 @@ http:
   proxy: null                 # OFF (docs/decisions.md #20)
 
 jobspy:
-  sites: [indeed, linkedin, google]
+  sites: [indeed, linkedin]     # google OFF (M0.2, 2026-10-17): 0 rows on 4 query phrasings
   country_indeed: India
   linkedin_fetch_description: true
   between_sites_delay: 3.0
@@ -38,7 +38,8 @@ jobspy:
       - Software Engineer
     location: India
     hours_old: 336            # 14 days (Track 1 default)
-    results_per_site: 10      # kept small for the 2a end-to-end review run
+    results_per_site: 100     # per term: Indeed 8 x 100 = up to 800 rows (M0.2)
+    # To retry Google later: add it to `sites` and set `google_search_term` (one full query string).
 
   # LinkedIn's ~10-page budget: fewer terms, full-time, tighter window.
   linkedin_query:
@@ -49,7 +50,8 @@ jobspy:
       - Backend Engineer
     job_type: fulltime
     hours_old: 168            # 7 days
-    results_per_site: 10      # kept small for the 2a end-to-end review run
+    results_per_site: 50      # per term, + 1 description request each; LinkedIn throttles past a
+                              # few hundred per IP. A block is fail-soft (30-min cooldown).
 
 path2:
   enabled: false              # Path-2 discovery slot (not implemented)
