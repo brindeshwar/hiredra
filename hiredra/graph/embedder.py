@@ -38,26 +38,30 @@ import os
 import time
 from collections.abc import Callable, Sequence
 
-import httpx
 import numpy as np
 from dotenv import load_dotenv
-from google.genai.errors import APIError
 from tenacity import Retrying, retry_if_exception, stop_after_attempt, wait_exponential
 
 from hiredra.graph.config import GraphConfig
+from hiredra.quota import (  # noqa: F401 -- re-exported: graph code and tests import them from here
+    DailyQuotaExceeded,
+    ProviderError,
+    _api_errors,
+    _is_daily_quota,
+    _is_transient,
+    _quota_ids,
+    _quota_values,
+    _retry_after_seconds,
+    classify_failure,
+)
 
 #: text list in, (n, dimensions) float32 L2-normalized matrix out.
 Embedder = Callable[[Sequence[str]], np.ndarray]
 
 
-class EmbeddingError(RuntimeError):
-    """The provider returned something we can't use (wrong count/dim, zero vector)."""
-
-
-class DailyQuotaExceeded(EmbeddingError):
-    """A DAILY quota is exhausted. Unlike the per-minute window this will not
-    clear in a retry or two, so it is raised at once and never retried: callers
-    stop cleanly and resume from the DB-backed queue on a later day."""
+#: The embedder's name for ``hiredra.quota.ProviderError`` (Google answered with something
+#: unusable). ``DailyQuotaExceeded`` subclasses it, so generic handlers still catch a daily stop.
+EmbeddingError = ProviderError
 
 
 def l2_normalize(matrix: np.ndarray) -> np.ndarray:
@@ -67,120 +71,6 @@ def l2_normalize(matrix: np.ndarray) -> np.ndarray:
     if not np.all(np.isfinite(norms)) or np.any(norms == 0):
         raise EmbeddingError("embedding has a zero or non-finite norm")
     return m / norms
-
-
-def _api_errors(exc: BaseException):
-    """Every SDK ``APIError`` in ``exc``'s cause/context chain (usually one)."""
-    seen: set[int] = set()
-    while exc is not None and id(exc) not in seen:
-        seen.add(id(exc))
-        if isinstance(exc, APIError):
-            yield exc
-        exc = exc.__cause__ or exc.__context__
-
-
-#: A retryDelay this long is not a per-minute window clearing.
-_DAILY_RETRY_DELAY_S = 600.0
-
-
-def _quota_ids(exc: BaseException) -> list[str]:
-    """``QuotaFailure`` quota ids on the error, e.g.
-    ``EmbedContentRequestsPerMinutePerUserPerProjectPerModel-FreeTier``."""
-    ids: list[str] = []
-    for e in _api_errors(exc):
-        details = e.details if isinstance(e.details, dict) else {}
-        body = details.get("error", details)
-        for item in (body.get("details") or []) if isinstance(body, dict) else []:
-            if isinstance(item, dict) and str(item.get("@type", "")).endswith("QuotaFailure"):
-                ids += [str(v.get("quotaId", "")) for v in item.get("violations") or [] if isinstance(v, dict)]
-    return ids
-
-
-def _quota_values(exc: BaseException) -> list[str]:
-    """The ``quotaValue`` (the limit itself) of each violated quota, so a daily
-    stop records WHAT the cap is, not just which quota it was."""
-    values: list[str] = []
-    for e in _api_errors(exc):
-        details = e.details if isinstance(e.details, dict) else {}
-        body = details.get("error", details)
-        for item in (body.get("details") or []) if isinstance(body, dict) else []:
-            if isinstance(item, dict) and str(item.get("@type", "")).endswith("QuotaFailure"):
-                values += [str(v.get("quotaValue", "")) for v in item.get("violations") or [] if isinstance(v, dict)]
-    return values
-
-
-def _is_daily_quota(exc: BaseException) -> bool:
-    """A 429 whose quota id says per-DAY, or whose retryDelay is far too long to
-    be a per-minute window (>= 10 min)."""
-    if not any(e.code == 429 for e in _api_errors(exc)):
-        return False
-    if any("perday" in q.lower() for q in _quota_ids(exc)):
-        return True
-    hint = _retry_after_seconds(exc)
-    return hint is not None and hint >= _DAILY_RETRY_DELAY_S
-
-
-#: Network-level failures (no HTTP status at all): a dropped connection, a DNS
-#: hiccup, a timeout. Worth a retry, and not a bug in our code.
-_NETWORK_ERRORS = (httpx.TransportError, ConnectionError, TimeoutError)
-
-
-def _cause_chain(exc: BaseException):
-    seen: set[int] = set()
-    while exc is not None and id(exc) not in seen:
-        seen.add(id(exc))
-        yield exc
-        exc = exc.__cause__ or exc.__context__
-
-
-def _is_network_error(exc: BaseException) -> bool:
-    return any(isinstance(e, _NETWORK_ERRORS) for e in _cause_chain(exc))
-
-
-def _is_transient(exc: BaseException) -> bool:
-    """429 / 5xx anywhere in the cause chain, or a network-level failure -- worth
-    a retry. Anything else (a bad request, our own EmbeddingError) is not, and
-    neither is a daily quota, which a retry cannot fix."""
-    if _is_daily_quota(exc):
-        return False
-    return _is_network_error(exc) or any(e.code == 429 or e.code >= 500 for e in _api_errors(exc))
-
-
-def classify_failure(exc: BaseException) -> str | None:
-    """What kind of failure is this? Used to tell an expected stop from a bug.
-
-    "daily_quota"  Google's daily cap (or our local budget): wait for the reset.
-    "transient"    429 / 5xx / network trouble that outlasted the retries: re-run later.
-    "api_error"    Google answered and said no (bad key, bad request, no access).
-    "bad_response" Google answered with something unusable (wrong count/size/zero vector).
-    None           anything else: an unknown exception is most likely a BUG, so callers
-                   must re-raise it rather than turn it into a status line.
-    """
-    if isinstance(exc, DailyQuotaExceeded) or _is_daily_quota(exc):
-        return "daily_quota"
-    if _is_transient(exc):
-        return "transient"
-    if any(True for _ in _api_errors(exc)):
-        return "api_error"
-    if isinstance(exc, EmbeddingError):
-        return "bad_response"
-    return None
-
-
-def _retry_after_seconds(exc: BaseException) -> float | None:
-    """The server's own ``RetryInfo.retryDelay`` (e.g. ``"57s"``), if the error
-    carries one. Free-tier 429s do."""
-    for e in _api_errors(exc):
-        details = e.details if isinstance(e.details, dict) else {}
-        body = details.get("error", details)
-        for item in (body.get("details") or []) if isinstance(body, dict) else []:
-            if isinstance(item, dict) and str(item.get("@type", "")).endswith("RetryInfo"):
-                delay = str(item.get("retryDelay", "")).rstrip("s")
-                try:
-                    return float(delay)
-                except ValueError:
-                    return None
-    return None
 
 
 def _default_client(cfg: GraphConfig, api_key: str | None):

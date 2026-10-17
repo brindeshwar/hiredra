@@ -14,3 +14,10 @@ min_description_chars: 200
 # gap between calls, not a token-bucket/learned-rate scheme -- see
 # hiredra/extraction.py's _pace().
 requests_per_minute: 15
+
+# Gemini free-tier daily cap for this model, and the share of it we allow ourselves.
+# The local counter (data/usage/gemini-3.5-flash-lite.json) stops a run at
+# requests_per_day x headroom = 450, before Google's own cap. Every flash-lite
+# agent shares that counter, because Google meters the model, not the stage.
+requests_per_day: 500
+headroom: 0.90

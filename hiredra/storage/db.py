@@ -488,6 +488,7 @@ def set_extraction(
     domain_bucket: str | None,
     legitimacy: str | None,
     extraction_confidence: str,
+    extraction_version: str | None = None,
 ) -> None:
     """Store Step 3's skill-extraction output.
 
@@ -498,7 +499,8 @@ def set_extraction(
     caller — this function does not touch the vocabulary). ``domain_bucket``/
     ``legitimacy`` are ``None`` on a too-thin-to-call skip; ``skills``/
     ``extraction_confidence`` are always given (``"[]"`` / ``"low"`` for a
-    skip).
+    skip). ``extraction_version`` (v5) stamps which model + prompt + schema
+    produced it; the extraction stage always passes it.
     """
     with conn:
         row = conn.execute("SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
@@ -506,8 +508,8 @@ def set_extraction(
             raise KeyError(f"no job with job_id {job_id!r}")
         conn.execute(
             "UPDATE jobs SET skills = ?, domain_bucket = ?, legitimacy = ?, "
-            "extraction_confidence = ?, updated_at = ? WHERE job_id = ?",
-            (skills, domain_bucket, legitimacy, extraction_confidence, _now(), job_id),
+            "extraction_confidence = ?, extraction_version = ?, updated_at = ? WHERE job_id = ?",
+            (skills, domain_bucket, legitimacy, extraction_confidence, extraction_version, _now(), job_id),
         )
 
 
