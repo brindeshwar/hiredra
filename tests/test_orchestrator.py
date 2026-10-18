@@ -318,7 +318,7 @@ def test_pacing_sleeps_between_companies_not_before_the_first(tmp_path, ctx):
 def test_resume_skips_done_companies(tmp_path, ctx):
     companies = _companies_yaml(tmp_path, [("A", "p"), ("B", "p")])
     p = FakeProvider("p", jobs=[_job(job_id="p:new")])
-    handle = RunHandle(run_id="R1", companies_done={"A"}, resumed=True)
+    handle = RunHandle(run_id="R1", companies_done={"A|p|"}, resumed=True)
     store = FakeRunStore(resume_handle=handle)
     report = run(
         _config(companies_path=companies),
@@ -334,6 +334,38 @@ def test_resume_skips_done_companies(tmp_path, ctx):
     assert statuses == {"A": "skipped", "B": "ok"}
     assert p.calls == ["B"]
     assert report.resumed is True
+
+
+def test_two_boards_with_one_name_are_both_fetched(tmp_path, ctx):
+    """M0.3 bug: progress keyed by name skipped the second board as "already fetched this run"."""
+    p = tmp_path / "companies.yml"
+    p.write_text(
+        "companies:\n"
+        "  - {name: Paradigm, provider: gh, slug: paradigm}\n"
+        "  - {name: Paradigm, provider: ab, slug: Paradigm}\n"
+        "  - {name: Kayak, provider: ab, slug: KAYAK}\n"
+        "  - {name: Kayak, provider: ab, slug: kayak}\n",
+        encoding="utf-8",
+    )
+    gh, ab = FakeProvider("gh", jobs=[_job(job_id="gh:1")]), FakeProvider("ab", jobs=[_job(job_id="ab:1")])
+    store = FakeRunStore()
+    report = run(
+        _config(companies_path=str(p)),
+        sink_factory=lambda r: RecordingSink(),
+        run_store=store,
+        ctx=ctx,
+        registry=(gh, ab),
+        jobspy_source=FakeJobSpySource(),
+        sleep=lambda s: None,
+    )
+    assert [c.status for c in report.companies] == ["ok", "ok", "ok", "ok"]
+    assert gh.calls == ["Paradigm"] and ab.calls == ["Paradigm", "Kayak", "Kayak"]
+    assert store.checkpoints[-1]["companies_done"] == {
+        "Paradigm|gh|paradigm",
+        "Paradigm|ab|Paradigm",
+        "Kayak|ab|KAYAK",
+        "Kayak|ab|kayak",
+    }
 
 
 def test_resume_skips_jobspy_when_already_done(ctx):

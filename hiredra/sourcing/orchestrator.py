@@ -84,6 +84,16 @@ class RunReport:
 _PARTIAL_TRIGGERS = frozenset({"blocked", "error"})
 
 
+def progress_key(entry: CompanyEntry) -> str:
+    """The run-progress key for one company-list entry: name + provider + board.
+
+    Not the name alone: a generated list can hold two DIFFERENT boards under one display name
+    (e.g. the same company on greenhouse and ashby), and keying by name skipped the second one
+    as "already fetched this run" (found in M0.3: 11 boards)."""
+    board = (entry.extra.get("slug") if entry.extra else None) or entry.careers_url or entry.api or ""
+    return f"{entry.name}|{entry.provider or ''}|{board}"
+
+
 def _roll_up(companies: Sequence[CompanyOutcome], jobspy: Sequence[SiteOutcome]) -> str:
     if any(c.status in _PARTIAL_TRIGGERS for c in companies):
         return "partial"
@@ -135,7 +145,8 @@ def run(
         unroutable: list[str] = []
         attempted = 0
         for entry in companies:
-            if entry.name in companies_done:
+            key = progress_key(entry)
+            if key in companies_done:
                 outcomes.append(CompanyOutcome(entry.name, "skipped", None, 0, "already fetched this run"))
                 continue
             if attempted:
@@ -181,7 +192,7 @@ def run(
                     )
                     outcomes.append(CompanyOutcome(entry.name, "ok", provider.name, len(jobs_c)))
 
-            companies_done.add(entry.name)
+            companies_done.add(key)
             run_store.checkpoint(handle.run_id, companies_done=companies_done, jobspy_done=jobspy_done)
 
         if unroutable and companies and len(unroutable) == len(companies):
