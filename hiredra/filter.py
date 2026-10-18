@@ -163,6 +163,17 @@ class SeniorityResult:
 # "N years" / "N+ yrs" / "N-M years" -- takes the max of every match, per job.
 _YEARS_RE = re.compile(r"(\d+)\s*\+?\s*(?:-\s*\d+\s*)?(?:years?|yrs?)", re.IGNORECASE)
 
+# JobSpy (Indeed/LinkedIn) text is markdown-escaped: "4\+ years", "\- mentor". The escapes are
+# removed before the gate reads the body, or "4\+ years" never matches (found in M0.5: 25 of 60
+# LinkedIn survivors were 3-15-year roles). Same set as hiredra.extraction's preprocess, plus
+# '+'; copied, not imported, so the funnel stays free of the LLM stack.
+_MD_ESCAPE_RE = re.compile(r"\\([-.()#*_\[\]!+])")
+
+
+def unescape_markdown(text: str | None) -> str | None:
+    return _MD_ESCAPE_RE.sub(r"\1", text) if text else text
+
+
 # Indian-market boilerplate: "Educational Qualification: 15 years full time
 # education" means "has a bachelor's degree," not 15 years of work experience.
 # A years match is excluded when "educational qualification" precedes it or
@@ -203,6 +214,7 @@ def passes_seniority_gate(title: str | None, description: str | None, config: Fi
     """Gate only -- not a score term. `years` is always populated when
     extractable, even when a title term or anti-signal phrase is what
     actually drops the job."""
+    description = unescape_markdown(description)
     years = extract_max_years(description)
 
     term = has_senior_title_term(title, config.senior_title_terms)

@@ -225,3 +225,21 @@ def test_run_funnel_is_idempotent_on_a_rerun():
     stats2 = funnel.run_funnel(conn, CONFIG)
     assert stats2.seen == 0  # nothing left at status='fetched'
     conn.close()
+
+
+# --- markdown-escaped JobSpy text (M0.5 finding) -----------------------------
+def test_escaped_plus_years_is_read():
+    from hiredra.filter import load_filter_config, passes_seniority_gate
+
+    cfg = load_filter_config()
+    r = passes_seniority_gate("AI Engineer", r"**MUST HAVES** \- **4\+ years of experience** in Python", cfg)
+    assert (r.keep, r.years) == (False, 4)
+    assert passes_seniority_gate("AI Engineer", r"0\-2 years of experience", cfg).keep is True
+
+
+def test_unescape_markdown_leaves_plain_text_alone():
+    from hiredra.filter import unescape_markdown
+
+    assert unescape_markdown("C++ and 3+ years") == "C++ and 3+ years"
+    assert unescape_markdown(r"3\+ years, \(remote\)") == "3+ years, (remote)"
+    assert unescape_markdown(None) is None and unescape_markdown("") == ""
