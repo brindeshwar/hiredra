@@ -1113,6 +1113,15 @@ except Exception:
     pass
 
 GEORGIAN_CITIES = {"tbilisi", "batumi", "kutaisi", "rustavi"}
+
+# Hiredra additions (M0.4 finding, not in upstream locparse): Ashby/Greenhouse boards often
+# name the WORKPLACE, not just the city ("San Francisco Office", "New York HQ", "London office").
+# A trailing workplace word is dropped before the lookup, so the city underneath resolves; a bare
+# "HQ" stays unknown. Never a guess: only names already in the tables resolve.
+_WORKPLACE_RE = re.compile(r"\s+(?:head\s+)?(?:office|offices|hq|headquarters|hub|campus)\.?$", re.I)
+# A flag emoji is an explicit country: two regional-indicator letters ("Lyon 🇫🇷" -> FR).
+_FLAG_RE = re.compile("([\U0001f1e6-\U0001f1ff])([\U0001f1e6-\U0001f1ff])")
+CITY_COUNTRY.update({"sf bay area": "US", "san francisco bay area": "US"})
 TZ_CODES = {
     "EST",
     "PST",
@@ -1208,9 +1217,17 @@ def _one(seg: str, out: dict) -> None:
     inferred: set[str] = set()
     lows = [t.lower().strip(". ") for t in toks]
     for t in toks:
+        for a, b in _FLAG_RE.findall(t):
+            code = chr(ord(a) - 0x1F1E6 + 65) + chr(ord(b) - 0x1F1E6 + 65)
+            explicit.add("GB" if code == "UK" else code)
+        t = _FLAG_RE.sub("", t).strip()
+        if not t:
+            continue
+        t = _WORKPLACE_RE.sub("", t).strip() or t
         tl = t.lower().strip(" .:")
         if tl == "washington" and any(x in ("dc", "d.c", "district of columbia") for x in lows):
             out["cities"].add("Washington")
+            explicit.add("US")  # Hiredra fix: the city was recorded but the country never was
             continue
         if tl == "georgia" and any(x in GEORGIAN_CITIES or "country" in x for x in lows):
             explicit.add("GE")
