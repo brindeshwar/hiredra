@@ -217,12 +217,40 @@ class ExtractionResult(BaseModel):
     extraction_confidence: Literal["high", "low"]
 
 
+#: v2 (M0.5 pilot spot-check: only 6 of 20 skill lists were clean). The rules target what the
+#: spot-check found: descriptions instead of skill names, combined items ("aws/azure/gcp"),
+#: 75-item lists, product names, and "high" confidence on a 0-skill or 2-sentence JD.
 _PROMPT_PREFIX = (
-    "Read the job description below. Extract every required and "
-    "good-to-have skill mentioned, tag each one accordingly, classify the "
-    "role into exactly one domain bucket, and flag the posting's legitimacy "
-    "and your own confidence in this extraction. Only read and normalize "
-    "what is written -- do not rate, score, or rank anything.\n\n"
+    "Read the job description below. Extract its skills, classify the role, and flag the posting. "
+    "Only read and normalize what is written -- do not rate, score, or rank anything.\n\n"
+    "SKILLS\n"
+    "- A skill is a technology, tool, language, framework, platform, or named technical method "
+    '(for example "python", "kubernetes", "postgresql", "rag", "rest api design", "data structures").\n'
+    '- Use the short canonical name, 1-4 words, lowercase: "postgresql", not "experience with '
+    'relational databases such as PostgreSQL".\n'
+    '- One skill per item. Split lists: "AWS/Azure/GCP" becomes "aws", "azure", "gcp".\n'
+    "- Leave out soft skills and traits (communication, ownership, collaboration), generic activities "
+    "(software development, building scalable systems, debugging), degrees, years of experience, and "
+    "bare umbrella words on their own (ai, ml, cloud, software, data).\n"
+    '- Never list the hiring company itself or its own products as a skill (at Cursor, "cursor" is not '
+    "a skill).\n"
+    "- At most 25 skills. If the description names more, keep the ones most central to the role.\n"
+    '- requirement: "required" when the description says must, required or you have; "good_to_have" '
+    'for preferred, nice to have, a plus or bonus. If it doesn\'t say, use "required" for skills '
+    'central to the role and "good_to_have" for the rest.\n\n'
+    "DOMAIN BUCKET (exactly one)\n"
+    "- agent_llm: building with LLMs, agents, RAG or generative AI.\n"
+    "- ml: training, evaluating or serving machine-learning models, not centred on LLM applications.\n"
+    "- data: data engineering, analytics or data science.\n"
+    "- backend: server-side services, APIs, distributed systems, databases or infrastructure.\n"
+    "- generic_swe: general, full-stack, frontend, mobile or test-automation software engineering.\n"
+    "- other: not a software engineering role.\n\n"
+    "LEGITIMACY\n"
+    "- legitimate: a real, specific posting. suspect: vague, inconsistent or misleading. "
+    "likely_ghost: generic boilerplate with no concrete role behind it.\n\n"
+    "EXTRACTION CONFIDENCE\n"
+    '- "low" when the description is too short or too vague to list reliable skills (for example '
+    'fewer than 3 concrete skills), otherwise "high".\n\n'
     "JOB DESCRIPTION:\n"
 )
 
