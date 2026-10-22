@@ -90,6 +90,11 @@ class ExtractionConfig:
     boilerplate_footers: dict = field(default_factory=dict)
     requests_per_day: int = 500
     headroom: float = 0.90
+    # Guards (code decides what the model is not trusted to enforce -- see apply_guards).
+    max_skills: int = 25
+    max_skill_words: int = 4
+    generic_skills: frozenset = frozenset()
+    skill_synonyms: dict = field(default_factory=dict)
 
     @property
     def daily_budget(self) -> int:
@@ -110,6 +115,10 @@ def load_extraction_config(
         boilerplate_footers=footers,
         requests_per_day=int(data.get("requests_per_day", 500)),
         headroom=float(data.get("headroom", 0.90)),
+        max_skills=int(data.get("max_skills", 25)),
+        max_skill_words=int(data.get("max_skill_words", 4)),
+        generic_skills=frozenset(_norm(x) for x in data.get("generic_skills") or []),
+        skill_synonyms={_norm(k): tuple(_norm(v) for v in vs) for k, vs in (data.get("skill_synonyms") or {}).items()},
     )
 
 
@@ -259,11 +268,90 @@ def _build_prompt(jd_text: str) -> str:
     return _PROMPT_PREFIX + jd_text
 
 
-def extraction_version() -> str:
-    """``<model>:<sha8>``: sha8 is sha256 over the prompt text + the output schema. Any change
-    to either changes the stamp, so ``--stale`` can list the jobs an older version wrote."""
+def _guard_settings(config: ExtractionConfig | None) -> dict:
+    if config is None:
+        return {}
+    return {
+        "max_skills": config.max_skills,
+        "max_skill_words": config.max_skill_words,
+        "generic_skills": sorted(config.generic_skills),
+        "skill_synonyms": {k: list(v) for k, v in sorted(config.skill_synonyms.items())},
+    }
+
+
+def extraction_version(config: ExtractionConfig | None = None) -> str:
+    """``<model>:<sha8>``: sha8 is sha256 over the prompt text + the output schema + the guard
+    settings. Any change to them changes the stamp, so ``--stale`` can list the jobs an older
+    version wrote. ``config=None`` gives the unguarded stamp (prompt + schema only)."""
     blob = _PROMPT_PREFIX + json.dumps(ExtractionResult.model_json_schema(), sort_keys=True)
+    guards = _guard_settings(config)
+    if guards:
+        blob += json.dumps(guards, sort_keys=True)
     return f"{MODEL_NAME}:{hashlib.sha256(blob.encode('utf-8')).hexdigest()[:8]}"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# guards: the model is trusted for reading, never for constraints (rule 3)
+# ─────────────────────────────────────────────────────────────────────────────
+_NORM_RE = re.compile(r"[^a-z0-9+#.]+")
+
+
+def _norm(text: str) -> str:
+    """Lowercase, punctuation to spaces (keeping + # . for c++, c#, node.js), single spaces."""
+    return " ".join(_NORM_RE.sub(" ", text.lower()).split())
+
+
+def is_grounded(name: str, jd_norm: str, synonyms: dict) -> bool:
+    """Does the JD actually name this skill (or a configured synonym of it)?
+
+    ``jd_norm`` is ``" " + _norm(jd) + " "``. A form of 1-2 characters ("c", "go") must match a
+    whole word; a longer one may be a word prefix ("api" matches "apis"). A multi-word form also
+    counts when every word of 3+ letters appears somewhere ("data pipelines" in "pipelines for
+    data"), and a form also matches with spaces and dots removed ("nodejs" for "node.js").
+    """
+    n = _norm(name)
+    compact_jd = jd_norm.replace(" ", "").replace(".", "")
+    for form in (n, *synonyms.get(n, ())):
+        if not form:
+            continue
+        if (f" {form} " if len(form) <= 2 else f" {form}") in jd_norm:
+            return True
+        if len(form) > 3 and form.replace(" ", "").replace(".", "") in compact_jd:
+            return True
+        words = [w for w in form.split() if len(w) > 2]
+        if len(words) > 1 and all(f" {w}" in jd_norm for w in words):
+            return True
+    return False
+
+
+def apply_guards(skills: list, jd_text: str, config: ExtractionConfig) -> tuple[list, dict[str, list[str]]]:
+    """Keep only grounded, specific skills, at most ``max_skills`` (required first).
+
+    Returns ``(kept, dropped)``, where ``dropped`` maps a reason to the names it removed:
+    ``ungrounded`` (the JD never names it), ``generic`` (on the owner's stoplist), ``too long``
+    (more than ``max_skill_words`` words: a description, not a skill name) and ``over cap``.
+    """
+    jd_norm = f" {_norm(jd_text)} "
+    dropped: dict[str, list[str]] = {}
+    kept = []
+    for item in skills:
+        n = _norm(item.name)
+        reason = None
+        if n in config.generic_skills:
+            reason = "generic"
+        elif len(n.split()) > config.max_skill_words:
+            reason = "too long"
+        elif not is_grounded(item.name, jd_norm, config.skill_synonyms):
+            reason = "ungrounded"
+        if reason:
+            dropped.setdefault(reason, []).append(item.name)
+        else:
+            kept.append(item)
+    kept = sorted(kept, key=lambda i: i.requirement != "required")  # stable: required first, order kept
+    if len(kept) > config.max_skills:
+        dropped["over cap"] = [i.name for i in kept[config.max_skills :]]
+        kept = kept[: config.max_skills]
+    return kept, dropped
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -416,7 +504,7 @@ def run_extraction(
         chain = build_extraction_chain()
     graph = build_extraction_graph(chain, usage, sleep=sleep)
     pacer = _Pacer(config.requests_per_minute, sleep=sleep)
-    stamp = extraction_version()
+    stamp = extraction_version(config)
     streak = 0
 
     jobs = list(iter_jobs(conn, status="filtered"))
@@ -468,16 +556,24 @@ def run_extraction(
             break
         streak = 0
 
-        skills = [
-            {"name": vocab.resolve_skill(conn, item.name), "requirement": item.requirement} for item in result.skills
-        ]
+        kept, dropped = apply_guards(result.skills, clean_text, config)
+        if dropped:
+            add_note(
+                conn,
+                job_id,
+                "extraction: guards dropped " + "; ".join(f"{k}: {', '.join(v)}" for k, v in dropped.items()),
+            )
+        confidence = result.extraction_confidence
+        if not kept and confidence == "high":
+            confidence = "low"  # no specific, grounded skill survived: not a reliable extraction
+        skills = [{"name": vocab.resolve_skill(conn, item.name), "requirement": item.requirement} for item in kept]
         set_extraction(
             conn,
             job_id,
             skills=json.dumps(skills),
             domain_bucket=result.domain_bucket,
             legitimacy=result.legitimacy,
-            extraction_confidence=result.extraction_confidence,
+            extraction_confidence=confidence,
             extraction_version=stamp,
         )
         set_status(conn, job_id, "extracted")
@@ -486,20 +582,63 @@ def run_extraction(
     return stats
 
 
-def stale_jobs(conn) -> dict[str | None, list[dict]]:
+def stale_jobs(conn, config: ExtractionConfig | None = None) -> dict[str | None, list[dict]]:
     """Extracted/scored jobs whose stamp is not the current one, grouped by their old stamp
     (None = written before stamps existed). Lists only: re-extracting costs 1 request per job,
-    so it is always the owner's call."""
+    so it is always the owner's call. ``config`` gives the guarded stamp (default: the shipped config)."""
+    if config is None:
+        config = load_extraction_config()
     groups: dict[str | None, list[dict]] = {}
     rows = conn.execute(
         "SELECT job_id, company, title, extraction_version FROM jobs "
         "WHERE status IN ('extracted', 'scored') AND (extraction_version IS NULL OR extraction_version != ?) "
         "ORDER BY extraction_version, job_id",
-        (extraction_version(),),
+        (extraction_version(config),),
     )
     for row in rows:
         groups.setdefault(row["extraction_version"], []).append(dict(row))
     return groups
+
+
+def reguard_jobs(conn, config: ExtractionConfig) -> dict[str, int]:
+    """Apply the current guards to ``extracted`` jobs written by the SAME prompt and schema without
+    guards (the unguarded stamp). No API call: the guards only need the stored skills and the JD.
+    Each job's skills are filtered, its confidence drops to low if none survive, and it gets the
+    guarded stamp. Scored jobs are left alone (their scores would go stale silently)."""
+    unguarded, guarded = extraction_version(), extraction_version(config)
+    counts = {"jobs": 0, "skills_dropped": 0, "now_low_confidence": 0}
+    rows = conn.execute(
+        "SELECT job_id, company, description, skills, extraction_confidence FROM jobs "
+        "WHERE status = 'extracted' AND extraction_version = ?",
+        (unguarded,),
+    ).fetchall()
+    for row in rows:
+        clean_text, _ = preprocess(row["description"] or "", row["company"], config)
+        items = [SkillItem(name=s["name"], requirement=s["requirement"]) for s in json.loads(row["skills"] or "[]")]
+        kept, dropped = apply_guards(items, clean_text, config)
+        confidence = row["extraction_confidence"]
+        if not kept and items and confidence == "high":
+            confidence = "low"
+            counts["now_low_confidence"] += 1
+        if dropped:
+            add_note(
+                conn,
+                row["job_id"],
+                "extraction: guards dropped " + "; ".join(f"{k}: {', '.join(v)}" for k, v in dropped.items()),
+            )
+            counts["skills_dropped"] += sum(len(v) for v in dropped.values())
+        with conn:
+            conn.execute(
+                "UPDATE jobs SET skills = ?, extraction_confidence = ?, extraction_version = ? WHERE job_id = ?",
+                (
+                    json.dumps([{"name": i.name, "requirement": i.requirement} for i in kept]),
+                    confidence,
+                    guarded,
+                    row["job_id"],
+                ),
+            )
+        counts["jobs"] += 1
+    return counts
 
 
 _STOP_HINTS = {
@@ -517,6 +656,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
     parser.add_argument("--limit", type=int, default=None, help="process at most N filtered jobs")
     parser.add_argument("--stale", action="store_true", help="list jobs extracted with an older stamp (no API call)")
+    parser.add_argument(
+        "--reguard", action="store_true", help="apply the current guards to jobs extracted without them (no API call)"
+    )
     parser.add_argument("--usage-path", default=str(DEFAULT_USAGE_PATH))
     parser.add_argument("--lock-path", default=str(DEFAULT_LOCK_PATH))
     args = parser.parse_args(argv)
@@ -527,14 +669,27 @@ def main(argv: list[str] | None = None) -> int:
         print(f"config error: {err}", file=sys.stderr)
         return 1
 
+    if args.reguard:
+        conn = connect(args.db)
+        try:
+            init_db(conn)
+            counts = reguard_jobs(conn, config)
+        finally:
+            conn.close()
+        print(
+            f"reguard: {counts['jobs']} job(s) re-checked, {counts['skills_dropped']} skill(s) dropped, "
+            f"{counts['now_low_confidence']} now low confidence; stamp {extraction_version(config)}"
+        )
+        return 0
+
     if args.stale:
         conn = connect(args.db)
         try:
             init_db(conn)
-            groups = stale_jobs(conn)
+            groups = stale_jobs(conn, config)
         finally:
             conn.close()
-        print(f"current stamp: {extraction_version()}")
+        print(f"current stamp: {extraction_version(config)}")
         for stamp, jobs in groups.items():
             print(f"  {stamp or '(no stamp)'}: {len(jobs)} job(s)")
             for j in jobs:

@@ -27,7 +27,7 @@ def _job(**overrides):
         "url": overrides.pop("url", "https://example.com/j1"),
         "title": "Backend Engineer",
         "company": "Acme",
-        "description": "x" * 500,
+        "description": "We build APIs with FastAPI and Python on a small backend team. " * 8,
         "source": "greenhouse",
     }
     job.update(overrides)
@@ -482,7 +482,7 @@ def test_every_written_job_carries_the_stamp(db):
     called = _filtered_job(db, job_id="a", url="u://a")
     thin = _filtered_job(db, job_id="b", url="u://b", description="too short")
     _run(db, _ScriptChain())
-    stamp = extraction.extraction_version()
+    stamp = extraction.extraction_version(CONFIG)
     assert stamp.startswith("gemini-3.5-flash-lite:") and len(stamp.split(":")[1]) == 8
     assert get_job(db, called)["extraction_version"] == stamp
     assert get_job(db, thin)["extraction_version"] == stamp
@@ -491,15 +491,15 @@ def test_every_written_job_carries_the_stamp(db):
 def test_changing_the_prompt_changes_the_stamp_and_stale_lists_exactly_those_jobs(db, monkeypatch):
     old = _filtered_job(db, job_id="old", url="u://old")
     _run(db, _ScriptChain())
-    old_stamp = extraction.extraction_version()
-    assert extraction.stale_jobs(db) == {}
+    old_stamp = extraction.extraction_version(CONFIG)
+    assert extraction.stale_jobs(db, CONFIG) == {}
 
     monkeypatch.setattr(extraction, "_PROMPT_PREFIX", extraction._PROMPT_PREFIX + "Be brief.\n")
-    assert extraction.extraction_version() != old_stamp
+    assert extraction.extraction_version(CONFIG) != old_stamp
     new = _filtered_job(db, job_id="new", url="u://new")
     _run(db, _ScriptChain())
 
-    groups = extraction.stale_jobs(db)
+    groups = extraction.stale_jobs(db, CONFIG)
     assert list(groups) == [old_stamp]
     assert [j["job_id"] for j in groups[old_stamp]] == [old]
     assert new not in {j["job_id"] for jobs in groups.values() for j in jobs}
@@ -585,3 +585,135 @@ def test_cli_stale_lists_without_any_call(tmp_path, monkeypatch, capsys):
     assert extraction.main([*args, "--stale"]) == 0
     out = capsys.readouterr().out
     assert "stale: 1" in out and "j1  Acme -- Backend Engineer" in out
+
+
+# --- guards: code enforces what the model is not trusted with (rule 3) ------------------------
+import dataclasses  # noqa: E402
+
+GUARDED = extraction.ExtractionConfig(
+    min_description_chars=200,
+    requests_per_minute=15,
+    max_skills=3,
+    max_skill_words=4,
+    generic_skills=frozenset({"testing", "ai", "backend"}),
+    skill_synonyms={"gcp": ("google cloud",), "nodejs": ("node.js",)},
+)
+_JD = (
+    "We ship Python services on Google Cloud with Node.js tooling, REST APIs and pipelines for data. "
+    "You write tests, care about testing, know some Go and C, and enjoy good AI work."
+)
+
+
+def _items(*names, req="required"):
+    return [extraction.SkillItem(name=n, requirement=req) for n in names]
+
+
+@pytest.mark.parametrize(
+    ("name", "grounded"),
+    [
+        ("python", True),
+        ("gcp", True),  # synonym: Google Cloud
+        ("nodejs", True),  # synonym, and compact form of node.js
+        ("rest api", True),  # prefix: "apis"
+        ("data pipelines", True),  # every word present
+        ("go", True),
+        ("c", True),
+        ("kafka", False),
+        ("pytorch", False),
+        ("cobol", False),
+        ("data warehouse", False),  # every word must be present, not just "data"
+    ],
+)
+def test_is_grounded(name, grounded):
+    jd = f" {extraction._norm(_JD)} "
+    assert extraction.is_grounded(name, jd, GUARDED.skill_synonyms) is grounded
+
+
+def test_short_names_need_a_whole_word():
+    jd = f" {extraction._norm('a good cat in a cave')} "
+    assert not extraction.is_grounded("go", jd, {}) and not extraction.is_grounded("c", jd, {})
+
+
+def test_apply_guards_drops_each_kind_and_caps_required_first():
+    skills = (
+        _items("kafka", "testing", "building reliable large scale distributed systems", "python")
+        + _items("go", req="good_to_have")
+        + _items("gcp", "rest api")
+    )
+    kept, dropped = extraction.apply_guards(skills, _JD, GUARDED)
+    assert [i.name for i in kept] == ["python", "gcp", "rest api"]  # required first, cap 3
+    assert dropped == {
+        "ungrounded": ["kafka"],
+        "generic": ["testing"],
+        "too long": ["building reliable large scale distributed systems"],
+        "over cap": ["go"],
+    }
+
+
+def test_guards_run_inside_extraction_and_are_noted(db):
+    job_id = _filtered_job(db, description=_JD * 2)
+    result = _result(skills=_items("python", "kafka", "ai"))
+    extraction.run_extraction(db, GUARDED, chain=_ScriptChain(result), sleep=lambda s: None)
+    row = get_job(db, job_id)
+    assert [s["name"] for s in json.loads(row["skills"])] == ["python"]
+    assert row["extraction_confidence"] == "high"
+    assert any("guards dropped ungrounded: kafka; generic: ai" in n for n in _notes(db, job_id))
+    assert row["extraction_version"] == extraction.extraction_version(GUARDED)
+
+
+def test_no_surviving_skill_means_low_confidence(db):
+    job_id = _filtered_job(db, description=_JD * 2)
+    extraction.run_extraction(db, GUARDED, chain=_ScriptChain(_result(skills=_items("kafka"))), sleep=lambda s: None)
+    row = get_job(db, job_id)
+    assert row["skills"] == "[]" and row["extraction_confidence"] == "low"
+
+
+def test_guard_settings_are_part_of_the_stamp():
+    base = extraction.extraction_version(GUARDED)
+    assert base != extraction.extraction_version()  # unguarded differs
+    for change in (
+        {"max_skills": 4},
+        {"max_skill_words": 3},
+        {"generic_skills": frozenset({"testing"})},
+        {"skill_synonyms": {"gcp": ("gcloud",)}},
+    ):
+        assert extraction.extraction_version(dataclasses.replace(GUARDED, **change)) != base, change
+
+
+def test_the_shipped_guard_config_loads():
+    cfg = extraction.load_extraction_config()
+    assert cfg.max_skills == 25 and "ai" in cfg.generic_skills and "google cloud" in cfg.skill_synonyms["gcp"]
+
+
+def test_reguard_filters_only_unguarded_extracted_jobs(db):
+    unguarded = extraction.extraction_version()
+    a = _filtered_job(db, job_id="a", url="u://a", description=_JD * 2)
+    b = _filtered_job(db, job_id="b", url="u://b", description=_JD * 2)
+    for jid, stamp in ((a, unguarded), (b, "older:prompt")):
+        db.execute(
+            "UPDATE jobs SET status = 'extracted', skills = ?, extraction_confidence = 'high', extraction_version = ? "
+            "WHERE job_id = ?",
+            (
+                json.dumps(
+                    [{"name": "kafka", "requirement": "required"}, {"name": "python", "requirement": "required"}]
+                ),
+                stamp,
+                jid,
+            ),
+        )
+    db.commit()
+
+    counts = extraction.reguard_jobs(db, GUARDED)
+
+    assert counts == {"jobs": 1, "skills_dropped": 1, "now_low_confidence": 0}
+    row = get_job(db, a)
+    assert [s["name"] for s in json.loads(row["skills"])] == ["python"]
+    assert row["extraction_version"] == extraction.extraction_version(GUARDED)
+    assert get_job(db, b)["extraction_version"] == "older:prompt"  # a different prompt: re-extract, not reguard
+    assert extraction.reguard_jobs(db, GUARDED)["jobs"] == 0  # idempotent
+
+
+def test_cli_reguard(tmp_path, capsys):
+    args = _cli_paths(tmp_path)
+    assert extraction.main([*args, "--reguard"]) == 0
+    assert "reguard: 0 job(s) re-checked" in capsys.readouterr().out
