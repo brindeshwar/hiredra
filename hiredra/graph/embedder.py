@@ -128,11 +128,9 @@ def build_embedder(
     def _request(chunk: list[str]) -> list[list[float]]:
         if usage is not None:
             usage.reserve(len(chunk))  # refuse BEFORE the call if today's budget can't cover it
+            usage.record(len(chunk))  # counted BEFORE the call, failed attempts too (Google may count them)
         _pace(len(chunk), sum(estimate_tokens(t) for t in chunk))  # every attempt spends quota
-        vectors = client.embed_documents(chunk, batch_size=len(chunk))
-        if usage is not None:
-            usage.record(len(chunk))  # counted only once Google accepted it
-        return vectors
+        return client.embed_documents(chunk, batch_size=len(chunk))
 
     backoff = wait_exponential(multiplier=1, min=2, max=30)
 

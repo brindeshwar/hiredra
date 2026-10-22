@@ -8,7 +8,16 @@ same code; the graph modules re-export these names, so nothing that imports them
   details through LangChain's wrapper, which re-raises the SDK error as ``__cause__``.
 * ``DailyUsage``: a small local counter for a per-DAY request limit, so a run stops BEFORE
   Google's cap instead of after a rejected request. It is ADVISORY; Google is the source of
-  truth. One counter file per metered model (Google meters the model, not the stage).
+  truth. One counter file per metered model (Google meters the model, not the stage). Every
+  ATTEMPT is counted before it is sent, failed ones too, so the count can only run ahead of
+  Google's (it fell 50 behind on 2026-10-19 when only successes counted).
+* A "PerDay" 429 label is a claim, not a fact: only a long (>= 10 min) or missing retryDelay
+  confirms it. A short throttle mislabelled PerDay must not switch a model off for the day.
+
+Rule for every caller (from spoin_bundle's measured gemini-saga): Google's free tier sheds above
+about 3 requests IN FLIGHT per source IP, across all keys. Hiredra calls Google one request at a
+time per process, and the run locks keep at most two such processes alive at once. Never add
+parallel or async fan-out to a Google call.
 """
 
 from __future__ import annotations
@@ -92,9 +101,12 @@ def _is_daily_quota(exc: BaseException) -> bool:
     be a per-minute window (>= 10 min)."""
     if not any(e.code == 429 for e in _api_errors(exc)):
         return False
-    if any("perday" in q.lower() for q in _quota_ids(exc)):
-        return True
     hint = _retry_after_seconds(exc)
+    if any("perday" in q.lower() for q in _quota_ids(exc)):
+        # The label alone is a claim, not a fact: Google has labelled short throttles "PerDay"
+        # (spoin_bundle's gemini-saga: one such label switched off 136 of 204 key slots in a
+        # minute). A per-day label with a SHORT retryDelay is treated as a per-minute throttle.
+        return hint is None or hint >= _DAILY_RETRY_DELAY_S
     return hint is not None and hint >= _DAILY_RETRY_DELAY_S
 
 

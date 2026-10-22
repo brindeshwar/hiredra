@@ -354,7 +354,7 @@ def test_googles_daily_quota_stops_the_run_marks_the_counter_and_is_not_retried(
     stats = _run(db, chain, usage=usage)
 
     assert stats.stopped == "daily_quota" and chain.calls == 1
-    assert usage.exhausted() and usage.used() == 0
+    assert usage.exhausted() and usage.used() == 1  # the attempt is counted even though Google refused it
     assert _status(db, a) == "filtered" and _status(db, b) == "filtered"
 
 
@@ -393,7 +393,7 @@ def test_a_per_minute_429_is_retried_then_succeeds(db, tmp_path):
 
     assert stats.extracted == 1 and chain.calls == 2
     assert 21.0 in slept  # the server's 20s retryDelay + 1s margin
-    assert usage.used() == 1  # the rejected attempt is not counted
+    assert usage.used() == 2  # both attempts are counted, the rejected one too
     assert _status(db, job_id) == "extracted"
 
 

@@ -386,23 +386,24 @@ def test_the_budget_stops_the_run_before_the_call_that_would_pass_it(tmp_path):
     assert usage.used() == 3
 
 
-def test_a_retried_chunk_is_counted_once(tmp_path):
+def test_every_attempt_of_a_retried_chunk_is_counted(tmp_path):
     usage = _usage(tmp_path)
     err = _wrapped(ClientError(429, {"error": {"message": "per-minute"}}))
     client = FakeClient(fail_with=[err])
     embed = build_embedder(_cfg(), client=client, usage=usage, sleep=lambda s: None, clock=lambda: 0.0)
     embed(["a", "b"])
-    assert len(client.calls) == 2 and usage.used() == 2  # the rejected attempt is not counted
+    # 2 inputs x 2 attempts: the rejected attempt counts too (Google may count it; ahead is safe)
+    assert len(client.calls) == 2 and usage.used() == 4
 
 
-def test_a_failed_request_is_not_counted(tmp_path):
+def test_a_failed_request_is_still_counted(tmp_path):
     usage = _usage(tmp_path)
     err = _wrapped(ClientError(400, {"error": {"message": "bad request"}}))
     client = FakeClient(fail_with=[err])
     embed = build_embedder(_cfg(), client=client, usage=usage, sleep=lambda s: None, clock=lambda: 0.0)
     with pytest.raises(RuntimeError):
         embed(["a"])
-    assert usage.used() == 0
+    assert usage.used() == 1
 
 
 def test_a_server_side_daily_quota_marks_the_day_exhausted_and_later_calls_make_no_request(tmp_path):
@@ -479,3 +480,24 @@ def test_a_bug_shaped_error_is_never_retried():
     with pytest.raises(KeyError):
         embed(["fastapi"])
     assert len(client.calls) == 1
+
+
+# --- a "PerDay" label is a claim, not a fact (lesson from spoin_bundle's gemini-saga) ----
+@pytest.mark.parametrize(
+    ("retry_delay", "daily"),
+    [("57s", False), ("20s", False), ("599s", False), ("600s", True), ("41000s", True), (None, True)],
+)
+def test_a_per_day_label_needs_a_long_or_missing_retry_delay(retry_delay, daily):
+    from hiredra.graph.embedder import _is_daily_quota
+
+    err = _wrapped(ClientError(429, _quota_error(_PER_DAY, retry_delay=retry_delay)))
+    assert _is_daily_quota(err) is daily
+
+
+def test_a_mislabelled_short_throttle_is_retried_not_treated_as_the_day_gone(tmp_path):
+    usage = _usage(tmp_path)
+    err = _wrapped(ClientError(429, _quota_error(_PER_DAY, retry_delay="20s")))
+    client = FakeClient(fail_with=[err])
+    embed = build_embedder(_cfg(), client=client, usage=usage, sleep=lambda s: None, clock=lambda: 0.0)
+    embed(["a"])
+    assert len(client.calls) == 2 and not usage.exhausted()
