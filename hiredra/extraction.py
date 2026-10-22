@@ -284,17 +284,14 @@ _SCHEMA_ERRORS = (SchemaError, OutputParserException, ValidationError)
 
 
 def _call(chain, jd_text: str, usage: DailyUsage | None) -> ExtractionResult:
-    """One attempt: check the daily budget, call, count it once Google has answered."""
+    """One attempt: check the daily budget, count the attempt, call."""
     if usage is not None:
         usage.reserve(1)  # raises BEFORE the call when today's budget is used
-    try:
-        result = chain.invoke(_build_prompt(jd_text))
-    except _SCHEMA_ERRORS:
-        if usage is not None:
-            usage.record(1)  # Google answered (badly): the request still counted
-        raise
-    if usage is not None:
+        # Counted BEFORE the call, failed attempts too: Google counts some requests it rejects or
+        # times out on, so counting only successes let the local count fall behind (694 vs 644
+        # observed on 2026-10-19). Ahead of Google is the safe direction.
         usage.record(1)
+    result = chain.invoke(_build_prompt(jd_text))
     if result is None:
         raise SchemaError("structured output came back empty")
     return result
