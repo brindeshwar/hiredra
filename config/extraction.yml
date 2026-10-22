@@ -21,3 +21,42 @@ requests_per_minute: 15
 # agent shares that counter, because Google meters the model, not the stage.
 requests_per_day: 500
 headroom: 0.90
+
+# --- Guards (hiredra.extraction.apply_guards) ---------------------------------
+# The model reads; code enforces the rules (CLAUDE.md rule 3). After every extraction, a skill is
+# dropped when the JD never names it (or a synonym below), when it is on the generic list, or when
+# it has more than max_skill_words words (a description, not a name). Then at most max_skills are
+# kept, required ones first. Every drop is noted on the job. Changing anything here changes the
+# extraction stamp; `python -m hiredra.extraction --reguard` re-applies it to stored jobs, free.
+max_skills: 25
+max_skill_words: 4
+generic_skills: [
+  ai, ml, cloud, data, software, programming, coding, engineering, development,
+  software development, software engineering, backend software engineering,
+  backend, frontend, full-stack, full stack, infrastructure, testing, debugging, troubleshooting,
+  monitoring, alerting, metrics, logging, documentation, deployment, collaboration, communication,
+  teamwork, leadership, problem solving, ownership, safety, tone, latency, performance
+]
+# canonical name -> other names that count as "the JD names it"
+skill_synonyms:
+  gcp: [google cloud, google cloud platform]
+  google cloud: [gcp]
+  aws: [amazon web services]
+  azure: [microsoft azure]
+  kubernetes: [k8s, kubenetes]
+  k8s: [kubernetes]
+  golang: [go]
+  go: [golang]
+  postgresql: [postgres]
+  postgres: [postgresql]
+  javascript: [js]
+  typescript: [ts]
+  nodejs: [node.js, node]
+  node.js: [nodejs, node]
+  llm: [large language model, llms]
+  llms: [large language models, llm]
+  machine learning: [ml]
+  aws bedrock: [amazon bedrock, bedrock]
+  amazon bedrock: [aws bedrock, bedrock]
+  a/b testing: [a/b test, ab test]
+  ci/cd: [ci cd, continuous integration, continuous delivery]
