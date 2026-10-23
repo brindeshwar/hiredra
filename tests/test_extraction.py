@@ -392,7 +392,7 @@ def test_a_per_minute_429_is_retried_then_succeeds(db, tmp_path):
     stats = _run(db, chain, usage=usage, sleep=slept.append)
 
     assert stats.extracted == 1 and chain.calls == 2
-    assert 21.0 in slept  # the server's 20s retryDelay + 1s margin
+    assert any(21.0 <= s < 22.0 for s in slept)  # the server's 20s retryDelay + 1s margin + up to 1s jitter
     assert usage.used() == 2  # both attempts are counted, the rejected one too
     assert _status(db, job_id) == "extracted"
 
@@ -537,7 +537,7 @@ def test_cli_ok_run_prints_the_final_line(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(extraction._Pacer, "wait", lambda self: None)
     assert extraction.main(_cli_paths(tmp_path)) == 0
     out = capsys.readouterr().out.strip().splitlines()[-1]
-    assert out == "seen=1 extracted=1 skipped_thin=0 schema_failed=0 stopped=none used_today=1/450"
+    assert out == "gemini: seen=1 extracted=1 skipped_thin=0 schema_failed=0 stopped=none used_today=1/450"
 
 
 def test_cli_stop_exits_2_with_the_reason(tmp_path, monkeypatch, capsys):
@@ -556,7 +556,7 @@ def test_cli_a_spent_budget_exits_2_without_building_a_chain(tmp_path, monkeypat
         raise AssertionError("a chain was built")
 
     monkeypatch.setattr(extraction, "build_extraction_chain", no_chain)
-    assert extraction.main(args) == 2
+    assert extraction.main([*args, "--provider", "gemini"]) == 2
     assert "NOT RUN" in capsys.readouterr().out
 
 

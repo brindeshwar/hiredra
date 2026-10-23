@@ -40,7 +40,7 @@ from collections.abc import Callable, Sequence
 
 import numpy as np
 from dotenv import load_dotenv
-from tenacity import Retrying, retry_if_exception, stop_after_attempt, wait_exponential
+from tenacity import Retrying, retry_if_exception, stop_after_attempt
 
 from hiredra.graph.config import GraphConfig
 from hiredra.quota import (  # noqa: F401 -- re-exported: graph code and tests import them from here
@@ -53,6 +53,7 @@ from hiredra.quota import (  # noqa: F401 -- re-exported: graph code and tests i
     _quota_values,
     _retry_after_seconds,
     classify_failure,
+    jittered_wait,
 )
 
 #: text list in, (n, dimensions) float32 L2-normalized matrix out.
@@ -132,17 +133,10 @@ def build_embedder(
         _pace(len(chunk), sum(estimate_tokens(t) for t in chunk))  # every attempt spends quota
         return client.embed_documents(chunk, batch_size=len(chunk))
 
-    backoff = wait_exponential(multiplier=1, min=2, max=30)
-
-    def _wait(retry_state) -> float:
-        hint = _retry_after_seconds(retry_state.outcome.exception())
-        # server hint (+1s margin) when it gave one, else plain exponential backoff
-        return backoff(retry_state) if hint is None else min(hint + 1.0, 120.0)
-
     retrying = Retrying(
         retry=retry_if_exception(_is_transient),
         stop=stop_after_attempt(4),
-        wait=_wait,
+        wait=jittered_wait,  # the owner's rule: 1, 2, 4, 8 s + jitter, or the server's own delay
         sleep=sleep,
         reraise=True,
     )

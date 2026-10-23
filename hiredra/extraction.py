@@ -36,6 +36,7 @@ Exit codes (same as the graph CLI): 0 ok, 2 stopped with a reason, 4 lock held, 
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import hashlib
 import json
 import os
@@ -53,11 +54,12 @@ from langchain_core.exceptions import OutputParserException
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, ValidationError
-from tenacity import Retrying, retry_if_exception, stop_after_attempt, wait_exponential
+from tenacity import Retrying, retry_if_exception, stop_after_attempt
 
 from hiredra import vocab
 from hiredra.lock import LockHeld, RunLock
-from hiredra.quota import DailyQuotaExceeded, DailyUsage, _retry_after_seconds, classify_failure, reset_text
+from hiredra.nvidia import NvidiaChain
+from hiredra.quota import DailyQuotaExceeded, DailyUsage, classify_failure, jittered_wait, reset_text
 from hiredra.storage import (
     DEFAULT_DB_PATH,
     add_note,
@@ -95,6 +97,15 @@ class ExtractionConfig:
     max_skill_words: int = 4
     generic_skills: frozenset = frozenset()
     skill_synonyms: dict = field(default_factory=dict)
+    # Fallback provider (docs/model-selection-extraction.md): used when Gemini's daily budget is spent.
+    fallback_provider: str | None = None  # "nvidia" or None
+    fallback_model: str = ""
+    fallback_base_url: str = "https://integrate.api.nvidia.com/v1"
+    fallback_requests_per_minute: int = 40
+    fallback_headroom: float = 0.90
+    fallback_requests_per_day: int = 2000
+    fallback_timeout_seconds: float = 120.0
+    fallback_max_tokens: int = 4096
 
     @property
     def daily_budget(self) -> int:
@@ -119,7 +130,26 @@ def load_extraction_config(
         max_skill_words=int(data.get("max_skill_words", 4)),
         generic_skills=frozenset(_norm(x) for x in data.get("generic_skills") or []),
         skill_synonyms={_norm(k): tuple(_norm(v) for v in vs) for k, vs in (data.get("skill_synonyms") or {}).items()},
+        **_fallback_fields(data.get("fallback") or {}),
     )
+
+
+def _fallback_fields(fb: dict) -> dict:
+    provider = fb.get("provider")
+    if provider not in (None, "nvidia"):
+        raise ValueError(f"extraction config: fallback.provider must be nvidia or null, got {provider!r}")
+    if provider and not fb.get("model"):
+        raise ValueError("extraction config: fallback.model is required when a fallback provider is set")
+    return {
+        "fallback_provider": provider,
+        "fallback_model": str(fb.get("model") or ""),
+        "fallback_base_url": str(fb.get("base_url") or "https://integrate.api.nvidia.com/v1"),
+        "fallback_requests_per_minute": int(fb.get("requests_per_minute", 40)),
+        "fallback_headroom": float(fb.get("headroom", 0.90)),
+        "fallback_requests_per_day": int(fb.get("requests_per_day", 2000)),
+        "fallback_timeout_seconds": float(fb.get("timeout_seconds", 120)),
+        "fallback_max_tokens": int(fb.get("max_tokens", 4096)),
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -279,15 +309,16 @@ def _guard_settings(config: ExtractionConfig | None) -> dict:
     }
 
 
-def extraction_version(config: ExtractionConfig | None = None) -> str:
+def extraction_version(config: ExtractionConfig | None = None, model: str = MODEL_NAME) -> str:
     """``<model>:<sha8>``: sha8 is sha256 over the prompt text + the output schema + the guard
     settings. Any change to them changes the stamp, so ``--stale`` can list the jobs an older
-    version wrote. ``config=None`` gives the unguarded stamp (prompt + schema only)."""
+    version wrote. ``config=None`` gives the unguarded stamp (prompt + schema only). ``model`` is
+    the model that actually did the extraction (Gemini, or the fallback)."""
     blob = _PROMPT_PREFIX + json.dumps(ExtractionResult.model_json_schema(), sort_keys=True)
     guards = _guard_settings(config)
     if guards:
         blob += json.dumps(guards, sort_keys=True)
-    return f"{MODEL_NAME}:{hashlib.sha256(blob.encode('utf-8')).hexdigest()[:8]}"
+    return f"{model}:{hashlib.sha256(blob.encode('utf-8')).hexdigest()[:8]}"
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -411,16 +442,10 @@ def build_extraction_graph(chain, usage: DailyUsage | None = None, sleep=time.sl
     waiting the server's own retryDelay when it gives one. Every attempt spends quota, so
     each one goes through the daily counter.
     """
-    backoff = wait_exponential(multiplier=1, min=2, max=30)
-
-    def _wait(retry_state) -> float:
-        hint = _retry_after_seconds(retry_state.outcome.exception())
-        return backoff(retry_state) if hint is None else min(hint + 1.0, 120.0)
-
     retrying = Retrying(
         retry=retry_if_exception(lambda exc: classify_failure(exc) == "transient"),
         stop=stop_after_attempt(4),
-        wait=_wait,
+        wait=jittered_wait,  # the owner's rule: 1, 2, 4, 8 s + jitter, or the server's own delay
         sleep=sleep,
         reraise=True,
     )
@@ -474,6 +499,7 @@ def run_extraction(
     usage: DailyUsage | None = None,
     limit: int | None = None,
     sleep=time.sleep,
+    model: str = MODEL_NAME,
 ) -> ExtractionStats:
     """Read status='filtered', run Step 3, advance survivors to 'extracted'.
 
@@ -504,7 +530,7 @@ def run_extraction(
         chain = build_extraction_chain()
     graph = build_extraction_graph(chain, usage, sleep=sleep)
     pacer = _Pacer(config.requests_per_minute, sleep=sleep)
-    stamp = extraction_version(config)
+    stamp = extraction_version(config, model)
     streak = 0
 
     jobs = list(iter_jobs(conn, status="filtered"))
@@ -582,6 +608,14 @@ def run_extraction(
     return stats
 
 
+def current_stamps(config: ExtractionConfig) -> list[str]:
+    """Every stamp that counts as current: Gemini's, and the fallback model's when one is set."""
+    stamps = [extraction_version(config)]
+    if config.fallback_provider:
+        stamps.append(extraction_version(config, config.fallback_model))
+    return stamps
+
+
 def stale_jobs(conn, config: ExtractionConfig | None = None) -> dict[str | None, list[dict]]:
     """Extracted/scored jobs whose stamp is not the current one, grouped by their old stamp
     (None = written before stamps existed). Lists only: re-extracting costs 1 request per job,
@@ -589,11 +623,13 @@ def stale_jobs(conn, config: ExtractionConfig | None = None) -> dict[str | None,
     if config is None:
         config = load_extraction_config()
     groups: dict[str | None, list[dict]] = {}
+    stamps = current_stamps(config)
     rows = conn.execute(
         "SELECT job_id, company, title, extraction_version FROM jobs "
-        "WHERE status IN ('extracted', 'scored') AND (extraction_version IS NULL OR extraction_version != ?) "
+        "WHERE status IN ('extracted', 'scored') "
+        f"AND (extraction_version IS NULL OR extraction_version NOT IN ({', '.join('?' for _ in stamps)})) "
         "ORDER BY extraction_version, job_id",
-        (extraction_version(config),),
+        stamps,
     )
     for row in rows:
         groups.setdefault(row["extraction_version"], []).append(dict(row))
@@ -660,6 +696,12 @@ def main(argv: list[str] | None = None) -> int:
         "--reguard", action="store_true", help="apply the current guards to jobs extracted without them (no API call)"
     )
     parser.add_argument("--usage-path", default=str(DEFAULT_USAGE_PATH))
+    parser.add_argument(
+        "--provider",
+        choices=["auto", "gemini", "nvidia"],
+        default="auto",
+        help="auto: Gemini, then the configured fallback when Gemini's daily budget is spent",
+    )
     parser.add_argument("--lock-path", default=str(DEFAULT_LOCK_PATH))
     args = parser.parse_args(argv)
 
@@ -689,7 +731,7 @@ def main(argv: list[str] | None = None) -> int:
             groups = stale_jobs(conn, config)
         finally:
             conn.close()
-        print(f"current stamp: {extraction_version(config)}")
+        print(f"current stamps: {', '.join(current_stamps(config))}")
         for stamp, jobs in groups.items():
             print(f"  {stamp or '(no stamp)'}: {len(jobs)} job(s)")
             for j in jobs:
@@ -697,37 +739,84 @@ def main(argv: list[str] | None = None) -> int:
         print(f"stale: {sum(len(j) for j in groups.values())}")
         return 0
 
-    usage = DailyUsage(config.daily_budget, args.usage_path)
+    stages = []
+    if args.provider in ("auto", "gemini"):
+        stages.append("gemini")
+    if args.provider == "nvidia" or (args.provider == "auto" and config.fallback_provider == "nvidia"):
+        stages.append("nvidia")
+    if "nvidia" in stages and not config.fallback_model:
+        print("config error: no fallback.model set in config/extraction.yml", file=sys.stderr)
+        return 1
+
+    results: list[tuple[str, ExtractionStats, DailyUsage]] = []
     try:
         with RunLock(args.lock_path, what="extraction", kind="flash-lite"):
-            if usage.remaining() == 0:
-                print(f"NOT RUN: {usage.summary()}")
-                return 2
-            try:
-                chain = build_extraction_chain()
-            except RuntimeError as err:
-                print(f"config error: {err}", file=sys.stderr)
-                return 1
             conn = connect(args.db)
             try:
                 init_db(conn)
-                stats = run_extraction(conn, config, chain, usage=usage, limit=args.limit)
+                remaining = args.limit
+                for stage in stages:
+                    if stage == "gemini":
+                        usage = DailyUsage(config.daily_budget, args.usage_path)
+                        if usage.remaining() == 0:
+                            print(f"gemini NOT RUN: {usage.summary()}")
+                            if stages[-1] == "gemini":
+                                return 2
+                            continue
+                        try:
+                            chain = build_extraction_chain()
+                        except RuntimeError as err:
+                            print(f"config error: {err}", file=sys.stderr)
+                            return 1
+                        stats = run_extraction(conn, config, chain, usage=usage, limit=remaining)
+                    else:
+                        usage = DailyUsage(
+                            config.fallback_requests_per_day,
+                            Path(args.usage_path).with_name(config.fallback_model.replace("/", "_") + ".json"),
+                        )
+                        try:
+                            chain = NvidiaChain(
+                                config.fallback_model,
+                                ExtractionResult,
+                                base_url=config.fallback_base_url,
+                                timeout=config.fallback_timeout_seconds,
+                                max_tokens=config.fallback_max_tokens,
+                            )
+                        except RuntimeError as err:
+                            print(f"nvidia NOT RUN: {err}")
+                            break
+                        paced = dataclasses.replace(
+                            config,
+                            requests_per_minute=max(
+                                1, int(config.fallback_requests_per_minute * config.fallback_headroom)
+                            ),
+                        )
+                        stats = run_extraction(
+                            conn, paced, chain, usage=usage, limit=remaining, model=config.fallback_model
+                        )
+                    results.append((stage, stats, usage))
+                    if remaining is not None:
+                        remaining -= stats.seen
+                    # Only a spent daily budget hands over to the fallback; any other stop ends the run.
+                    if stats.stopped != "daily_quota" or (remaining is not None and remaining <= 0):
+                        break
             finally:
                 conn.close()
     except LockHeld as err:
         print(f"NOT RUN: {err}")
         return 4
 
-    if stats.stopped:
-        hint = _STOP_HINTS.get(stats.stopped, "")
-        reset = f"; resets {reset_text(datetime.now(timezone.utc))}" if stats.stopped == "daily_quota" else ""
-        print(f"STOPPED ({stats.stopped}): {stats.stop_detail} -- {hint}{reset}")
-    print(
-        f"seen={stats.seen} extracted={stats.extracted} skipped_thin={stats.skipped_thin} "
-        f"schema_failed={stats.schema_failed} stopped={stats.stopped or 'none'} "
-        f"used_today={usage.used()}/{usage.budget}"
-    )
-    return 2 if stats.stopped else 0
+    for stage, stats, usage in results:
+        if stats.stopped:
+            hint = _STOP_HINTS.get(stats.stopped, "")
+            reset = f"; resets {reset_text(datetime.now(timezone.utc))}" if stats.stopped == "daily_quota" else ""
+            print(f"{stage} STOPPED ({stats.stopped}): {stats.stop_detail} -- {hint}{reset}")
+        print(
+            f"{stage}: seen={stats.seen} extracted={stats.extracted} skipped_thin={stats.skipped_thin} "
+            f"schema_failed={stats.schema_failed} stopped={stats.stopped or 'none'} "
+            f"used_today={usage.used()}/{usage.budget}"
+        )
+    return 2 if results and results[-1][1].stopped else 0
 
 
 if __name__ == "__main__":

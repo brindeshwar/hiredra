@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import json
 import os
+import random
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -34,6 +35,19 @@ from google.genai.errors import APIError
 
 PACIFIC = ZoneInfo("America/Los_Angeles")
 IST = ZoneInfo("Asia/Kolkata")
+
+
+class HTTPProviderTransient(RuntimeError):
+    """A non-Google provider (NVIDIA) failed in a way a retry can fix: 429, 5xx, a timeout or a
+    dropped connection. ``retry_after`` carries the server's own Retry-After when it sent one."""
+
+    def __init__(self, message: str, retry_after: float | None = None):
+        super().__init__(message)
+        self.retry_after = retry_after
+
+
+class HTTPProviderRefused(RuntimeError):
+    """A non-Google provider answered and said no (400 / 401 / 403 / 404 / 422): not retried."""
 
 
 class ProviderError(RuntimeError):
@@ -133,6 +147,8 @@ def _is_transient(exc: BaseException) -> bool:
     neither is a daily quota, which a retry cannot fix."""
     if _is_daily_quota(exc):
         return False
+    if isinstance(exc, HTTPProviderTransient):
+        return True
     return _is_network_error(exc) or any(e.code == 429 or e.code >= 500 for e in _api_errors(exc))
 
 
@@ -150,7 +166,7 @@ def classify_failure(exc: BaseException) -> str | None:
         return "daily_quota"
     if _is_transient(exc):
         return "transient"
-    if any(True for _ in _api_errors(exc)):
+    if any(True for _ in _api_errors(exc)) or isinstance(exc, HTTPProviderRefused):
         return "api_error"
     if isinstance(exc, ProviderError):
         return "bad_response"
@@ -159,7 +175,9 @@ def classify_failure(exc: BaseException) -> str | None:
 
 def _retry_after_seconds(exc: BaseException) -> float | None:
     """The server's own ``RetryInfo.retryDelay`` (e.g. ``"57s"``), if the error
-    carries one. Free-tier 429s do."""
+    carries one. Free-tier 429s do. A non-Google provider's Retry-After counts too."""
+    if isinstance(exc, HTTPProviderTransient) and exc.retry_after is not None:
+        return exc.retry_after
     for e in _api_errors(exc):
         details = e.details if isinstance(e.details, dict) else {}
         body = details.get("error", details)
@@ -279,3 +297,15 @@ class DailyUsage:
         if note:
             rec["note"] = note
         self._save(rec)
+
+
+def jittered_wait(retry_state, rng: Callable[[], float] = random.random) -> float:
+    """The owner's retry rule, for every provider: wait 1, 2, 4, 8 s (doubling per attempt) plus a
+    random jitter of up to the same amount, so two of our processes never retry in lockstep. When
+    the server names its own retry time, wait that + 1 s, plus up to 1 s of jitter. Capped at 120 s.
+    Use as tenacity's ``wait=``."""
+    hint = _retry_after_seconds(retry_state.outcome.exception())
+    if hint is not None:
+        return min(hint + 1.0 + rng(), 120.0)
+    base = float(2 ** (retry_state.attempt_number - 1))
+    return min(base + rng() * base, 120.0)

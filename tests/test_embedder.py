@@ -136,7 +136,7 @@ def test_retries_a_wrapped_429_then_succeeds():
     out = embed(["fastapi"])
     assert out.shape == (1, DIM)
     assert len(client.calls) == 2  # one failure + one success
-    assert any(s >= 2 for s in t.slept)  # backoff floor (min=2)
+    assert any(1.0 <= s < 2.0 for s in t.slept)  # first retry: 1 s + up to 1 s jitter (owner rule)
 
 
 _RETRY_INFO_429 = {
@@ -156,7 +156,7 @@ def test_a_429_with_retry_info_waits_the_servers_delay_not_the_short_backoff():
     embed, client, t = _embedder(client=FakeClient(fail_with=[err]))
     embed(["fastapi"])
     assert len(client.calls) == 2
-    assert 58.0 in t.slept  # 57s hint + 1s margin
+    assert any(58.0 <= s < 59.0 for s in t.slept)  # 57s hint + 1s margin + up to 1s jitter
 
 
 def test_retry_after_parsing_tolerates_missing_or_malformed_info():
@@ -464,7 +464,7 @@ def test_a_network_error_is_retried_like_a_5xx_and_then_succeeds():
     err = _wrapped(httpx.ConnectError("connection refused"))
     embed, client, t = _embedder(client=FakeClient(fail_with=[err]))
     out = embed(["fastapi"])
-    assert out.shape == (1, DIM) and len(client.calls) == 2 and any(s >= 2 for s in t.slept)
+    assert out.shape == (1, DIM) and len(client.calls) == 2 and any(1.0 <= s < 2.0 for s in t.slept)
 
 
 def test_a_network_error_that_never_clears_gives_up_after_four_attempts():
