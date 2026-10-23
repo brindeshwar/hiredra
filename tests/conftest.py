@@ -129,3 +129,11 @@ def ashby_payload() -> dict:
             {"id": "job_003", "title": "Malformed (no jobUrl)"},
         ]
     }
+
+
+@pytest.fixture(autouse=True)
+def _no_real_nvidia_key(monkeypatch):
+    """No test may reach NVIDIA's real API: the key is blanked for every test (python-dotenv never
+    overrides a variable that is already set), so a real NvidiaChain can't be built by accident.
+    Tests that need one pass a fake client."""
+    monkeypatch.setenv("NVIDIA_API_KEY", "")

@@ -60,3 +60,20 @@ skill_synonyms:
   amazon bedrock: [aws bedrock, bedrock]
   a/b testing: [a/b test, ab test]
   ci/cd: [ci cd, continuous integration, continuous delivery]
+
+# --- Fallback provider (docs/model-selection-extraction.md) ---------------------------------
+# When Gemini's daily budget is spent, the same run continues on this model for the remaining jobs.
+# `python -m hiredra.extraction --provider nvidia` forces it (big re-runs). The owner accepted
+# NVIDIA's API trial terms for this use (docs/decisions.md). Key: NVIDIA_API_KEY in .env.
+# One call at a time, paced under requests_per_minute x headroom, each with a timeout; retries use
+# the owner's rule (1, 2, 4, 8 s + jitter). NVIDIA states no daily cap: requests_per_day is our own
+# guard rail and a visible count (data/usage/<model>.json).
+fallback:
+  provider: nvidia
+  model: nvidia/nemotron-3.5-super-vl-120b-a12b
+  base_url: https://integrate.api.nvidia.com/v1
+  requests_per_minute: 40
+  headroom: 0.90
+  requests_per_day: 2000
+  timeout_seconds: 120
+  max_tokens: 4096
