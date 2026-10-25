@@ -392,8 +392,10 @@ def test_write_fit_config_keeps_comments_and_loads_back(tmp_path):
     assert load_graph_config(path).have == 0.88
 
 
-def test_the_shipped_config_has_no_calibration_yet():
-    assert load_graph_config().calibration_id is None
+def test_the_shipped_config_is_calibrated_and_has_its_report():
+    cfg = load_graph_config()
+    assert cfg.calibration_id and cfg.calibration_id.startswith("step5-")
+    assert (REPO / "calibration" / "reports" / f"{cfg.calibration_id}.md").exists()
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────────

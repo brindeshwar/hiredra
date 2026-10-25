@@ -1,0 +1,181 @@
+# same      = an interviewer would accept experience in A as experience in B
+# related   = transferable; quick ramp-up; deserves partial credit
+# unrelated = no meaningful transfer
+# split is assigned before any cosine is seen. Labelling is blind to cosine.
+# Labels 2026-10-25: three LLM reviewers relabelled all 174 pairs (rounds 1-2 pre-filled with the owner's answers);
+# the final label is their majority, accepted by the owner.
+a,b,label,split,source,note
+pinecone,python,unrelated,tune,real,
+design systems,system design,unrelated,tune,real,
+visx,onnx,unrelated,tune,real,
+web api,rest api,related,holdout,real,
+data science,machine learning,related,holdout,real,
+lever ats,slack,unrelated,tune,real,
+ray serve,fastapi,related,holdout,real,
+jira,confluence,related,tune,trap,sibling products
+machine learning,deep learning,related,tune,trap,subfield
+service workers,nginx,unrelated,tune,real,
+object-oriented design,system design,related,tune,real,
+sans gcih,application security,related,tune,real,
+rag,vector databases,related,holdout,trap,part of a pipeline
+linux,windows,related,tune,trap,rival OSes
+async python,asyncio,same,tune,real,
+postgresql,mysql,related,tune,trap,sibling databases
+ecdsa,oauth2,unrelated,tune,real,
+helm,linux,unrelated,tune,real,
+agent frameworks,llm agents,related,tune,real,
+mongodb,dynamodb,related,tune,trap,sibling NoSQL
+typescript,javascript,related,tune,trap,superset
+sql server,sql,related,holdout,real,
+http apis,rest api,related,tune,real,
+fastapi,django,related,holdout,trap,heavier sibling
+agentic ai,ai agents,same,tune,real,
+halide,sqlite,unrelated,tune,real,
+mcps,mcp,same,tune,real,
+tensorflow,pytorch,related,holdout,trap,rival frameworks
+prompt engineering,fine-tuning,related,tune,trap,two ways to adapt LLMs
+model optimization,model evaluation,related,tune,real,
+rest api,graphql,related,tune,trap,rival API styles
+junit,unit testing,related,tune,real,
+github actions,ci/cd,related,tune,trap,one tool vs the practice
+css3,css,same,tune,real,
+google cloud computing,machine learning,unrelated,tune,real,
+pick,git,unrelated,tune,real,
+redis,caching,related,holdout,trap,tool vs practice
+hls,http,related,tune,real,
+data engineering,data science,related,tune,trap,"different jobs, shared data"
+tpu,tensorflow,related,tune,real,
+mayastor,mypy,unrelated,tune,real,
+react,react native,related,tune,trap,"same word, different thing"
+micronaut,transformers,unrelated,tune,real,
+kafka,fastapi,unrelated,tune,trap,unrelated backend pieces
+dvc,mcp,unrelated,holdout,real,
+generative ai applications,generative ai,related,tune,real,
+apache spark,pyarrow,related,tune,real,
+elysia,azure,unrelated,tune,real,
+bm25,hybrid retrieval,related,tune,real,
+ci/cd platforms,ci/cd,related,tune,real,
+node.js,express,related,holdout,trap,runtime vs framework
+restful api integration,rest api,related,holdout,real,
+espresso,java,related,tune,real,
+salesforce,sales,unrelated,holdout,trap,false friend
+ai systems,ai agents,related,tune,real,
+vantage,azure,unrelated,holdout,real,
+grpc,rest api,related,holdout,real,
+java,javascript,unrelated,holdout,trap,false friend
+computer vision,natural language processing,related,tune,trap,sibling AI fields
+trl,testing,unrelated,holdout,real,
+android,linux,unrelated,holdout,real,
+emr,named entity recognition (ner),unrelated,holdout,real,
+fde,http,unrelated,tune,real,
+ruby,gemini,unrelated,tune,real,
+langsmith,langchain,related,tune,real,
+lnd,llm,unrelated,tune,real,
+docker,kubernetes,related,tune,trap,neighbouring tools
+virtualization,linux,related,tune,real,
+sql,nosql,related,tune,trap,opposite-sounding
+unit testing,integration testing,related,tune,trap,sibling test levels
+evm,machine learning,unrelated,tune,real,
+python,c++,related,tune,trap,different languages
+thoughtspot,semantic search,unrelated,tune,real,
+radius,statistics,unrelated,holdout,real,
+aws,azure,related,tune,trap,rival clouds
+fastapi,flask,related,tune,trap,sibling web frameworks
+qa,named entity recognition (ner),unrelated,tune,real,
+continuous integration,ci/cd,related,tune,real,
+git,github,related,holdout,trap,tool vs hosting
+auth0,oauth2,related,tune,real,
+langchain,llamaindex,related,tune,trap,rival LLM frameworks
+git/github,github,same,tune,real,
+ai alignment,ai safety,related,tune,real,
+apache spark,pandas,related,holdout,trap,big vs small dataframes
+multi-agent architectures,agent orchestration,related,tune,real,
+c,python,related,tune,real,
+firewalls,security,related,holdout,real,
+excel,python,unrelated,holdout,trap,different tools
+hsms,http,unrelated,holdout,real,
+object-oriented programming,oop,same,tune,trap,round 2 synonym candidate
+dbt,sqlite,related,tune,real,
+servicenow,ci/cd,unrelated,holdout,real,
+ui tests,unit testing,related,holdout,real,
+microsoft foundry,generative ai,related,tune,real,
+laravel,node.js,related,holdout,real,
+chatgpt,prompt engineering,related,holdout,real,
+vector store,vector databases,same,tune,trap,round 2 synonym candidate
+web crawling,web scraping,related,holdout,trap,round 2 synonym candidate
+dl,deep learning,same,tune,trap,round 2 synonym candidate
+containerization,docker,related,holdout,trap,round 2 synonym candidate
+ci pipelines,ci/cd,related,tune,trap,round 2 synonym candidate
+llm evaluation,llm evals,same,holdout,trap,round 2 synonym candidate
+semantic retrieval,semantic search,same,tune,trap,round 2 synonym candidate
+fsdp,pytorch,related,holdout,real,
+blender,machine learning,unrelated,tune,real,
+deck.gl,streamlit,unrelated,tune,real,
+data analysis,statistics,related,holdout,real,
+llm applications,llm apps,same,holdout,trap,round 2 synonym candidate
+argocd,ci/cd,related,holdout,real,
+tool calling,function calling,same,tune,trap,round 2 synonym candidate
+model serving,model deployment,related,tune,trap,round 2 synonym candidate
+webassembly,javascript,related,holdout,real,
+pydantic models,pydantic,same,holdout,trap,round 2 synonym candidate
+serverless functions,aws lambda,related,tune,trap,round 2 synonym candidate
+data wrangling,data cleaning,related,tune,trap,round 2 synonym candidate
+hugging face transformers,transformers,same,tune,trap,round 2 synonym candidate
+unsloth,slack,unrelated,holdout,real,
+agentic workflows,ai agents,related,holdout,trap,round 2 synonym candidate
+temporal,sql,unrelated,tune,real,
+rabbit,python,unrelated,tune,real,
+api development,api design,related,holdout,trap,round 2 synonym candidate
+speech-to-text,speech recognition,same,holdout,trap,round 2 synonym candidate
+prompt design,prompt engineering,same,holdout,trap,round 2 synonym candidate
+version control,git,related,holdout,trap,round 2 synonym candidate
+information retrieval,search,related,tune,trap,round 2 synonym candidate
+attention mechanisms,reinforcement learning,unrelated,tune,real,
+text embeddings,embeddings,related,holdout,trap,round 2 synonym candidate
+bdd,mongodb,unrelated,tune,real,
+initrd,linux,related,holdout,real,
+restful services,rest api,same,holdout,trap,round 2 synonym candidate
+conversational ai,chatbots,related,tune,trap,round 2 synonym candidate
+nosql databases,nosql,same,tune,trap,round 2 synonym candidate
+aws genai services,generative ai,related,tune,real,
+wordpress,html,related,holdout,real,round 3 (holdout-only)
+fips,http,unrelated,holdout,real,round 3 (holdout-only)
+openobserve,ollama,unrelated,holdout,real,round 3 (holdout-only)
+selenium,html,related,holdout,real,round 3 (holdout-only)
+tilelang,langchain,unrelated,holdout,real,round 3 (holdout-only)
+google analytics,machine learning,unrelated,holdout,real,round 3 (holdout-only)
+rest services,rest api,same,holdout,real,round 3 (holdout-only)
+neural networks,machine learning,related,holdout,real,round 3 (holdout-only)
+ci systems,ci/cd,related,holdout,real,round 3 (holdout-only)
+dagster,data pipelines,related,holdout,real,round 3 (holdout-only)
+large-scale financial tracking systems,system design,related,holdout,real,round 3 (holdout-only)
+langfuse,langchain,related,holdout,real,round 3 (holdout-only)
+github ci/cd,github actions,same,holdout,real,round 3 (holdout-only)
+bootloaders,linux,related,holdout,real,round 3 (holdout-only)
+workers ai,ai agents,related,holdout,real,round 3 (holdout-only)
+long-context models,vision language models,related,holdout,real,round 3 (holdout-only)
+ocr,opencv,related,holdout,real,round 3 (holdout-only)
+ovs,aws,unrelated,holdout,real,round 3 (holdout-only)
+phlex,python,unrelated,holdout,real,round 3 (holdout-only)
+azure ai,azure,related,holdout,real,round 3 (holdout-only)
+fly.io,nginx,unrelated,holdout,real,round 3 (holdout-only)
+mlops,machine learning,related,holdout,real,round 3 (holdout-only)
+vxlan,linux,related,holdout,real,round 3 (holdout-only)
+power bi,sql,related,holdout,real,round 3 (holdout-only)
+html5,html,same,holdout,real,round 3 (holdout-only)
+web3,web scraping,unrelated,holdout,real,round 3 (holdout-only)
+microsoft copilot,generative ai,related,holdout,real,round 3 (holdout-only)
+minio,linux,unrelated,holdout,real,round 3 (holdout-only)
+dataops,data pipelines,related,holdout,real,round 3 (holdout-only)
+px4,pyarrow,unrelated,holdout,real,round 3 (holdout-only)
+firebase,mongodb,related,holdout,real,round 3 (holdout-only)
+multi-agent systems,ai agents,related,holdout,real,round 3 (holdout-only)
+ubuntu,linux,related,holdout,real,round 3 (holdout-only)
+agentic workflows,llm agents,related,holdout,real,round 3 (holdout-only)
+datadog llm observability,llm integration,related,holdout,real,round 3 (holdout-only)
+sendgrid,slack,unrelated,holdout,real,round 3 (holdout-only)
+onnx runtime,onnx,related,holdout,real,round 3 (holdout-only)
+rest api design,api design,related,holdout,real,round 3 (holdout-only)
+elt,jest,unrelated,holdout,real,round 3 (holdout-only)
+hsm,http,unrelated,holdout,real,round 3 (holdout-only)
+dexie,sqlite,related,holdout,real,round 3 (holdout-only)

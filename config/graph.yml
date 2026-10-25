@@ -75,8 +75,9 @@ fit:
   # `python -m hiredra.graph calibrate --write` rewrites have/adj and adds
   # a calibration_id key, step5-<date> (the regression test then guards them).
   have: 0.90
-  adj: 0.70
+  adj: 0.68
 
+  calibration_id: step5-2026-10-25
 harvest:
   # Market vocabulary comes from open-jobs' OWN skill fields (CC0), not from
   # Gemini calls: each enriched posting carries enrichment_json.data.
