@@ -68,6 +68,7 @@ def _weights(tmp_path, cfg, **over):
         "cover_bar": 0.85,
         "good_to_have_factor": 0.4,
         "apply_line": None,
+        "min_skills": 1,  # the few_skills rule has its own test below
         **over,
     }
     p = tmp_path / f"weights-{abs(hash(json.dumps(data, sort_keys=True)))}.yml"
@@ -198,6 +199,19 @@ def test_review_reasons_are_stored_but_the_job_is_still_scored(world):
     row = get_job(world.conn, "j1")
     assert row["status"] == "scored" and json.loads(row["review_reason"]) == ["likely_ghost", "low_confidence"]
     assert row["score"] is not None
+
+
+def test_a_job_with_too_few_skills_goes_to_review_and_is_never_promoted(world):
+    w, _ = _weights(world.tmp, world.cfg, min_skills=3, apply_line=-10.0)
+    world.job("few", [("django", "required"), ("flask", "required")])
+    world.job("enough", [("django", "required"), ("flask", "required"), ("mysql", "good_to_have")])
+    world.run(w)
+    few, enough = get_job(world.conn, "few"), get_job(world.conn, "enough")
+    assert few["status"] == "scored" and json.loads(few["review_reason"]) == ["few_skills"]
+    assert enough["review_reason"] is None
+    assert [j["job_id"] for j in sr.promoted(world.conn, w)] == [
+        "enough"
+    ]  # below-floor apply line: only skill count gates
 
 
 def test_f2_a_merge_after_extraction_scores_against_the_survivor_with_zero_embeddings(world):

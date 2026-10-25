@@ -13,7 +13,8 @@ docs/scoring.md sec 2).
 
 Code decides, the model never does (CLAUDE.md rule 3): the LLM only supplied the bucket and the
 skill names. There is no legitimacy term (D2); ``review_reasons`` routes doubtful jobs to the
-review list instead. Empty cases are defined (no skills -> coverage 0, gap 0; no bucket ->
+review list instead, including jobs with fewer than ``min_skills`` extracted skills (their
+coverage would be trivially high: 1 of 1 cleared is 100%). Empty cases are defined (no skills -> coverage 0, gap 0; no bucket ->
 domain_fit 0), so the score can never be NaN.
 """
 
@@ -48,6 +49,7 @@ _KEYS = {
     "cover_bar",
     "good_to_have_factor",
     "apply_line",
+    "min_skills",
 }
 
 #: float32 cosines can land a hair under an exact bar (same tolerance as hiredra.graph.fit).
@@ -64,6 +66,7 @@ class Weights:
     cover_bar: float  # resolved: never None after loading
     good_to_have_factor: float
     apply_line: float | None
+    min_skills: int  # fewer extracted skills than this -> review list (few_skills)
     score_version: str  # "<calibration_id>:<sha8>" over every value that changes a score
 
 
@@ -120,12 +123,17 @@ def load_weights(graph_cfg: GraphConfig, path: Path | str = DEFAULT_WEIGHTS_PATH
 
     apply_line = None if data["apply_line"] is None else _number(data["apply_line"], "apply_line")
 
+    min_skills = data["min_skills"]
+    if isinstance(min_skills, bool) or not isinstance(min_skills, int) or min_skills < 1:
+        raise ValueError(f"weights config: min_skills must be a whole number >= 1, got {min_skills!r}")
+
     canonical = {
         "domain_fit": domain_fit,
         **w,
         "cover_bar": cover_bar,
         "good_to_have_factor": x,
         "apply_line": apply_line,
+        "min_skills": min_skills,
         "fit.have": have,
         "fit.adj": adj,
     }
@@ -136,6 +144,7 @@ def load_weights(graph_cfg: GraphConfig, path: Path | str = DEFAULT_WEIGHTS_PATH
         cover_bar=cover_bar,
         good_to_have_factor=x,
         apply_line=apply_line,
+        min_skills=min_skills,
         score_version=f"{cid}:{sha8}",
         **w,
     )
@@ -197,11 +206,14 @@ def score_job(skills: Iterable[tuple[float, str]], bucket: str | None, weights: 
     return ScoreResult(score=score, domain_fit=d, coverage=c, gap_distance=g)
 
 
-def review_reasons(job: Mapping) -> list[str]:
-    """Why a job goes to the review list instead of the ranked list (D2). Empty = no reason."""
+def review_reasons(job: Mapping, n_skills: int, min_skills: int) -> list[str]:
+    """Why a job goes to the review list instead of the ranked list (D2). Empty = no reason.
+    ``few_skills``: with fewer than ``min_skills`` skills, coverage says too little to rank on."""
     reasons: list[str] = []
     if job.get("legitimacy") in ("suspect", "likely_ghost"):
         reasons.append(job["legitimacy"])
     if job.get("extraction_confidence") == "low":
         reasons.append("low_confidence")
+    if n_skills < min_skills:
+        reasons.append("few_skills")
     return reasons

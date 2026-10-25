@@ -38,6 +38,7 @@ _BASE = {
     "cover_bar": None,
     "good_to_have_factor": 0.4,
     "apply_line": None,
+    "min_skills": 3,
 }
 
 
@@ -98,16 +99,20 @@ def test_unknown_bucket_and_requirement_are_errors(tmp_path):
 
 
 @pytest.mark.parametrize(
-    ("job", "reasons"),
+    ("job", "n_skills", "reasons"),
     [
-        ({"legitimacy": "legitimate", "extraction_confidence": "high"}, []),
-        ({"legitimacy": "suspect", "extraction_confidence": "high"}, ["suspect"]),
-        ({"legitimacy": "likely_ghost", "extraction_confidence": "low"}, ["likely_ghost", "low_confidence"]),
-        ({"legitimacy": None, "extraction_confidence": "low"}, ["low_confidence"]),
+        ({"legitimacy": "legitimate", "extraction_confidence": "high"}, 5, []),
+        ({"legitimacy": "suspect", "extraction_confidence": "high"}, 5, ["suspect"]),
+        ({"legitimacy": "likely_ghost", "extraction_confidence": "low"}, 5, ["likely_ghost", "low_confidence"]),
+        ({"legitimacy": None, "extraction_confidence": "low"}, 5, ["low_confidence"]),
+        ({"legitimacy": "legitimate", "extraction_confidence": "high"}, 3, []),  # exactly min_skills is enough
+        ({"legitimacy": "legitimate", "extraction_confidence": "high"}, 2, ["few_skills"]),
+        ({"legitimacy": "legitimate", "extraction_confidence": "high"}, 0, ["few_skills"]),
+        ({"legitimacy": "suspect", "extraction_confidence": "low"}, 1, ["suspect", "low_confidence", "few_skills"]),
     ],
 )
-def test_review_reasons(job, reasons):
-    assert sc.review_reasons(job) == reasons
+def test_review_reasons(job, n_skills, reasons):
+    assert sc.review_reasons(job, n_skills, 3) == reasons
 
 
 def test_legitimacy_never_changes_the_score(tmp_path):
@@ -165,7 +170,7 @@ def test_the_shipped_config_loads_against_the_shipped_graph_config():
     g = load_graph_config()
     w = sc.load_weights(g)
     assert w.cover_bar == pytest.approx((g.adj + g.have) / 2)
-    assert w.apply_line is None and w.calibration_id == "placeholder"
+    assert w.apply_line is None and w.calibration_id == "placeholder" and w.min_skills == 3
     assert w.score_version.startswith("placeholder:") and len(w.score_version.split(":")[1]) == 8
 
 
@@ -194,6 +199,10 @@ def test_null_cover_bar_is_the_midpoint(tmp_path):
         ({"cover_bar": 0.90}, "strictly between"),
         ({"cover_bar": 0.65}, "strictly between"),
         ({"apply_line": "high"}, "apply_line must be a number"),
+        ({"min_skills": 0}, "min_skills must be a whole number >= 1"),
+        ({"min_skills": 2.5}, "min_skills must be a whole number >= 1"),
+        ({"min_skills": True}, "min_skills must be a whole number >= 1"),
+        ({"min_skills": None}, "min_skills must be a whole number >= 1"),
     ],
 )
 def test_loader_rejects(tmp_path, over, message):
@@ -220,7 +229,13 @@ def test_edge_values_that_are_allowed(tmp_path):
 def test_score_version_changes_with_any_value_and_with_have_adj(tmp_path):
     base = _weights(tmp_path).score_version
     assert _weights(tmp_path).score_version == base  # deterministic
-    for over in ({"w_gap": 0.6}, {"good_to_have_factor": 0.5}, {"apply_line": 0.3}, {"cover_bar": 0.81}):
+    for over in (
+        {"w_gap": 0.6},
+        {"good_to_have_factor": 0.5},
+        {"apply_line": 0.3},
+        {"cover_bar": 0.81},
+        {"min_skills": 4},
+    ):
         assert _weights(tmp_path, **over).score_version != base, over
     assert _weights(tmp_path, domain_fit={**_BASE["domain_fit"], "ml": 0.25}).score_version != base
     assert _weights(tmp_path, graph=_graph(have=0.91)).score_version != base

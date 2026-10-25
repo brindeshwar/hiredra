@@ -191,7 +191,7 @@ def run_scoring(
             break
 
         result = score_job([(f.fit, i["requirement"]) for f, i in zip(fits, items)], job["domain_bucket"], weights)
-        reasons = review_reasons(job)
+        reasons = review_reasons(job, len(items), weights.min_skills)
         features = build_features(job, items, fits, result, reasons, weights, graph_cfg, levels)
         set_score(
             conn,
