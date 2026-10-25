@@ -126,8 +126,8 @@ class World:
         set_status(self.conn, job_id, "extracted")
         return job_id
 
-    def run(self, weights, embed_factory=None):
-        return sr.run_scoring(self.conn, self.cfg, weights, self.profile, embed_factory)
+    def run(self, weights, embed_factory=None, force=False):
+        return sr.run_scoring(self.conn, self.cfg, weights, self.profile, embed_factory, force=force)
 
 
 @pytest.fixture()
@@ -212,6 +212,15 @@ def test_a_job_with_too_few_skills_goes_to_review_and_is_never_promoted(world):
     assert [j["job_id"] for j in sr.promoted(world.conn, w)] == [
         "enough"
     ]  # below-floor apply line: only skill count gates
+
+
+def test_force_rescores_fresh_jobs_and_picks_up_a_merge(world):
+    w, _ = _weights(world.tmp, world.cfg)
+    world.job("j1", [("django", "required")])
+    assert world.run(w).scored == 1
+    assert world.run(w).selected == 0  # nothing stale: a plain run selects nothing
+    stats = world.run(w, force=True)
+    assert (stats.selected, stats.rescored, stats.scored) == (1, 1, 0)
 
 
 def test_f2_a_merge_after_extraction_scores_against_the_survivor_with_zero_embeddings(world):

@@ -63,7 +63,7 @@ def _cmd_run(conn, args, graph_cfg, weights) -> int:
 
                 return build_embedder(graph_cfg, usage=usage)
 
-            stats = sr.run_scoring(conn, graph_cfg, weights, profile, embedder)
+            stats = sr.run_scoring(conn, graph_cfg, weights, profile, embedder, force=args.force)
     except LockHeld as exc:
         _log(f"NOT RUN: {exc}")
         return 4
@@ -195,7 +195,8 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--usage-path", default=str(DEFAULT_USAGE_PATH))
     ap.add_argument("--lock-path", default=str(DEFAULT_LOCK_PATH), help="the graph lock (the freeze rule)")
     sub = ap.add_subparsers(dest="command", required=True)
-    sub.add_parser("run")
+    run_p = sub.add_parser("run")
+    run_p.add_argument("--force", action="store_true", help="re-score every scored job (after graph merges; 0 API)")
     lst = sub.add_parser("list")
     lst.add_argument("--top", type=int, default=None)
     lst.add_argument("--all", action="store_true")

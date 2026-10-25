@@ -111,9 +111,12 @@ def test_the_shipped_alias_file_is_valid_and_conservative():
     aliases = load_aliases(DEFAULT_ALIAS_PATH)
     assert aliases["kubernetes"] == ("k8s",) and aliases["go"] == ("golang",)
     assert aliases["c#"] == ("csharp",)
-    # ambiguous abbreviations are deliberately absent
+    # ambiguous abbreviations are deliberately absent ("node" -> node.js was added by owner decision)
     every_alias = {a for v in aliases.values() for a in v}
-    assert every_alias.isdisjoint({"ai", "ci", "node", "ux"})
+    assert every_alias.isdisjoint({"ai", "ci", "ux"})
+    assert aliases["node.js"] == ("nodejs", "node")
+    # the owner's short/long forms that embeddings score below ADJ
+    assert "model context protocol" in aliases["mcp"] and aliases["rag"] == ("retrieval augmented generation",)
     assert not (set(aliases) & every_alias)  # one hop, no chains
 
 

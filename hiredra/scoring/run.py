@@ -63,8 +63,14 @@ def check_preconditions(conn, graph_cfg: GraphConfig, profile: ProfileSkills, ov
         )
 
 
-def select_jobs(conn, weights: Weights, graph_cfg: GraphConfig, profile: ProfileSkills) -> list[dict]:
-    """``extracted`` jobs, plus ``scored`` ones with any stale stamp (oldest first)."""
+def select_jobs(
+    conn, weights: Weights, graph_cfg: GraphConfig, profile: ProfileSkills, *, force: bool = False
+) -> list[dict]:
+    """``extracted`` jobs, plus ``scored`` ones with any stale stamp (oldest first). ``force`` takes
+    every ``scored`` job: the stamps don't cover graph merges, so a merge needs a forced rescore."""
+    if force:
+        rows = conn.execute("SELECT * FROM jobs WHERE status IN ('extracted', 'scored') ORDER BY first_seen_at, job_id")
+        return [dict(r) for r in rows]
     rows = conn.execute(
         "SELECT * FROM jobs WHERE status = 'extracted' OR (status = 'scored' AND ("
         "score_version IS NOT ? OR score_embed_tag IS NOT ? OR score_skills_hash IS NOT ?)) "
@@ -142,6 +148,8 @@ def run_scoring(
     weights: Weights,
     profile: ProfileSkills,
     embed_factory: Callable[[], Embedder] | None = None,
+    *,
+    force: bool = False,
 ) -> ScoringStats:
     """Score the selected jobs. The caller holds the graph lock and has checked preconditions."""
     stats = ScoringStats()
@@ -159,7 +167,7 @@ def run_scoring(
             embedder.append(embed_factory())
         return embedder[0](names)
 
-    jobs = select_jobs(conn, weights, graph_cfg, profile)
+    jobs = select_jobs(conn, weights, graph_cfg, profile, force=force)
     stats.selected = len(jobs)
     for job in jobs:
         try:

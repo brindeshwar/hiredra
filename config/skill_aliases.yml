@@ -12,7 +12,8 @@
 #   canonical and an alias is an error.
 #
 # These are starter entries chosen conservatively -- delete anything you disagree
-# with. Deliberately NOT included (ambiguous): ai, ci, node, ux.
+# with. Deliberately NOT included (ambiguous): ai, ci, ux. ("node" was added on
+# 2026-10-25 by owner decision: in job skill lists it means Node.js.)
 
 aliases:
   kubernetes: [k8s]
@@ -23,15 +24,24 @@ aliases:
   azure: [microsoft azure]
   aws: [amazon web services]
   generative ai: [genai]
-  llm: [large language models]
+  llm: [large language models, large language models (llm)]
   machine learning: [ml]
   natural language processing: [nlp]
   sre: [site reliability engineering]
   vue: [vue.js]
-  node.js: [nodejs]
+  node.js: [nodejs, node]
   react: [react.js, reactjs]
   c#: [csharp]
   mongodb: [mongo]
   scikit-learn: [sklearn]
   postgresql: [postgres]
   ci/cd: [cicd]
+  # Short/long forms of the owner's own skills that embeddings score low (owner review 2026-10-25,
+  # data/merge-review-short-forms-2026-10-25.md). The cosine is today's similarity.
+  mcp: [model context protocol, mcps]                    # 0.57 / 0.75
+  rag: [retrieval augmented generation]                  # 0.67
+  named entity recognition (ner): [ner]                  # 0.70
+  s3: [amazon s3]                                        # 0.72
+  transformers: [hugging face transformers]              # 0.78
+  ec2: [amazon ec2]                                      # 0.80
+  gemini: [google gemini]                                # 0.85
