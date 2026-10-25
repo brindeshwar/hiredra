@@ -29,3 +29,8 @@ good_to_have_factor: 0.4
 # The quality floor (D13): jobs at or above it are promoted to tailoring. null = nothing is
 # promoted yet (Step 8 refuses to start). Jobs below it stay scored and visible.
 apply_line: null
+
+# A job with fewer extracted skills than this goes to the review list (few_skills) instead of
+# the ranked list: with 1 or 2 skills, coverage is trivially high (1 of 1 cleared = 100%).
+# Owner decision 2026-10-25 (option A; the formula itself is unchanged).
+min_skills: 3

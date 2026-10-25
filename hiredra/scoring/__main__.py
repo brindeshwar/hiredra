@@ -3,7 +3,7 @@
     python -m hiredra.scoring run                  # score extracted jobs + re-score stale ones (holds the graph lock)
     python -m hiredra.scoring list [--top N]       # the promoted jobs (above the apply line, or released)
     python -m hiredra.scoring list --all           # every scored job, below the line too (D13)
-    python -m hiredra.scoring review               # the review list (suspect / likely_ghost / low_confidence)
+    python -m hiredra.scoring review               # the review list (suspect / likely_ghost / low_confidence / few_skills)
     python -m hiredra.scoring show <job_id>        # the full feature breakdown
     python -m hiredra.scoring release <job_id>     # the owner's override: promote it (review list or below the line)
     python -m hiredra.scoring reject <job_id>      # drop it with detail "review: rejected"
