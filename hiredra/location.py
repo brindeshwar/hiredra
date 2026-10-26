@@ -18,6 +18,14 @@ Adapted for Hiredra:
 * Everything else (country/US-state/Indian-city dictionaries, the remote/
   hybrid/onsite heuristics, ``RESTRICT_RE``/``MACRO``, ``eligibility()``) is
   the same logic, reformatted to this file's style.
+
+Recognition rules added 2026-10-27 from freehire's ``internal/dict/location``
+(MIT), each measured over every job in the database before adoption
+(docs/freehire-merge/04-verification.md sec 7): 2-letter country codes and the
+US-state clash rule ("KA, IN" and "Bangalore, IN" were read as Indiana), the
+GeoNames city table as a last resort (``geonames_cities.tsv``), a spaced dash
+as a separator, UK postcodes, region and subdivision names, Cyrillic city
+prefixes, and a restriction stated in the title.
 """
 
 from __future__ import annotations
@@ -89,6 +97,12 @@ CA_PROV = {
     "SK": "Saskatchewan",
     "NS": "Nova Scotia",
     "NB": "New Brunswick",
+    # Hiredra addition: the rest of Canada (upstream had eight)
+    "NL": "Newfoundland and Labrador",
+    "PE": "Prince Edward Island",
+    "NT": "Northwest Territories",
+    "NU": "Nunavut",
+    "YT": "Yukon",
 }
 PROV_BY_NAME = {v.lower(): k for k, v in CA_PROV.items()}
 
@@ -1107,18 +1121,262 @@ CITY_COUNTRY.update({"tbilisi": "GE", "batumi": "GE", "kutaisi": "GE"})
 
 try:  # ~5k bare city names that resolve to one country >=90% of the time (open-jobs' build-city-table.py)
     _city_table = json.loads(Path(__file__).with_name("city_countries.json").read_text(encoding="utf-8"))
+    # Hiredra (2026-10-27): the table was built from job-location strings, so it also maps state/country
+    # codes and plain words to the country they were mostly seen with ("in"/"field"/"home" -> US). Codes are
+    # read by the subdivision/country rules in _one; the words are not places. Both are skipped.
+    _codes = {c.lower() for c in (*US_STATES, *CA_PROV, *ISO_NAMES.values())}
+    _not_places = {
+        "all", "commerce", "country", "countryside", "down", "early", "export", "field", "friendly", "harmony",
+        "hazard", "headquarters", "home", "hotel", "king", "mena", "nationwide", "null", "ocean", "pacific",
+        "page", "price", "purchase", "rehab", "reserve", "shape", "star", "statewide", "supply", "unavailable",
+        "united", "unity", "valley", "various", "welcome",
+    }  # fmt: skip
     for _k, _v in _city_table.items():
-        CITY_COUNTRY.setdefault(_k, _v)
+        if _k not in _codes and _k not in _not_places:
+            CITY_COUNTRY.setdefault(_k, _v)
 except Exception:
     pass
 
 GEORGIAN_CITIES = {"tbilisi", "batumi", "kutaisi", "rustavi"}
 
+# Hiredra addition (2026-10-27): the names freehire's hand-curated nameToCountry pins and ours lacked
+# (github.com/strelov1/freehire internal/dict/location/dictionaries.go, MIT): country names in other
+# languages and high-frequency cities ("Bristol", "Belgrade", "Malaga", "Stuttgart", "Pangyo", "Coimbatore").
+_FREEHIRE_COUNTRY_NAMES = {
+    "u.k.": "GB", "britain": "GB", "russia": "RU", "рф": "RU", "беларусь": "BY", "узбекистан": "UZ",
+    "казахстан": "KZ", "украина": "UA", "ivory coast": "CI", "cote d'ivoire": "CI", "burma": "MM",
+    "palestinian territories": "PS", "alemania": "DE", "méjico": "MX", "francia": "FR", "países bajos": "NL",
+    "reino unido": "GB", "estados unidos": "US", "suiza": "CH", "suecia": "SE", "polonia": "PL", "rumanía": "RO",
+    "hungría": "HU", "turquía": "TR", "japón": "JP", "filipinas": "PH", "malasia": "MY", "corea del sur": "KR",
+    "emiratos árabes unidos": "AE", "arabia saudita": "SA", "egipto": "EG", "espanha": "ES", "alemanha": "DE",
+    "frança": "FR", "grécia": "GR", "países baixos": "NL", "suíça": "CH", "polónia": "PL", "roménia": "RO",
+    "hungria": "HU", "turquia": "TR", "coreia do sul": "KR", "emirados árabes unidos": "AE", "arábia saudita": "SA",
+    "egito": "EG", "frankreich": "FR", "spanien": "ES", "italien": "IT", "niederlande": "NL",
+    "vereinigtes königreich": "GB", "vereinigte staaten": "US", "schweden": "SE", "polen": "PL", "rumänien": "RO",
+    "ungarn": "HU", "türkei": "TR", "griechenland": "GR", "philippinen": "PH", "indonesien": "ID", "südkorea": "KR",
+    "ägypten": "EG", "belgien": "BE", "dänemark": "DK", "finnland": "FI", "irland": "IE", "norwegen": "NO",
+    "tschechien": "CZ", "bulgarien": "BG", "saudi-arabien": "SA", "vereinigte arabische emirate": "AE",
+    
+}  # fmt: skip
+_FREEHIRE_CITIES = {
+    "méxico city": "MX", "pangyo": "KR", "valletta": "MT",
+    "bristol": "GB", "liverpool": "GB", "leeds": "GB", "brisbane": "AU", "perth": "AU", "wellington": "NZ",
+    "moscow": "RU", "lvov": "UA", "kharkiv": "UA", "kharkov": "UA", "dnipro": "UA", "dnepr": "UA",
+    "dnepropetrovsk": "UA", "vinnytsia": "UA", "ivano-frankivsk": "UA", "zaporizhzhia": "UA", "zaporozhye": "UA",
+    "chernivtsi": "UA", "chernovtsy": "UA", "ternopil": "UA", "ternopol": "UA", "uzhhorod": "UA", "uzhgorod": "UA",
+    "rivne": "UA", "rovno": "UA", "poltava": "UA", "khmelnytskyi": "UA", "zhytomyr": "UA", "zhitomir": "UA",
+    "sumy": "UA", "mykolaiv": "UA", "chernihiv": "UA", "chernigov": "UA", "kryvyi rih": "UA", "krivoy rog": "UA",
+    "kherson": "UA", "kropyvnytskyi": "UA", "luhansk": "UA", "toshkent": "UZ", "samarkand": "UZ", "nur-sultan": "KZ",
+    "bishkek": "KG", "dushanbe": "TJ", "ashgabat": "TM", "chisinau": "MD", "baku": "AZ", "спб": "RU", "питер": "RU",
+    "казань": "RU", "самара": "RU", "краснодар": "RU", "ростов-на-дону": "RU", "воронеж": "RU", "уфа": "RU",
+    "пермь": "RU", "челябинск": "RU", "волгоград": "RU", "красноярск": "RU", "тюмень": "RU", "саратов": "RU",
+    "тольятти": "RU", "ижевск": "RU", "ульяновск": "RU", "барнаул": "RU", "владивосток": "RU", "хабаровск": "RU",
+    "иркутск": "RU", "ярославль": "RU", "томск": "RU", "оренбург": "RU", "кемерово": "RU", "рязань": "RU",
+    "набережные челны": "RU", "пенза": "RU", "липецк": "RU", "тула": "RU", "киров": "RU", "чебоксары": "RU",
+    "калининград": "RU", "ставрополь": "RU", "сочи": "RU", "иваново": "RU", "брянск": "RU", "белгород": "RU",
+    "сургут": "RU", "владимир": "RU", "архангельск": "RU", "калуга": "RU", "смоленск": "RU", "волжский": "RU",
+    "курск": "RU", "орёл": "RU", "череповец": "RU", "вологда": "RU", "магнитогорск": "RU", "тамбов": "RU",
+    "мурманск": "RU", "тверь": "RU", "новокузнецк": "RU", "астрахань": "RU", "великий новгород": "RU", "псков": "RU",
+    "чита": "RU", "улан-удэ": "RU", "якутск": "RU", "норильск": "RU", "новороссийск": "RU", "таганрог": "RU",
+    "сарапул": "RU", "майкоп": "RU", "подольск": "RU", "химки": "RU", "мытищи": "RU", "балашиха": "RU",
+    "курган": "RU", "саранск": "RU", "йошкар-ола": "RU", "благовещенск": "RU", "кисловодск": "RU",
+    "петропавловск-камчатский": "RU", "комсомольск-на-амуре": "RU", "новый уренгой": "RU", "минск": "BY",
+    "ташкент": "UZ", "алматы": "KZ", "астана": "KZ", "ереван": "AM", "баку": "AZ", "киев": "UA", "київ": "UA",
+    "львів": "UA", "львов": "UA", "харків": "UA", "харьков": "UA", "одеса": "UA", "одесса": "UA", "дніпро": "UA",
+    "днепр": "UA", "вінниця": "UA", "винница": "UA", "івано-франківськ": "UA", "ивано-франковск": "UA",
+    "запоріжжя": "UA", "запорожье": "UA", "чернівці": "UA", "черновцы": "UA", "тернопіль": "UA", "тернополь": "UA",
+    "ужгород": "UA", "рівне": "UA", "ровно": "UA", "полтава": "UA", "хмельницький": "UA", "хмельницкий": "UA",
+    "житомир": "UA", "черкаси": "UA", "суми": "UA", "сумы": "UA", "миколаїв": "UA", "чернігів": "UA",
+    "чернигов": "UA", "кривий ріг": "UA", "кривой рог": "UA", "херсон": "UA", "кропивницький": "UA",
+    "луганськ": "UA", "kosovo": "XK", "brunei": "BN", "macau": "MO", "tailandia": "TH", "japão": "JP",
+    "florianópolis": "BR", "medellín": "CO", "medellin": "CO", "montevideo": "UY", "busan": "KR", "coimbatore": "IN",
+    "köln": "DE", "stuttgart": "DE", "düsseldorf": "DE", "dusseldorf": "DE", "leipzig": "DE", "dresden": "DE",
+    "geneve": "CH", "valencia": "ES", "seville": "ES", "malaga": "ES", "bergen": "NO", "belgrade": "RS",
+    "bratislava": "SK", "reykjavik": "IS", "reykjavík": "IS", "sharjah": "AE",
+}  # fmt: skip
+for _k, _v in _FREEHIRE_COUNTRY_NAMES.items():
+    COUNTRIES.setdefault(_k, _v)
+for _k, _v in _FREEHIRE_CITIES.items():
+    CITY_COUNTRY.setdefault(_k, _v)
+CITY_COUNTRY["бишкек"] = "KG"  # the open-jobs table had US
+
+# Hiredra addition (2026-10-27): region names below country level state their country ("Kerala",
+# "Schleswig-Holstein", "New South Wales"). freehire's foreignSubdivisionNames (foreign_subdivisions.go, MIT;
+# names only, "Punjab"/"Victoria" withheld there as ambiguous) plus every Indian state and union territory
+# and the misspellings seen in our postings ("Gujrat" was read as Gujrat, Pakistan).
+_SUBDIVISION_NAMES = {
+    "республика адыгея": "RU", "адыгея": "RU", "республика алтай": "RU", "республика башкортостан": "RU",
+    "башкортостан": "RU", "башкирия": "RU", "республика бурятия": "RU", "бурятия": "RU", "республика дагестан": "RU",
+    "дагестан": "RU", "республика ингушетия": "RU", "ингушетия": "RU", "кабардино-балкарская республика": "RU",
+    "кабардино-балкария": "RU", "республика калмыкия": "RU", "калмыкия": "RU",
+    "карачаево-черкесская республика": "RU", "карачаево-черкесия": "RU", "республика карелия": "RU", "карелия": "RU",
+    "республика коми": "RU", "республика марий эл": "RU", "марий эл": "RU", "республика мордовия": "RU",
+    "мордовия": "RU", "республика саха": "RU", "якутия": "RU", "республика северная осетия": "RU",
+    "северная осетия": "RU", "республика татарстан": "RU", "татарстан": "RU", "республика тыва": "RU", "тыва": "RU",
+    "удмуртская республика": "RU", "удмуртия": "RU", "республика хакасия": "RU", "хакасия": "RU",
+    "чеченская республика": "RU", "чечня": "RU", "чувашская республика": "RU", "чувашия": "RU",
+    "алтайский край": "RU", "забайкальский край": "RU", "камчатский край": "RU", "краснодарский край": "RU",
+    "красноярский край": "RU", "пермский край": "RU", "приморский край": "RU", "ставропольский край": "RU",
+    "хабаровский край": "RU", "амурская область": "RU", "архангельская область": "RU", "астраханская область": "RU",
+    "белгородская область": "RU", "брянская область": "RU", "владимирская область": "RU",
+    "волгоградская область": "RU", "вологодская область": "RU", "воронежская область": "RU",
+    "ивановская область": "RU", "иркутская область": "RU", "калининградская область": "RU",
+    "калужская область": "RU", "кемеровская область": "RU", "кузбасс": "RU", "кировская область": "RU",
+    "костромская область": "RU", "курганская область": "RU", "курская область": "RU", "ленинградская область": "RU",
+    "липецкая область": "RU", "магаданская область": "RU", "московская область": "RU", "мурманская область": "RU",
+    "нижегородская область": "RU", "новгородская область": "RU", "новосибирская область": "RU",
+    "омская область": "RU", "оренбургская область": "RU", "орловская область": "RU", "пензенская область": "RU",
+    "псковская область": "RU", "ростовская область": "RU", "рязанская область": "RU", "самарская область": "RU",
+    "саратовская область": "RU", "сахалинская область": "RU", "свердловская область": "RU",
+    "смоленская область": "RU", "тамбовская область": "RU", "тверская область": "RU", "томская область": "RU",
+    "тульская область": "RU", "тюменская область": "RU", "ульяновская область": "RU", "челябинская область": "RU",
+    "ярославская область": "RU", "еврейская автономная область": "RU", "ненецкий автономный округ": "RU",
+    "ханты-мансийский автономный округ": "RU", "югра": "RU", "чукотский автономный округ": "RU",
+    "ямало-ненецкий автономный округ": "RU", "moscow oblast": "RU", "moscow region": "RU", "leningrad oblast": "RU",
+    "sverdlovsk oblast": "RU", "tatarstan": "RU", "bashkortostan": "RU", "tyne and wear": "GB",
+    "north yorkshire": "GB", "north east england": "GB", "north west england": "GB",
+    "yorkshire and the humber": "GB", "east of england": "GB", "south east england": "GB",
+    "south west england": "GB", "qld": "AU", "south australia": "AU", "tasmania": "AU", "northern territory": "AU",
+    "australian capital territory": "AU", "bayern": "DE", "bavaria": "DE", "baden-württemberg": "DE",
+    "baden-wurttemberg": "DE", "baden-wuerttemberg": "DE", "north rhine-westphalia": "DE", "hessen": "DE",
+    "hesse": "DE", "niedersachsen": "DE", "lower saxony": "DE", "sachsen": "DE", "saxony": "DE",
+    "sachsen-anhalt": "DE", "saxony-anhalt": "DE", "rheinland-pfalz": "DE", "rhineland-palatinate": "DE",
+    "schleswig-holstein": "DE", "thüringen": "DE", "thuringia": "DE", "mecklenburg-vorpommern": "DE",
+    "saarland": "DE", "brandenburg": "DE", "kerala": "IN", "rajasthan": "IN", "west bengal": "IN",
+    "andhra pradesh": "IN", "odisha": "IN", "bihar": "IN", "assam": "IN", "jharkhand": "IN", "chhattisgarh": "IN",
+    "uttarakhand": "IN", "himachal pradesh": "IN", "bengaluru urban": "IN", "arunachal pradesh": "IN",
+    "manipur": "IN", "meghalaya": "IN", "mizoram": "IN", "nagaland": "IN", "sikkim": "IN", "tripura": "IN",
+    "andaman and nicobar islands": "IN", "dadra and nagar haveli": "IN", "daman and diu": "IN",
+    "jammu and kashmir": "IN", "ladakh": "IN", "lakshadweep": "IN", "puducherry": "IN", "delhi ncr": "IN",
+    "gujrat": "IN", "tamilnadu": "IN", "uttrakhand": "IN", "telengana": "IN", "orissa": "IN", "pondicherry": "IN",
+    "chattisgarh": "IN", "maharastra": "IN",
+}  # fmt: skip
+for _k, _v in _SUBDIVISION_NAMES.items():
+    COUNTRIES.setdefault(_k, _v)
+
+
+# Hiredra addition: region spellings seen in our postings ("Home Based - Americas", "Latin America").
+_REGION_ALIASES = {
+    "americas": "Americas",
+    "the americas": "Americas",
+    "latin america": "Latam",
+    "latinoamerica": "Latam",
+    "latinoamérica": "Latam",
+    "mena": "Mena",
+    "middle east": "Mena",
+    "cis": "Cis",
+    "central asia": "Cis",
+}
+
+
+def _load_geonames() -> dict[str, tuple[str, bool]]:
+    """alias -> (ISO-2 country, contested) from geonames_cities.tsv (freehire's cities1000 export).
+
+    Rows are population-sorted, so the first claimant of an alias wins; a trailing '*' marks an alias that
+    more than one country claims (counted over the whole GeoNames dump), which states no country.
+    """
+    out: dict[str, tuple[str, bool]] = {}
+    try:
+        text = Path(__file__).with_name("geonames_cities.tsv").read_text(encoding="utf-8")
+    except OSError:
+        return out
+    for line in text.splitlines():
+        if not line or line[0] == "#":
+            continue
+        parts = line.split("\t", 2)
+        if len(parts) < 3:
+            continue
+        for alias in parts[2].split("|"):
+            out.setdefault(alias.rstrip("*"), (parts[1].upper(), alias.endswith("*")))
+    return out
+
+
+# Hiredra addition (2026-10-27, docs/freehire-merge/04-verification.md sec 7), from freehire's
+# internal/dict/location (MIT). ~34k GeoNames places: the evidence that a city is North American (to read a
+# clashing 2-letter code) and the last-resort country of a line that states none.
+_GEONAMES = _load_geonames()
+
+# A 2-letter token that is both a US state / Canadian province and an ISO country code ("IN" Indiana or
+# India, "DE", "CO", "IL", "PE"...) is read as the subdivision only when the city before it is North
+# American. For these codes the state reading dominates job postings, so it is the default after any city
+# not placed in the clashing country itself -- freehire's measured stateFirstSubdivisions (IN, DE, CO, ID,
+# AR, TN, MT measured the other way: the country wins).
+_STATE_FIRST = {"PA", "MA", "MD", "IL", "MN", "AL", "MO", "LA", "ME"}
+_ISO2 = set(ISO_NAMES.values())
+# Indian state / union-territory codes as some ATSs write them before the country: "KA, IN", "TN, IN".
+_INDIAN_STATE_CODES = {
+    "AN", "AP", "AR", "AS", "BR", "CG", "CH", "CT", "DD", "DL", "DN", "GA", "GJ", "HP", "HR", "JH", "JK", "KA",
+    "KL", "LA", "LD", "MH", "ML", "MN", "MP", "MZ", "NL", "OD", "OR", "PB", "PY", "RJ", "SK", "TG", "TN", "TR",
+    "TS", "UK", "UL", "UP", "UT", "WB",
+}  # fmt: skip
+
+
+def _city_country(name: str) -> str | None:
+    """The country a city name points to (curated table first, then GeoNames' most populous claimant)."""
+    n = name.lower().strip(" .")
+    if n in CITY_COUNTRY:
+        return CITY_COUNTRY[n]
+    hit = _GEONAMES.get(n)
+    return hit[0] if hit else None
+
+
+def _subdivision_wins(code: str, prev: str, us_context: bool, us_state: bool = True) -> bool:
+    """Read a clashing 2-letter code as the US/CA subdivision (True) or as the country (False)?
+
+    A city the dictionaries place in the clashing country wins ("Bangalore, IN", "Tel Aviv, IL", "Lima, PE").
+    A US-state code after a city of some THIRD country is the state: US towns reuse foreign names ("Athens,
+    GA", "Munster, IN"). ``us_context``: the line names the US elsewhere ("Vienna, VA, USA").
+    """
+    if code not in _ISO2 or code == "CA":  # CA stays California, as upstream (freehire too)
+        return True
+    place = _city_country(prev) if prev else None
+    if place in ("US", "CA"):
+        return True
+    if place == code:
+        return False
+    return us_context or (us_state and place is not None) or (code in _STATE_FIRST and bool(prev))
+
+
+_US_CONTEXT_RE = re.compile(
+    r"\b(?:united states|usa|u\.s\.a?\.?)(?![\w.])|,\s*(?:"
+    + "|".join(sorted(s for s in US_STATES if s not in _ISO2))
+    + r")\b|\b(?:"
+    + "|".join(sorted((re.escape(n) for n in STATE_BY_NAME if n != "georgia"), key=len, reverse=True))
+    + r")\b",
+    re.I,
+)
+
 # Hiredra additions (M0.4 finding, not in upstream locparse): Ashby/Greenhouse boards often
 # name the WORKPLACE, not just the city ("San Francisco Office", "New York HQ", "London office").
 # A trailing workplace word is dropped before the lookup, so the city underneath resolves; a bare
 # "HQ" stays unknown. Never a guess: only names already in the tables resolve.
-_WORKPLACE_RE = re.compile(r"\s+(?:head\s+)?(?:office|offices|hq|headquarters|hub|campus)\.?$", re.I)
+_WORKPLACE_RE = re.compile(
+    r"(?:\s+|\s*[-–]\s*)(?:head\s+)?(?:office|offices|hq|headquarters|hub|campus)\.?$", re.I
+)  # "-HQ" too: "San Francisco-HQ"
+# A full UK postcode states GB, the way a ZIP states US, and is cut so the place before it still resolves
+# ("London SW1A 2HB"). Ported from freehire's stripUKPostcode (MIT): the full outward + inward form under
+# a real postcode area only, never an ordinal ("B2 2nd floor"); GY/JE/IM are Crown dependencies, not GB.
+_UK_POSTCODE_RE = re.compile(r"\b([A-Z]{1,2})\d[A-Z\d]? \d[ABD-HJLNP-UW-Z]{2}\b", re.I)
+_UK_POSTCODE_AREAS = set(
+    "ab al b ba bb bd bh bl bn br bs bt ca cb cf ch cm co cr ct cv cw da dd de dg dh dl dn dt dy e ec eh en ex "
+    "fk fy g gl gu ha hd hg hp hr hs hu hx ig ip iv ka kt kw ky l la ld le ll ln ls lu m me mk ml n ne ng nn np "
+    "nr nw ol ox pa pe ph pl po pr rg rh rm s sa se sg sk sl sm sn so sp sr ss st sw sy ta td tf tn tq tr ts tw "
+    "ub w wa wd wf wn wr ws wv yo ze".split()
+)
+
+
+# Russian/Ukrainian "city" markers before a name ("г Москва", "город Самара", "м. Львів"); freehire's
+# cityMarkerPrefixes (MIT). Each ends in a separator, so "Грозный" and "Мурманск" are untouched.
+_CYRILLIC_CITY_PREFIX_RE = re.compile(r"^(?:город|місто|г\.|м\.|г|м)\s+|^(?:г\.|м\.)(?=\S)", re.I)
+
+
+def _strip_uk_postcode(tok: str) -> tuple[str, bool]:
+    for m in _UK_POSTCODE_RE.finditer(tok):
+        if m.group(1).lower() in _UK_POSTCODE_AREAS and m.group(0)[-2:].lower() not in ("st", "nd", "rd", "th"):
+            return " ".join((tok[: m.start()] + " " + tok[m.end() :]).split()).strip(" ."), True
+    return tok, False
+
+
 # A flag emoji is an explicit country: two regional-indicator letters ("Lyon 🇫🇷" -> FR).
 _FLAG_RE = re.compile("([\U0001f1e6-\U0001f1ff])([\U0001f1e6-\U0001f1ff])")
 CITY_COUNTRY.update({"sf bay area": "US", "san francisco bay area": "US"})
@@ -1163,6 +1421,7 @@ def _split(loc: str) -> list[str]:
     )  # "(country)" must not become its own segment
     loc = re.sub(r"\b([A-Za-z.]+(?: [A-Za-z.]+)?)\s*[-–]\s*([A-Za-z.]+)\b", hy, loc)  # also "Czech Republic-Prague"
     loc = loc.replace(">", ";")  # "Hungary > Budapest"
+    loc = re.sub(r"\s+[-–—]\s+", ";", loc)  # a spaced dash always separates (freehire): "Massachusetts - Boston"
     loc = re.sub(r"[()\[\]]", ";", loc)  # "Remote (United States)" -> two segments
     loc = re.sub(
         r"\b(remote|hybrid|on-?site|work from home|wfh)\b\s*[-–:]?\s*", lambda m: m.group(1) + ";", loc, flags=re.I
@@ -1199,6 +1458,9 @@ def _one(seg: str, out: dict) -> None:
             out["cities"].add(rest.title())
             return
         return
+    m = re.match(r"^([A-Z]{2})-([A-Za-z][^,]*)$", s)
+    if m and (m.group(1) in US_STATES or m.group(1) in CA_PROV or m.group(1) in _ISO2):
+        s = f"{m.group(2)}, {m.group(1)}"  # "TX-Houston", "IL-Cupertino", "IN-Pune": judge the code after its city
     toks = [t.strip() for t in re.split(r",", s) if t.strip()]
     toks2 = []
     for t in toks:  # "SD USA" -> "SD", "USA"
@@ -1207,6 +1469,10 @@ def _one(seg: str, out: dict) -> None:
             toks2 += [m2.group(1), m2.group(2)]
         elif m2 and m2.group(1) in US_STATES and re.fullmatch(r"\d{5}(?:-\d{4})?", m2.group(2).strip()):
             toks2.append(m2.group(1))  # "TN 37090"
+        elif (m3 := re.match(r"^(.*[a-z].*?)\s+([A-Z]{2})(?:\s+\d{5}(?:-\d{4})?)?$", t.strip())) and (
+            m3.group(2) in US_STATES or m3.group(2) in CA_PROV or m3.group(2) in _INDIAN_STATE_CODES
+        ):
+            toks2 += [m3.group(1), m3.group(2)]  # "Atlanta GA", "Pune IN": the code is judged as its own token
         else:
             toks2.append(t)
     toks = toks2
@@ -1215,15 +1481,34 @@ def _one(seg: str, out: dict) -> None:
     city = None
     explicit: set[str] = set()
     inferred: set[str] = set()
+    # "KA, IN" / "TN, India" / "Mumbai, MH": an Indian state code after an Indian city or before the country.
+    # Read as India; the code must not fall through to a US state (TN, GA, LA) or a country (MH Marshall Is.).
+    for i, tok in enumerate(toks):
+        code = tok.strip()
+        nxt = toks[i + 1].strip().lower() if i + 1 < len(toks) else ""
+        if (
+            code in _INDIAN_STATE_CODES
+            and code.isupper()
+            and (nxt in ("in", "india") or (i and _city_country(toks[i - 1]) == "IN"))
+        ):
+            explicit.add("IN")
+            toks[i] = ""
     lows = [t.lower().strip(". ") for t in toks]
-    for t in toks:
+    for i, t in enumerate(toks):
+        prev = toks[i - 1].strip() if i else ""
         for a, b in _FLAG_RE.findall(t):
             code = chr(ord(a) - 0x1F1E6 + 65) + chr(ord(b) - 0x1F1E6 + 65)
             explicit.add("GB" if code == "UK" else code)
         t = _FLAG_RE.sub("", t).strip()
+        t = _CYRILLIC_CITY_PREFIX_RE.sub("", t)  # "г Москва", "м. Львів"
+        t, uk_postcode = _strip_uk_postcode(t)
+        if uk_postcode:
+            explicit.add("GB")
         if not t:
             continue
         t = _WORKPLACE_RE.sub("", t).strip() or t
+        if len(t.rstrip(".")) == 2:
+            t = t.rstrip(".")  # "Boston, MA."
         tl = t.lower().strip(" .:")
         if tl == "washington" and any(x in ("dc", "d.c", "district of columbia") for x in lows):
             out["cities"].add("Washington")
@@ -1246,7 +1531,7 @@ def _one(seg: str, out: dict) -> None:
         if tl in COUNTRIES:
             explicit.add(COUNTRIES[tl])
             continue
-        if t.upper() in US_STATES and (len(t) == 2):
+        if t.upper() in US_STATES and (len(t) == 2) and _subdivision_wins(t.upper(), prev, out["us_context"]):
             explicit.add("US")
             out["regions"].add(t.upper())
             continue
@@ -1254,9 +1539,18 @@ def _one(seg: str, out: dict) -> None:
             explicit.add("US")
             out["regions"].add(STATE_BY_NAME[tl])
             continue
-        if t.upper() in CA_PROV and len(t) == 2:
+        if t.upper() in CA_PROV and len(t) == 2 and _subdivision_wins(t.upper(), prev, out["us_context"], False):
             explicit.add("CA")
             out["regions"].add("CA-" + t.upper())
+            continue
+        # A bare country code, upper-case only ("Berlin, DE", "Pune, IN"; upstream read only uk/us), so a
+        # word ("in office", "na") never reads as one.
+        if len(t) == 2 and t.isupper() and t in _ISO2:
+            place = _city_country(prev) if prev else None
+            if place is None or place == t:
+                explicit.add(t)
+            # else a local subdivision code after a city of another country ("Belo Horizonte, MG" is Minas
+            # Gerais, not Madagascar; "Adelaide, SA"): the city decides
             continue
         if tl in PROV_BY_NAME:
             explicit.add("CA")
@@ -1279,9 +1573,16 @@ def _one(seg: str, out: dict) -> None:
             "south america",
             "asia",
             "africa",
+            *_REGION_ALIASES,
         ):
             if not REMOTE_RE.search(tl):
-                out["regions"].add(tl.title())
+                out["regions"].add(_REGION_ALIASES.get(tl, tl.title()))
+            continue
+        geo = _GEONAMES.get(tl)
+        if geo:  # a long-tail city (GeoNames): its country is the line's last resort, see parse()
+            out["cities"].add(t.title())
+            if not geo[1]:
+                out["geo_fallback"].add(geo[0])
             continue
         if (
             city is None
@@ -1297,15 +1598,50 @@ def _one(seg: str, out: dict) -> None:
     out["countries"] |= explicit if explicit else inferred
 
 
+# A restriction stated in the title, read only when the location line gave no geography ("Data Engineer -
+# US Remote" at location "Remote"). Ported from freehire's RestrictionFromTitle (MIT): a bracketed suffix
+# anchored on "remote"/"location" ("[Remote-US]", "(Remote Europe)"); a final " - ... Remote" segment is our
+# addition. The anchor keeps a plain "(US)" language/team note from counting.
+_TITLE_SUFFIX_RE = re.compile(r"\[([^\[\]]*)\]|\(([^()]*)\)|\s[-–|]\s+([^-–|()\[\]]+)$")
+_TITLE_ANCHOR_RE = re.compile(r"\b(?:remote|location)\b", re.I)
+
+
+def _title_restriction(title: str, out: dict) -> None:
+    for m in _TITLE_SUFFIX_RE.finditer(title or ""):
+        inner = next(g for g in m.groups() if g is not None).replace("-", " ")
+        if not _TITLE_ANCHOR_RE.search(inner):
+            continue
+        rest = _TITLE_ANCHOR_RE.sub(" ", inner)
+        rest = re.sub(r"^\s*(?:in|within|from|only)\s+(?:the\s+)?", "", rest, flags=re.I).strip(" :,")
+        tmp: dict = {**out, "countries": set(), "regions": set(), "cities": set(), "geo_fallback": set()}
+        for seg in _split(rest):
+            _one(seg, tmp)
+        out["countries"] |= tmp["countries"]
+        out["regions"] |= tmp["regions"]
+
+
 def parse(location: str | None, jd: str = "", title: str = "") -> dict:
     """``{"remote": "remote|hybrid|onsite|unknown", "countries": [...], "regions": [...], "cities": [...]}``.
 
     Heuristic, deterministic, no network. Countries are ISO-3166 alpha-2; US
     regions are state codes.
     """
-    out: dict = {"countries": set(), "regions": set(), "cities": set(), "remote_hint": False}
+    out: dict = {
+        "countries": set(),
+        "regions": set(),
+        "cities": set(),
+        "remote_hint": False,
+        "us_context": bool(_US_CONTEXT_RE.search(location or "")),
+        "geo_fallback": set(),
+    }
     for seg in _split(location or ""):
         _one(seg, out)
+    # Nothing in the line stated a country, so the long-tail GeoNames cities may -- with one voice only
+    # ("Belgrade" -> RS; "Recife, Benidorm" -> nothing). Ported from freehire's cityFallbackCountries (MIT).
+    if not out["countries"] and len(out["geo_fallback"]) == 1:
+        out["countries"] |= out["geo_fallback"]
+    if not out["countries"] and not out["regions"]:
+        _title_restriction(title, out)
     loc = ((location or "") + " | " + (title or "")).lower()
     text = (jd or "").lower()
     head = text[:2500]
@@ -1425,6 +1761,30 @@ MACRO = {
     "Eastern Europe": {"PL", "CZ", "HU", "RO", "UA", "GR"},
     "Western Europe": {"GB", "DE", "FR", "ES", "IT", "NL", "BE", "CH", "AT", "IE", "PT"},
     "North America": {"US", "CA", "MX"},
+    "Americas": {"US", "CA", "MX", "BR", "AR", "CO", "CL", "PE", "CR", "UY"},
+    # freehire's region vocabulary (internal/dict/location regionCountries, MIT)
+    "Mena": {
+        "AE",
+        "SA",
+        "IL",
+        "EG",
+        "TR",
+        "QA",
+        "KW",
+        "BH",
+        "OM",
+        "JO",
+        "LB",
+        "IQ",
+        "IR",
+        "MA",
+        "DZ",
+        "TN",
+        "LY",
+        "YE",
+        "PS",
+    },
+    "Cis": {"RU", "BY", "MD", "AM", "AZ", "GE", "UZ", "KZ", "KG", "TJ", "TM"},
     "South America": {"BR", "AR", "CO", "CL", "PE", "UY"},
     "Asia": {"IN", "CN", "JP", "KR", "SG", "HK", "TW", "PH", "ID", "MY", "TH", "VN", "PK", "BD", "LK"},
     "Africa": {"ZA", "NG", "KE", "EG", "MA"},

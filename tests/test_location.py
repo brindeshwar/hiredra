@@ -4,6 +4,9 @@ the unknown-location "never guess" case."""
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from hiredra import filter as funnel
 from hiredra.location import eligibility, parse
 
@@ -318,3 +321,130 @@ def test_a_workplace_word_must_be_its_own_word():
 def test_the_flag_is_removed_from_the_city_name():
     assert parse("Lyon \U0001f1eb\U0001f1f7")["cities"] == ["Lyon"]
     assert parse("\U0001f1ec\U0001f1e7")["cities"] == []
+
+
+# --- recognition fixes (2026-10-27, docs/freehire-merge/04-verification.md sec 7) -------------------
+# Every location below is a real string from our database. The first group were Indian jobs dropped as
+# "restricted to US": a 2-letter "IN" was always read as Indiana.
+@pytest.mark.parametrize(
+    "location",
+    ["KA, IN", "MH, IN", "TN, IN", "GA, IN", "Remote, IN", "Bangalore, IN", "Pune IN", "IN - Jaipur", "IN-Pune",
+     "Mumbai, MH", "Chennai, TN", "Chennai, TN, India", "Indore MP", "Mhesana , Gujrat", "Kozhikode, Kerala"],
+)  # fmt: skip
+def test_indian_locations_with_codes_or_states_are_india(location):
+    assert parse(location)["countries"] == ["IN"]
+    assert eligibility("India", location)[0] is True
+
+
+@pytest.mark.parametrize(
+    ("location", "countries"),
+    [
+        ("Indianapolis, IN", ["US"]),  # a known US city confirms the state
+        ("Athens, GA", ["US"]),  # a city of a third country: US towns reuse foreign names
+        ("Munster, IN", ["US"]),
+        ("Abernathy, TX · New Lebanon, IN · United States", ["US"]),  # the line names the US
+        ("Tel Aviv, IL", ["IL"]),  # the city is in the clashing country
+        ("Berlin, DE", ["DE"]),
+        ("Bogota, CO", ["CO"]),
+        ("Lima, PE", ["PE"]),  # PE also Prince Edward Island
+        ("Pittsburgh, PA", ["US"]),
+        ("Brisbane, CA", ["US"]),  # CA stays California
+        ("Belo Horizonte, MG", ["BR"]),  # a local code after a city of another country: the city decides
+        ("Adelaide, SA", ["AU"]),
+        ("Whitehorse, YT", ["CA"]),
+        ("IL-Cupertino", ["US"]),
+        ("TX-Houston", ["US"]),
+    ],
+)
+def test_two_letter_codes_that_clash(location, countries):
+    assert parse(location)["countries"] == countries
+
+
+@pytest.mark.parametrize(
+    ("location", "countries"),
+    [
+        ("Massachusetts - Boston", ["US"]),  # a spaced dash always separates
+        ("London - The River Building HQ", ["GB"]),
+        ("San Francisco-HQ", ["US"]),
+        ("SF Office", ["US"]),
+        ("Olathe KS", ["US"]),  # a trailing state code inside a token
+        ("Rancho Bernardo, CA.", ["US"]),
+        ("London SW1A 2HB", ["GB"]),  # a full UK postcode
+        ("Durham, North East England, DH1 3HU", ["GB"]),
+        ("Elmshorn, Schleswig-Holstein", ["DE"]),  # a region name states its country
+        ("Belgrade", ["RS"]),  # freehire's curated names
+        ("Bristol", ["GB"]),
+        ("Ludhiana", ["IN"]),  # GeoNames, the last resort
+        ("Düsseldorf", ["DE"]),
+        ("г Москва", ["RU"]),
+    ],
+)
+def test_places_the_tokenizer_now_reads(location, countries):
+    assert parse(location)["countries"] == countries
+
+
+@pytest.mark.parametrize(
+    "location",
+    ["In-Office", "In Office", "Field - Based", "Home", "Nationwide", "B2 2nd floor", "Valencia, Venezuela or Spain"],
+)
+def test_words_and_stubs_are_not_places(location):
+    assert "US" not in parse(location)["countries"]
+
+
+def test_a_country_code_must_be_upper_case():
+    assert parse("NYC or Palo Alto (in office)")["countries"] == ["US"]  # "in" is not India
+    assert parse("na")["countries"] == []
+
+
+@pytest.mark.parametrize(
+    "location", ["Home based - EMEA", "Home Based - Americas", "Latin America", "Remote: MENA", "Remote NA"]
+)
+def test_regions_that_exclude_india_drop(location):
+    assert eligibility("India", location)[0] is False
+
+
+@pytest.mark.parametrize(("location", "ok"), [("Home Based - APAC", True), ("Americas; APAC", True)])
+def test_regions_that_include_india_keep(location, ok):
+    assert eligibility("India", location)[0] is ok
+
+
+def test_a_contested_city_with_no_curated_answer_states_nothing():
+    assert parse("Cambridge")["countries"] == []  # GB and US both claim it
+
+
+def test_geonames_cities_must_agree():
+    assert parse("Colorado Springs, Eden Prairie")["countries"] == ["US"]
+
+
+# freehire's RestrictionFromTitle cases (title_restriction_test.go, MIT) plus a dash suffix of our own.
+@pytest.mark.parametrize(
+    ("title", "ok"),
+    [
+        ("Senior Back End Engineer [Remote-US]", False),
+        ("Senior Backend Engineer (Go) (Location - Australia or New Zealand)", False),
+        ("Data Engineer - US Remote", False),
+        ("SecOps Engineer - North Central region (Remote in the U.S.)", False),
+        ("Backend Engineer [Remote-India]", True),
+        ("Frontend Engineer (React)", True),  # no anchor word
+        ("Product Manager (Contract)", True),
+        ("Engineer [Remote-EMEA-ish]", True),  # anchor but no place
+        ("Generative AI Analyst | Simplified Chinese (US)", True),  # "(US)" without "remote" is not a restriction
+        ("", True),
+    ],
+)
+def test_a_restriction_in_the_title_counts_when_the_location_is_bare(title, ok):
+    assert eligibility("India", "Remote", "", title)[0] is ok
+
+
+def test_the_title_never_overrides_a_stated_location():
+    assert eligibility("India", "Bengaluru, India", "", "Backend Engineer [Remote-US]")[0] is True
+
+
+_FREEHIRE_CASES = json.loads((Path(__file__).parent / "fixtures" / "freehire_location_cases.json").read_text("utf-8"))
+
+
+@pytest.mark.parametrize("case", _FREEHIRE_CASES["cases"], ids=lambda c: c["location"])
+def test_freehire_parse_cases(case):
+    # freehire's own Parse cases, countries only. Where we deliberately differ the fixture records our answer
+    # and why ("hiredra_countries", "why").
+    assert parse(case["location"])["countries"] == case.get("hiredra_countries", case["countries"])

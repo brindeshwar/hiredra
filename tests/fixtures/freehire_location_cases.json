@@ -1,0 +1,784 @@
+{
+ "source": "github.com/strelov1/freehire internal/dict/location/location_test.go (MIT), copied 2026-10-27",
+ "compare": "countries only; freehire's regions are a different vocabulary",
+ "cases": [
+  {
+   "location": "Remote - Germany",
+   "countries": [
+    "DE"
+   ]
+  },
+  {
+   "location": "Remote - USA",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "United States",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Remote - Europe",
+   "countries": []
+  },
+  {
+   "location": "Hallstahammar, Västmanlands län, Sverige",
+   "countries": [
+    "SE"
+   ]
+  },
+  {
+   "location": "Remote - UK or Europe",
+   "countries": [
+    "GB"
+   ]
+  },
+  {
+   "location": "Warszawa",
+   "countries": [
+    "PL"
+   ]
+  },
+  {
+   "location": "Łódź, Poland",
+   "countries": [
+    "PL"
+   ]
+  },
+  {
+   "location": "San Pedro Sula, Honduras",
+   "countries": [
+    "HN"
+   ]
+  },
+  {
+   "location": "Kigali, Rwanda",
+   "countries": [
+    "RW"
+   ]
+  },
+  {
+   "location": "Laos",
+   "countries": [
+    "LA"
+   ]
+  },
+  {
+   "location": "Taft, CA",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Baton Rouge, LA",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Minneapolis, MN",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "St. Louis, MO",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Manchester",
+   "countries": [
+    "GB"
+   ]
+  },
+  {
+   "location": "Montréal, QC",
+   "countries": [
+    "CA"
+   ]
+  },
+  {
+   "location": "Brisbane",
+   "countries": [
+    "AU"
+   ]
+  },
+  {
+   "location": "Auckland",
+   "countries": [
+    "NZ"
+   ]
+  },
+  {
+   "location": "Remote",
+   "countries": []
+  },
+  {
+   "location": "Remote - Anywhere",
+   "countries": []
+  },
+  {
+   "location": "Work from home",
+   "countries": []
+  },
+  {
+   "location": "Remote - International",
+   "countries": []
+  },
+  {
+   "location": "Hybrid - London",
+   "countries": [
+    "GB"
+   ]
+  },
+  {
+   "location": "Berlin (On-site)",
+   "countries": [
+    "DE"
+   ]
+  },
+  {
+   "location": "Hybrid / Remote - London",
+   "countries": [
+    "GB"
+   ]
+  },
+  {
+   "location": "Burlington, Massachusetts, United States; Remote",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Yunusobod, Toshkent, Uzbekistan",
+   "countries": [
+    "UZ"
+   ]
+  },
+  {
+   "location": "Remote - Kazakhstan",
+   "countries": [
+    "KZ"
+   ]
+  },
+  {
+   "location": "Baku, Azerbaijan",
+   "countries": [
+    "AZ"
+   ]
+  },
+  {
+   "location": "Atlanta, Georgia, United States",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "",
+   "countries": []
+  },
+  {
+   "location": "Zzqxville",
+   "countries": []
+  },
+  {
+   "location": "Remote or in-house",
+   "countries": []
+  },
+  {
+   "location": "De-Witt, NY",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "TX-Houston",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "United States-Utah-Roy",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "stoke-on-trent",
+   "countries": [
+    "GB"
+   ]
+  },
+  {
+   "location": "Lake Worth, TX 76135",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Austin, TX",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "San Francisco, CA",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Remote - California",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Austin TX",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "94105",
+   "countries": [
+    "US"
+   ],
+   "hiredra_countries": [],
+   "why": "a lone 5-digit number is as likely a German/French/Spanish postcode; we never guess"
+  },
+  {
+   "location": "Toronto, ON",
+   "countries": [
+    "CA"
+   ]
+  },
+  {
+   "location": "Vancouver, British Columbia",
+   "countries": [
+    "CA"
+   ]
+  },
+  {
+   "location": "Washington, DC",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Tbilisi, Georgia",
+   "countries": [
+    "GE"
+   ]
+  },
+  {
+   "location": "Tel Aviv, IL",
+   "countries": [
+    "IL"
+   ]
+  },
+  {
+   "location": "Vientiane, LA",
+   "countries": [
+    "LA"
+   ]
+  },
+  {
+   "location": "Panama City, PA",
+   "countries": [
+    "PA"
+   ]
+  },
+  {
+   "location": "Chicago, IL",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "IL-Cupertino",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Carmel, IN",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Brownsburg, IN",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Auburn, IN, US",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Wilmington, DE",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Boise, ID",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Bangalore, IN",
+   "countries": [
+    "IN"
+   ]
+  },
+  {
+   "location": "Mumbai, MH, IN",
+   "countries": [
+    "IN"
+   ]
+  },
+  {
+   "location": "Berlin, DE",
+   "countries": [
+    "DE"
+   ]
+  },
+  {
+   "location": "Jakarta, ID",
+   "countries": [
+    "ID"
+   ]
+  },
+  {
+   "location": "Москва",
+   "countries": [
+    "RU"
+   ]
+  },
+  {
+   "location": "г Москва",
+   "countries": [
+    "RU"
+   ]
+  },
+  {
+   "location": "Санкт-Петербург",
+   "countries": [
+    "RU"
+   ]
+  },
+  {
+   "location": "Нижний Новгород",
+   "countries": [
+    "RU"
+   ]
+  },
+  {
+   "location": "Энск, Россия",
+   "countries": [
+    "RU"
+   ]
+  },
+  {
+   "location": "РФ",
+   "countries": [
+    "RU"
+   ]
+  },
+  {
+   "location": "Россия (удалённо)",
+   "countries": [
+    "RU"
+   ]
+  },
+  {
+   "location": "Удалённо",
+   "countries": []
+  },
+  {
+   "location": "Москва, гибрид",
+   "countries": [
+    "RU"
+   ]
+  },
+  {
+   "location": "Минск",
+   "countries": [
+    "BY"
+   ]
+  },
+  {
+   "location": "Ташкент",
+   "countries": [
+    "UZ"
+   ]
+  },
+  {
+   "location": "Київ",
+   "countries": [
+    "UA"
+   ]
+  },
+  {
+   "location": "Львів",
+   "countries": [
+    "UA"
+   ]
+  },
+  {
+   "location": "Харьков",
+   "countries": [
+    "UA"
+   ]
+  },
+  {
+   "location": "Lviv",
+   "countries": [
+    "UA"
+   ]
+  },
+  {
+   "location": "Україна",
+   "countries": [
+    "UA"
+   ]
+  },
+  {
+   "location": "м. Львів",
+   "countries": [
+    "UA"
+   ]
+  },
+  {
+   "location": "Грозный",
+   "countries": [
+    "RU"
+   ]
+  },
+  {
+   "location": "Мурманск",
+   "countries": [
+    "RU"
+   ]
+  },
+  {
+   "location": "Florianópolis",
+   "countries": [
+    "BR"
+   ]
+  },
+  {
+   "location": "Florianópolis, Brazil",
+   "countries": [
+    "BR"
+   ]
+  },
+  {
+   "location": "Recife",
+   "countries": [
+    "BR"
+   ]
+  },
+  {
+   "location": "Recife, Brazil",
+   "countries": [
+    "BR"
+   ]
+  },
+  {
+   "location": "Birmingham",
+   "countries": [],
+   "hiredra_countries": [
+    "GB"
+   ],
+   "why": "our open-jobs table is built from job postings, where Birmingham is UK"
+  },
+  {
+   "location": "Burlington",
+   "countries": []
+  },
+  {
+   "location": "Birmingham, UK",
+   "countries": [
+    "GB"
+   ]
+  },
+  {
+   "location": "Anna, Illinois, United States",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Crossroads - London",
+   "countries": [
+    "GB"
+   ]
+  },
+  {
+   "location": "Colorado Springs",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Recife, Benidorm",
+   "countries": [],
+   "hiredra_countries": [
+    "BR"
+   ],
+   "why": "Recife is in our data-driven city table, a stronger tier than GeoNames' fallback"
+  },
+  {
+   "location": "Benidorm, Recife",
+   "countries": [],
+   "hiredra_countries": [
+    "BR"
+   ],
+   "why": "Recife is in our data-driven city table, a stronger tier than GeoNames' fallback"
+  },
+  {
+   "location": "Colorado Springs, Eden Prairie",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "USA",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Worldwide",
+   "countries": []
+  },
+  {
+   "location": "Köln",
+   "countries": [
+    "DE"
+   ]
+  },
+  {
+   "location": "Cambridge, MA",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Birmingham, AL",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Montgomery County, PA",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Annapolis Junction, MD",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Fort Meade, MD",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Oak Brook, IL",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Lone Tree, MN",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Statewide, LA",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Slu Saint Louis, MO",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Portland, ME",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Brighton MA",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Tel Aviv, IL",
+   "countries": [
+    "IL"
+   ]
+  },
+  {
+   "location": "Haifa, IL",
+   "countries": [
+    "IL"
+   ]
+  },
+  {
+   "location": "Casablanca, MA",
+   "countries": [
+    "MA"
+   ]
+  },
+  {
+   "location": "Rabat, MA",
+   "countries": [
+    "MA"
+   ]
+  },
+  {
+   "location": "Tirana, AL",
+   "countries": [
+    "AL"
+   ]
+  },
+  {
+   "location": "Chisinau, MD",
+   "countries": [
+    "MD"
+   ]
+  },
+  {
+   "location": "Panama City, PA",
+   "countries": [
+    "PA"
+   ]
+  },
+  {
+   "location": "Ulaanbaatar, MN",
+   "countries": [
+    "MN"
+   ]
+  },
+  {
+   "location": "Podgorica, ME",
+   "countries": [
+    "ME"
+   ]
+  },
+  {
+   "location": "Vientiane, LA",
+   "countries": [
+    "LA"
+   ]
+  },
+  {
+   "location": "MA",
+   "countries": [
+    "MA"
+   ]
+  },
+  {
+   "location": "IL",
+   "countries": [
+    "IL"
+   ]
+  },
+  {
+   "location": "Unknownville, DE",
+   "countries": [
+    "DE"
+   ]
+  },
+  {
+   "location": "Unknownville, IN",
+   "countries": [
+    "IN"
+   ]
+  },
+  {
+   "location": "Unknownville, CO",
+   "countries": [
+    "CO"
+   ]
+  },
+  {
+   "location": "London SW1A 2HB",
+   "countries": [
+    "GB"
+   ]
+  },
+  {
+   "location": "This position is based at HM Prison Frankland, Durham, DH1 5YD.",
+   "countries": [
+    "GB"
+   ]
+  },
+  {
+   "location": "Birmingham, West Midlands (England), B1 2AX",
+   "countries": [
+    "GB"
+   ]
+  },
+  {
+   "location": "NMS Church House, HD1 1SG, NMS LG, The Church View Centre, DN1 1AF",
+   "countries": [
+    "GB"
+   ]
+  },
+  {
+   "location": "Belfast BT1 5GS",
+   "countries": [
+    "GB"
+   ]
+  },
+  {
+   "location": "Durham, North East England",
+   "countries": [
+    "GB"
+   ]
+  },
+  {
+   "location": "East of England, Yorkshire and the Humber",
+   "countries": [
+    "GB"
+   ]
+  },
+  {
+   "location": "Cambridge, MA 02139",
+   "countries": [
+    "US"
+   ]
+  },
+  {
+   "location": "Durham, NC",
+   "countries": [
+    "US"
+   ]
+  }
+ ]
+}
