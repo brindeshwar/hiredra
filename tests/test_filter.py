@@ -119,6 +119,23 @@ def test_extract_max_years_caps_unbelievable_figures():
     assert funnel.extract_max_years("25+ years of experience") == 25
 
 
+def test_extract_max_years_reads_decimals_whole_and_rounds_up():
+    # these were read from the digit after the point: "1.5+ years" as 5 (a false drop), "5.1-7 years" as 1
+    assert funnel.extract_max_years("* 1.5+ years of software engineering experience") == 2
+    assert funnel.extract_max_years("Experience: 0.5-2 years") == 1
+    assert funnel.extract_max_years("Possesses 2.5 years of experience") == 3
+    assert funnel.extract_max_years("Preferred experience: - 5.1-7 years") == 6
+
+
+def test_extract_max_years_reads_a_figure_right_after_a_full_stop():
+    # list items joined without a space: the point is a sentence end, not a decimal
+    assert funnel.extract_max_years("license in TX, FL and/or PA.3+ years of clinical experience.1+ years") == 3
+
+
+def test_extract_max_years_range_counts_its_lower_end():
+    assert funnel.extract_max_years("2-5 years of experience in working with AI models") == 2
+
+
 def test_extract_max_years_does_not_read_yearly_as_years():
     assert funnel.extract_max_years("€20 yearly learning budget") is None
 
