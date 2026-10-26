@@ -161,7 +161,7 @@ class SeniorityResult:
 
 
 # "N years" / "N+ yrs" / "N-M years" -- takes the max of every match, per job.
-_YEARS_RE = re.compile(r"(\d+)\s*\+?\s*(?:-\s*\d+\s*)?(?:years?|yrs?)", re.IGNORECASE)
+_YEARS_RE = re.compile(r"(\d+)\s*\+?\s*(?:-\s*\d+\s*)?(?:years?|yrs?)\b", re.IGNORECASE)  # \b: not "yearly"
 
 # JobSpy (Indeed/LinkedIn) text is markdown-escaped: "4\+ years", "\- mentor". The escapes are
 # removed before the gate reads the body, or "4\+ years" never matches (found in M0.5: 25 of 60
@@ -189,14 +189,75 @@ _FULL_TIME_EDUCATION_RE = re.compile(r"full[- ]?time education", re.IGNORECASE)
 _EDUCATION_WINDOW = 45
 
 
-def extract_max_years(text: str | None) -> int | None:
-    """Max of every 'N years'/'N+ yrs' match in `text`, or None if none found.
+# Years figures that are not a requirement on the candidate (2026-10-26). Taking the max of every
+# "N years" let company history decide the gate: "over 20 years of game development expertise" dropped
+# a 2027 new-grad role. Compared with freehire's internal/job/jobfacts (MIT), which strips age phrases
+# and caps believable experience at 25 (vocab.MaxExperienceYears); company history, business age and
+# time spans were added from our own drops (5,163 "requires Ny" drops, 1,502 with no "experience" near the
+# deciding figure). Exclusions only REMOVE figures, so the result can only fall: a job can move from
+# dropped to kept, never the other way. Anything not excluded counts exactly as before.
+_MAX_BELIEVABLE_YEARS = 25
+_AGE_AFTER_RE = re.compile(r"^\s*(?:of\s+age|old)\b", re.I)
+_AGE_BEFORE_RE = re.compile(r"\b(?:age|aged)\b[^.\n]{0,30}$", re.I)
+_SPAN_BEFORE_RE = re.compile(r"(?<!\bat\s)\b(?:past|last|previous|next)\s*$", re.I)  # not "at last 8 years" (typo)
+_EXPERIENCE_AFTER_RE = re.compile(r"^\s*(?:of\s+)?(?:[\w-]+\s+){0,3}experience\b", re.I)
+_SPAN_AFTER_RE = re.compile(r"^\s*ago\b", re.I)
+_BUSINESS_AFTER_RE = re.compile(
+    # "in business" only as a finished phrase: "3-7 years in business operations" / "business intelligence" are
+    # requirements. Not "of operation"/"of growth" either: candidate phrasing ("2-6 years of operation of ...").
+    r"^\s*(?:in\s+business\s*(?:$|[,:)!]|\b(?:and|since|with|for|across)\b)|of\s+(?:history|heritage|legacy)\b)",
+    re.I,
+)
+_HISTORY_LEAD_RE = re.compile(
+    r"\b(?:for|over|nearly|almost|more\s+than|spanning|celebrating|since|across)\s+"
+    r"(?:(?:over|nearly|almost|more\s+than|the\s+(?:past|last))\s+)?$",
+    re.I,
+)
+_COMPANY_CUE_RE = re.compile(
+    r"\b(?:we|we've|we’ve|our|us|company|firm|organi[sz]ation|has\s+been|have\s+been|founded|history|heritage|"
+    r"legacy|leader|serving|served|trusted|helped|built|building|delivered|providing|provided)\b",
+    re.I,
+)
+_CANDIDATE_CUE_RE = re.compile(
+    r"\b(?:you|your|candidates?|applicants?|required|requirements?|minimum|at\s+least|must|should|need|"
+    r"qualifications?)\b",
+    re.I,
+)
+_CLAUSE_BREAK_RE = re.compile(r"[.!?;\n•]")
 
-    None means unknown -- never a stand-in for zero (docs/repos.md sec 6).
-    A match near "educational qualification" / "full time education" is
-    excluded (real example: "Educational Qualification: 15 years full time
-    education" -- a bachelor's degree, not 15 years of experience); this is a
-    narrow, specific exclusion, not general experience-context anchoring.
+
+def _clause_around(text: str, start: int, end: int) -> tuple[str, str]:
+    """The clause containing text[start:end], split into (before the match, after it)."""
+    left = max((m.end() for m in _CLAUSE_BREAK_RE.finditer(text, 0, start)), default=0)
+    nxt = _CLAUSE_BREAK_RE.search(text, end)
+    right = nxt.start() if nxt else len(text)
+    return text[left:start], text[end:right]
+
+
+def _not_a_requirement(text: str, m: re.Match) -> bool:
+    """Is this "N years" figure about something other than the candidate's experience?"""
+    before, after = _clause_around(text, m.start(), m.end())
+    if _EXPERIENCE_AFTER_RE.search(after):
+        return False  # "N years (of relevant) experience" always counts, whatever precedes it
+    if _AGE_AFTER_RE.search(after) or _AGE_BEFORE_RE.search(before):
+        return True  # "18+ years old", "at least 18 years of age", "Age has to be 18+ years"
+    if _SPAN_BEFORE_RE.search(before) or _SPAN_AFTER_RE.search(after):
+        return True  # "in the past 25 years", "10 years ago"
+    if _BUSINESS_AFTER_RE.search(after):
+        return True  # "100 years in business", "50 years of history"
+    clause = before + m.group(0) + after
+    return bool(
+        _HISTORY_LEAD_RE.search(before) and _COMPANY_CUE_RE.search(clause) and not _CANDIDATE_CUE_RE.search(clause)
+    )  # "For nearly 20 years, we've built ...", "for over 40 years, X has helped ..."
+
+
+def extract_max_years(text: str | None) -> int | None:
+    """Max of every 'N years'/'N+ yrs' figure in `text` that states the candidate's experience, or None.
+
+    None means unknown -- never a stand-in for zero (docs/repos.md sec 6). Excluded: figures near
+    "educational qualification" / "full time education" ("Educational Qualification: 15 years full time
+    education" is a bachelor's degree), age phrases, time spans, company history and business age (see
+    ``_not_a_requirement``), and anything above ``_MAX_BELIEVABLE_YEARS``.
     """
     if not text:
         return None
@@ -206,7 +267,10 @@ def extract_max_years(text: str | None) -> int | None:
         after = text[m.end() : m.end() + _EDUCATION_WINDOW]
         if _EDU_QUALIFICATION_RE.search(before) or _FULL_TIME_EDUCATION_RE.search(after):
             continue
-        matches.append(int(m.group(1)))
+        years = int(m.group(1))
+        if years > _MAX_BELIEVABLE_YEARS or _not_a_requirement(text, m):
+            continue
+        matches.append(years)
     return max(matches) if matches else None
 
 
