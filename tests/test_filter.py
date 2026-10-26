@@ -69,6 +69,60 @@ def test_extract_max_years_still_counts_unrelated_high_numbers():
     assert funnel.extract_max_years(text) == 10
 
 
+# Not-a-requirement figures (2026-10-26). Every phrase below is quoted from a real job in our database that
+# the old max-of-everything parser dropped.
+def test_extract_max_years_ignores_company_history():
+    # the false drop that found the bug: a 2027 new-grad role
+    text = (
+        "With over 20 years of game development expertise and teams all over North America our commitment to "
+        "balanced and sustainable development is well known in the game community. "
+        "1+ years of experience in software development."
+    )
+    assert funnel.extract_max_years(text) == 1
+    assert funnel.extract_max_years("For more than 20 years, we’ve helped hotels attract guests.") is None
+    assert funnel.extract_max_years("A company that has been providing quality childcare for over 20 years!") is None
+
+
+def test_extract_max_years_ignores_age_phrases():
+    assert funnel.extract_max_years("Availability on evenings and weekends 18+ years old") is None
+    assert funnel.extract_max_years("Must be at least 21 years of age; 2 years of experience.") == 2
+    assert funnel.extract_max_years("Age has to be 18+ years") is None
+
+
+def test_extract_max_years_ignores_time_spans():
+    assert funnel.extract_max_years("What started 13 years ago is now backed by evidence.") is None
+    assert funnel.extract_max_years("Over the last 5 years, BAMKO has won countless awards.") is None
+    assert funnel.extract_max_years("become a $10B business in the next 4 years") is None
+
+
+def test_extract_max_years_ignores_business_age_but_not_business_fields():
+    assert funnel.extract_max_years("Proudly 20 years in business, and growing.") is None
+    assert funnel.extract_max_years("3–7 years in business operations, accounting or payroll") == 7
+    assert funnel.extract_max_years("12+ years in business intelligence, analytics engineering") == 12
+
+
+def test_extract_max_years_counts_operation_and_typo_requirements():
+    # rules that once removed these real requirements: "of operation" as business age, "at last" as a span
+    assert funnel.extract_max_years("2-6 years of operation of production systems") == 2
+    assert funnel.extract_max_years("Have at last 8 years of experience in Solvency 2 regulatory framework") == 8
+    assert funnel.extract_max_years("Have at last 8 years in the Solvency 2 regulatory framework") == 8
+
+
+def test_extract_max_years_counts_experience_even_after_a_history_lead():
+    assert funnel.extract_max_years("for over 5 years of hands-on experience we have built") == 5
+    # a history-shaped clause that is about the candidate still counts
+    assert funnel.extract_max_years("Our ideal candidate has worked for over 5 years in fintech") == 5
+
+
+def test_extract_max_years_caps_unbelievable_figures():
+    assert funnel.extract_max_years("Payment veterans with more than 100 years of combined experience") is None
+    assert funnel.extract_max_years("25+ years of experience") == 25
+
+
+def test_extract_max_years_does_not_read_yearly_as_years():
+    assert funnel.extract_max_years("€20 yearly learning budget") is None
+
+
 # --- word-boundary matching (the approved correctness fix) --------------
 def test_contains_term_does_not_match_across_a_word_boundary():
     # "forward deployed engineer" must not match inside "...Engineering" --
