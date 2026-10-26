@@ -91,3 +91,55 @@ def test_404_and_429(http_factory):
         LV.fetch(_entry(), FetchContext(http=http_factory(lambda req: httpx.Response(404))))
     with pytest.raises(Blocked):
         LV.fetch(_entry(), FetchContext(http=http_factory(lambda req: httpx.Response(429))))
+
+
+# -- the body lives in description + lists + additional, not in descriptionPlain (2026-10-26) ------
+_FIXTURES = __import__("pathlib").Path(__file__).parent / "fixtures"
+
+
+def test_live_posting_body_includes_the_lists(http_factory):
+    """A real posting captured from api.lever.co (board tsmg, 2026-10-26): descriptionPlain is the
+    intro only; the requirements live in ``lists``."""
+    payload = __import__("json").loads((_FIXTURES / "lever_live_posting_with_lists.json").read_text(encoding="utf-8"))
+    http = http_factory(lambda req: httpx.Response(200, json=payload))
+    (job,) = LV.fetch(_entry(careers_url="https://jobs.lever.co/tsmg"), FetchContext(http=http))
+    plain = payload[0]["descriptionPlain"]
+    assert len(job.description) > 3 * len(plain)  # 384 chars of intro vs the whole body
+    for heading in ("Key Responsibilities", "Requirements", "Schedule & Commitment"):
+        assert heading in job.description
+    assert "<" not in job.description  # plain text, no markup left
+
+
+def test_body_order_is_description_then_lists_then_additional(http_factory):
+    posting = {
+        "id": "p-1",
+        "text": "Engineer",
+        "hostedUrl": "https://jobs.lever.co/acme/p-1",
+        "description": "<div>Intro text.</div>",
+        "lists": [
+            {"text": "Requirements", "content": "<li>3+ years of Python</li><li>SQL</li>"},
+            {"text": "", "content": "<li>an item without a heading</li>"},
+            "not a dict",
+        ],
+        "additional": "<div>Closing note.</div>",
+        "descriptionPlain": "Intro text.",
+    }
+    http = http_factory(lambda req: httpx.Response(200, json=[posting]))
+    (job,) = LV.fetch(_entry(), FetchContext(http=http))
+    text = job.description
+    assert text.index("Intro text.") < text.index("Requirements") < text.index("3+ years of Python")
+    assert text.index("an item without a heading") < text.index("Closing note.")
+
+
+@pytest.mark.parametrize("html_fields", [{}, {"description": "", "lists": [], "additional": ""}])
+def test_falls_back_to_description_plain_when_no_html(http_factory, html_fields):
+    posting = {
+        "id": "p-2",
+        "text": "Engineer",
+        "hostedUrl": "https://jobs.lever.co/acme/p-2",
+        "descriptionPlain": "Only the plain text.",
+        **html_fields,
+    }
+    http = http_factory(lambda req: httpx.Response(200, json=[posting]))
+    (job,) = LV.fetch(_entry(), FetchContext(http=http))
+    assert job.description == "Only the plain text."

@@ -1,8 +1,15 @@
 """Lever provider -- public v0 postings JSON, no key.
 
-Ported from career-ops ``providers/lever.mjs``. The list endpoint ships the full
-``descriptionPlain`` for free, so there are no per-job fetches. The response is a
-bare JSON array (not ``{jobs: [...]}``).
+Ported from career-ops ``providers/lever.mjs``. The list endpoint ships each posting's
+whole body, so there are no per-job fetches. The response is a bare JSON array (not
+``{jobs: [...]}``).
+
+The body is split across fields: ``description`` (the intro), ``lists`` (each a heading
+plus HTML items: "Requirements", "Responsibilities", ...) and ``additional``. The
+``descriptionPlain`` mirror holds the intro only (measured live 2026-10-26: 384-469
+chars against 1,598-2,359 for the assembled body), so the body is assembled from the
+HTML fields, the way freehire's adapter does (``internal/ingest/sources/lever.go``, MIT).
+``descriptionPlain`` remains the fallback when every HTML field is empty.
 """
 
 from __future__ import annotations
@@ -11,6 +18,7 @@ import logging
 import re
 from urllib.parse import urlsplit
 
+from hiredra.sourcing._html import html_to_text
 from hiredra.sourcing.http import FetchError
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
@@ -26,6 +34,23 @@ log = logging.getLogger("hiredra.sourcing.lever")
 _ALLOWED_HOSTS = frozenset({"api.lever.co", "api.eu.lever.co"})
 _CAREERS_RE = re.compile(r"^jobs\.((?:eu\.)?lever\.co)$", re.I)
 _API = "https://{host}/v0/postings/{slug}"
+
+
+def _full_body(posting: dict) -> str | None:
+    """``description`` + every ``lists`` heading and items + ``additional``, as plain text."""
+    parts = [posting.get("description") if isinstance(posting.get("description"), str) else ""]
+    lists = posting.get("lists")
+    for item in lists if isinstance(lists, list) else ():
+        if not isinstance(item, dict):
+            continue
+        heading = item.get("text")
+        if isinstance(heading, str) and heading.strip():
+            parts.append(f"<h3>{heading}</h3>")
+        if isinstance(item.get("content"), str):
+            parts.append(f"<ul>{item['content']}</ul>")
+    if isinstance(posting.get("additional"), str):
+        parts.append(posting["additional"])
+    return html_to_text("".join(parts)) or clean(posting.get("descriptionPlain"))
 
 
 def _fold_locations(categories: dict) -> str | None:
@@ -101,7 +126,7 @@ class LeverProvider:
                         title=title,
                         company=entry.name,
                         source=self.name,
-                        description=clean(j.get("descriptionPlain")),
+                        description=_full_body(j),
                         location=location,
                         date_posted=iso_date(j.get("createdAt")),
                         job_type=clean(categories.get("commitment")),
