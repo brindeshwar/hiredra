@@ -20,6 +20,7 @@ itself stays pure CPU with no sourcing/http imports.
 from __future__ import annotations
 
 import argparse
+import math
 import re
 import sys
 from dataclasses import dataclass
@@ -160,8 +161,13 @@ class SeniorityResult:
     reason: str | None  # None iff keep
 
 
-# "N years" / "N+ yrs" / "N-M years" -- takes the max of every match, per job.
-_YEARS_RE = re.compile(r"(\d+)\s*\+?\s*(?:-\s*\d+\s*)?(?:years?|yrs?)\b", re.IGNORECASE)  # \b: not "yearly"
+# "N years" / "N+ yrs" / "N-M years" -- takes the max of every match, per job. A range counts by its lower
+# end ("2-5 years" is open to 2). Decimals are read whole and rounded up: "1.5+ years" -> 2 (it was read as
+# "5+ years"), "2.5 years" -> 3, and "5.1-7 years" -> 6 (it was read as "1-7").
+_YEARS_RE = re.compile(
+    r"(\d+(?:\.\d+)?)\s*\+?\s*(?:-\s*\d+(?:\.\d+)?\s*)?(?:years?|yrs?)\b",  # \b: not "yearly"
+    re.IGNORECASE,
+)
 
 # JobSpy (Indeed/LinkedIn) text is markdown-escaped: "4\+ years", "\- mentor". The escapes are
 # removed before the gate reads the body, or "4\+ years" never matches (found in M0.5: 25 of 60
@@ -267,7 +273,7 @@ def extract_max_years(text: str | None) -> int | None:
         after = text[m.end() : m.end() + _EDUCATION_WINDOW]
         if _EDU_QUALIFICATION_RE.search(before) or _FULL_TIME_EDUCATION_RE.search(after):
             continue
-        years = int(m.group(1))
+        years = math.ceil(float(m.group(1)))
         if years > _MAX_BELIEVABLE_YEARS or _not_a_requirement(text, m):
             continue
         matches.append(years)
