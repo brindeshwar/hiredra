@@ -11,9 +11,11 @@ for the data rows, to read their published data on the owner's machine.
 |---|---|---|---|
 | [career-ops](https://github.com/santifer/career-ops) | MIT | Design of the ATS providers (Greenhouse, Lever, Ashby), the provider shape `{id, detect(), fetch()}`, and the HTTP retry/backoff pattern, re-written in Python. No JavaScript is copied or run. | `hiredra/sourcing/http.py`, `hiredra/sourcing/provider.py`, `hiredra/sourcing/providers/` |
 | [OpenJobs](https://github.com/outscal/OpenJobs) (a fork of career-ops) | MIT | Its company dataset `data/companies_v2.json` (the `ats_links` field), read from the local clone to build the candidate company pool. No code is copied or run. | `discovery/harvest.py` |
+| [freehire](https://github.com/strelov1/freehire) | MIT | Location parsing rules from `internal/dict/location`, re-written in Python: the US-state / country-code clash rule, the GeoNames last-resort city rule, UK postcodes, Cyrillic city prefixes, title restrictions, and its curated place names and region-name tables (copied as data). Its location test cases, copied as a test fixture. The Lever description assembly (`description` + `lists` + `additional`) and the years-parser age/cap rules (`internal/job/jobfacts`), re-written. Its GeoNames city export `cities1000.tsv`, copied unchanged. | `hiredra/location.py`, `hiredra/geonames_cities.tsv`, `tests/fixtures/freehire_location_cases.json`, `hiredra/sourcing/providers/lever.py`, `hiredra/filter.py` |
+| [GeoNames](https://www.geonames.org/) (via freehire) | CC BY 4.0 | The `cities1000` place names and countries in `hiredra/geonames_cities.tsv` (freehire's export of it, unchanged). | `hiredra/geonames_cities.tsv` |
 | [open-jobs](https://github.com/elliottdehn/open-jobs) | CC0 1.0 | `tools/locparse.py`, ported to Python module `hiredra/location.py`, with its bare-city table copied as `hiredra/city_countries.json`. Its published job export: the `enrichment_json` skill fields (market skill vocabulary) and the per-ATS crawled postings. Its board roster `slugs.json`. | `hiredra/location.py`, `hiredra/city_countries.json`, `hiredra/graph/harvest.py`, `discovery/harvest.py`, `scripts/generate_company_list.py` |
 
-Versions read: career-ops at commit `fe06051`, OpenJobs at `cdcc533`, open-jobs at `a2d88f4`.
+Versions read: career-ops at commit `fe06051`, OpenJobs at `cdcc533`, open-jobs at `a2d88f4`, freehire at `8b55a65`.
 
 Later units will add one more use, recorded here when they land: the HTML/CSS structure of
 career-ops' CV and cover-letter templates, adapted into Jinja2 templates.
@@ -64,6 +66,20 @@ OpenJobs uses the same MIT text as above, with these copyright lines:
 Copyright (c) 2026 Santiago Fernández de Valderrama (original career-ops work)
 Copyright (c) 2026 Outscal (modifications and additions in this fork — Outscal-Jobs)
 ```
+
+### freehire (MIT)
+
+freehire uses the same MIT text as career-ops above, with this copyright line:
+
+```
+Copyright (c) 2026 freehire contributors
+```
+
+### GeoNames (CC BY 4.0)
+
+`hiredra/geonames_cities.tsv` contains data from GeoNames (https://www.geonames.org/), licensed under
+Creative Commons Attribution 4.0 (https://creativecommons.org/licenses/by/4.0/). Hiredra uses freehire's
+export of the `cities1000` dump unchanged, apart from a two-line provenance header.
 
 ### open-jobs (CC0 1.0 Universal)
 
