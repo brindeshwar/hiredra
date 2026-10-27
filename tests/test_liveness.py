@@ -88,7 +88,8 @@ def test_liveness_drops_a_job_absent_from_the_fresh_listing(ctx):
     conn = connect(":memory:")
     init_db(conn)
     job_id = _filtered_job(conn, job_id="p1", url="https://fake.example/p1")
-    provider = _FakeLivenessProvider("greenhouse", jobs=[])  # board is alive, this posting isn't listed anymore
+    other = Job(job_id="p9", url="https://fake.example/p9", title="x", company="Acme", source="greenhouse")
+    provider = _FakeLivenessProvider("greenhouse", jobs=[other])  # board is alive, this posting isn't listed
 
     stats = liveness.check_liveness(conn, ctx=ctx, registry=[provider])
 
@@ -111,6 +112,50 @@ def test_liveness_drops_the_whole_board_on_a_404(ctx):
     assert stats.gone == 2
     assert get_job(conn, j1)["status_detail"] == "liveness: gone"
     assert get_job(conn, j2)["status_detail"] == "liveness: gone"
+    conn.close()
+
+
+def test_liveness_keeps_jobs_when_the_board_lists_nothing(ctx):
+    # an empty listing reads the same as a broken feed: never a reason to drop a whole board at once
+    conn = connect(":memory:")
+    init_db(conn)
+    j1 = _filtered_job(conn, job_id="p1", url="https://fake.example/p1")
+    j2 = _filtered_job(conn, job_id="p2", url="https://fake.example/p2")
+    provider = _FakeLivenessProvider("greenhouse", jobs=[])
+
+    stats = liveness.check_liveness(conn, ctx=ctx, registry=[provider])
+
+    assert stats.ambiguous == 2 and stats.gone == 0
+    assert get_job(conn, j1)["status"] == "filtered" and get_job(conn, j2)["status"] == "filtered"
+    conn.close()
+
+
+def test_a_gone_job_listed_again_is_reopened(ctx):
+    # OpenAI took a posting down and republished it under the same id four days later (2026-10)
+    conn = connect(":memory:")
+    init_db(conn)
+    job_id = _filtered_job(conn, job_id="p1", url="https://fake.example/p1")
+    other = Job(job_id="p9", url="https://fake.example/p9", title="x", company="Acme", source="greenhouse")
+    liveness.check_liveness(conn, ctx=ctx, registry=[_FakeLivenessProvider("greenhouse", jobs=[other])])
+    assert get_job(conn, job_id)["status_detail"] == "liveness: gone"
+
+    upsert_job(conn, _job(job_id="p1", url="https://fake.example/p1"))  # the next sourcing run lists it again
+
+    row = get_job(conn, job_id)
+    assert row["status"] == "filtered"
+    assert "reopened" in row["status_detail"]
+    conn.close()
+
+
+def test_re_sighting_never_reopens_a_job_dropped_by_a_filter(ctx):
+    conn = connect(":memory:")
+    init_db(conn)
+    job_id = _filtered_job(conn, job_id="p1", url="https://fake.example/p1")
+    set_status(conn, job_id, "dropped", detail="seniority: requires 5y (max 2)")
+
+    upsert_job(conn, _job(job_id="p1", url="https://fake.example/p1"))
+
+    assert get_job(conn, job_id)["status"] == "dropped"  # only a liveness 'gone' is undone by a sighting
     conn.close()
 
 

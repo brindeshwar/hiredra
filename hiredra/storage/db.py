@@ -391,7 +391,9 @@ def upsert_job(
     are bumped and a ``seen`` event appended. Status, the scoring ledger, the
     outcome fields, and the Job content columns are all left untouched — a flaky
     re-fetch must never corrupt a good row or move a job backwards through the
-    funnel.
+    funnel. One exception: a job liveness dropped as ``liveness: gone`` that is
+    listed again is reopened to ``filtered`` (the only status liveness drops
+    from) -- a take-down and repost under the same id (2026-10-27).
     """
     job_id = job.get("job_id") or job.get("url")
     if not job_id:
@@ -428,7 +430,10 @@ def upsert_job(
             _add_event(conn, job_id, "seen", detail="first sighting", at=now)
         else:
             _touch(conn, job_id, detail="re-sighted", now=now)
+            row = conn.execute("SELECT status, status_detail FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
 
+    if exists is not None and row[0] == "dropped" and (row[1] or "").startswith("liveness: gone"):
+        set_status(conn, job_id, "filtered", detail="reopened: listed again after liveness: gone")
     return job_id
 
 

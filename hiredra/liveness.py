@@ -21,8 +21,12 @@ sourced jobs have no board to re-list -- deliberately NOT fetched directly
 boundary this project has held since Path 3 was built); they're kept and
 flagged ``add_note(..., "liveness: unchecked")`` instead, same convention
 the location stage uses for a kept-by-default job. Anything ambiguous (a
-block, a timeout, a non-404 error) also keeps the job unchanged -- an
-inconclusive recheck is never evidence of death.
+block, a timeout, a non-404 error, a listing with no jobs at all) also keeps
+the job unchanged -- an inconclusive recheck is never evidence of death.
+
+A 'gone' drop is not final: if a later sourcing run lists the job again (a
+take-down and repost under the same id, seen once in 77 drops), the storage
+layer reopens it to 'filtered' (``upsert_job``).
 """
 
 from __future__ import annotations
@@ -95,6 +99,12 @@ def check_liveness(conn, ctx: FetchContext | None = None, registry: Sequence[Pro
             except Exception:  # noqa: BLE001 -- Blocked/other FetchError/anything unexpected: ambiguous, never a drop signal
                 stats.ambiguous += len(group_jobs)
             else:
+                if not fresh_jobs:
+                    # A listing with nothing on it proves nothing: a board whose feed broke reads the same
+                    # as one that emptied, and calling everything on it gone would drop a whole live board
+                    # at once (freehire's boardReachedPostings guard, internal/ingest/pipeline, MIT).
+                    stats.ambiguous += len(group_jobs)
+                    continue
                 fresh_ids = {j.job_id for j in fresh_jobs}
                 for job in group_jobs:
                     if job["job_id"] in fresh_ids:
