@@ -13,6 +13,18 @@ Layered keys are **exact-match on normalized strings; no fuzzy matching**. A
 false merge loses a real job; a missed near-dup just shows twice in the batch
 of 10 -- so the bias is deliberately toward under-merging. On any collision the
 ATS row wins over an aggregator row (docs/sourcing.md sec. 8).
+
+The (company, role) key alone is not identity (2026-10-27, measured on 675 boards
+that post in India: it merged 24% of 49,906 jobs and threw away 624 India-eligible
+postings for a foreign copy of the same title, before the location filter ran).
+So a (company, role) match only merges two jobs that are the same role:
+- from different sources (an aggregator copy of a board's posting, or two
+  aggregators) -- two postings on one ATS board are two jobs by the board's own
+  ids, and a true duplicate there already shares a url;
+- in the same countries, as ``hiredra.location.parse`` reads them -- a role in
+  Bangalore and the same title in London are two jobs to us.
+Compare freehire's jobhash/jobdedup (MIT), which never deletes on (company, title)
+and clusters reposts only with the description in the key.
 """
 
 from __future__ import annotations
@@ -21,8 +33,10 @@ import re
 import sqlite3
 from collections.abc import Iterable
 from dataclasses import dataclass, field
+from functools import lru_cache
 from urllib.parse import parse_qsl, urlsplit
 
+from hiredra.location import parse
 from hiredra.sourcing.job import Job
 
 _AGG_PREFIX = "jobspy-"
@@ -166,6 +180,21 @@ def _is_aggregator(job: Job) -> bool:
     return job.source.startswith(_AGG_PREFIX)
 
 
+@lru_cache(maxsize=65536)
+def _countries(location: str | None, title: str | None) -> frozenset[str]:
+    return frozenset(parse(location or "", "", title or "")["countries"])
+
+
+def _same_role(a_source: str, a_countries: frozenset[str], b_source: str, b_countries: frozenset[str]) -> bool:
+    """May two jobs with the same (company, role) key be merged? See the module docstring."""
+    one_ats_board = a_source == b_source and not a_source.startswith(_AGG_PREFIX)
+    return not one_ats_board and a_countries == b_countries
+
+
+def _job_countries(job: Job) -> frozenset[str]:
+    return _countries(job.location, job.title)
+
+
 def _completeness(job: Job) -> int:
     return sum(v is not None for v in (job.description, job.date_posted, job.salary, job.location, job.is_remote))
 
@@ -209,19 +238,22 @@ def _collapse(jobs: list[Job], trace: list[MergeTrace]) -> tuple[list[Job], int]
                 by_url[key] = len(slots)
             slots.append(job)
 
-    by_ct: dict[tuple[str, str], int] = {}
+    by_ct: dict[tuple[str, str], list[int]] = {}
     out: list[Job] = []
     for job in slots:
         ct = (_norm_company(job.company), _norm_role(job.title))
         if not ct[0] or not ct[1]:
             out.append(job)
             continue
-        pos = by_ct.get(ct)
+        here = _job_countries(job)
+        pos = next(
+            (i for i in by_ct.get(ct, ()) if _same_role(out[i].source, _job_countries(out[i]), job.source, here)), None
+        )
         if pos is not None:
             out[pos] = _merge(out[pos], job, "company+role", trace)
             collapsed += 1
         else:
-            by_ct[ct] = len(out)
+            by_ct.setdefault(ct, []).append(len(out))
             out.append(job)
 
     return out, collapsed
@@ -234,7 +266,7 @@ class _SeenIndex:
     def __init__(self) -> None:
         self.by_job_id: set[str] = set()
         self.by_url: dict[str, str] = {}
-        self.by_ct: dict[tuple[str, str], str] = {}
+        self.by_ct: dict[tuple[str, str], list[tuple[str, str, frozenset[str]]]] = {}
 
     def match(self, job: Job) -> str | None:
         if job.job_id in self.by_job_id:
@@ -244,13 +276,16 @@ class _SeenIndex:
                 return self.by_url[candidate]
         ct = (_norm_company(job.company), _norm_role(job.title))
         if ct[0] and ct[1]:
-            return self.by_ct.get(ct)
+            here = _job_countries(job)
+            for jid, source, countries in self.by_ct.get(ct, ()):
+                if _same_role(source, countries, job.source, here):
+                    return jid
         return None
 
 
 def _load_seen_index(conn: sqlite3.Connection) -> _SeenIndex:
     idx = _SeenIndex()
-    for row in conn.execute("SELECT job_id, url, apply_url, company, title FROM jobs"):
+    for row in conn.execute("SELECT job_id, url, apply_url, company, title, source, location FROM jobs"):
         jid = row["job_id"]
         idx.by_job_id.add(jid)
         for candidate in (_norm_url(row["url"]), _norm_url(row["apply_url"])):
@@ -258,7 +293,7 @@ def _load_seen_index(conn: sqlite3.Connection) -> _SeenIndex:
                 idx.by_url.setdefault(candidate, jid)
         ct = (_norm_company(row["company"]), _norm_role(row["title"]))
         if ct[0] and ct[1]:
-            idx.by_ct.setdefault(ct, jid)
+            idx.by_ct.setdefault(ct, []).append((jid, row["source"], _countries(row["location"], row["title"])))
     return idx
 
 
