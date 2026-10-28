@@ -89,7 +89,7 @@ def test_the_sheet_is_blind(conn):
             and str(p["score_at_sampling"]) not in sheet
             or p["score_at_sampling"] == 0
         )
-    assert sheet.count("Rating: [ ] apply   [ ] maybe   [ ] skip") == 30
+    assert sheet.count("- [ ] apply\n- [ ] maybe\n- [ ] skip\n") == 30  # task-list lines: tickable in a preview
     assert "aws, python" in sheet  # skills alphabetical
 
 
@@ -98,7 +98,7 @@ def _tick(sheet: str, n: int, rating: str, reason: str) -> str:
     head = f"### J{n:02d}."
     a = sheet.index(head)
     b = sheet.index("job_id:", a)
-    block = sheet[a:b].replace(f"[ ] {rating}", f"[x] {rating}").replace("Reason: ", f"Reason: {reason}")
+    block = sheet[a:b].replace(f"- [ ] {rating}", f"- [x] {rating}").replace("Reason: ", f"Reason: {reason}")
     return sheet[:a] + block + sheet[b:]
 
 
@@ -130,22 +130,21 @@ def test_a_changed_rating_is_a_new_row_and_the_latest_wins(conn, tmp_path):
 
 
 @pytest.mark.parametrize(
-    ("rating_line", "reason", "problem"),
+    ("ticks", "reason", "problem"),
     [
-        ("Rating: [x] apply   [x] maybe   [ ] skip", "two boxes", "exactly one"),
-        ("Rating: [x] apply   [ ] maybe   [ ] skip", "", "reason is required"),
-        ("Rating: [ ] apply   [ ] maybe   [ ] skip", "a reason but no tick", "exactly one"),
+        (("apply", "maybe"), "two boxes", "exactly one"),
+        (("apply",), "", "reason is required"),
+        ((), "a reason but no tick", "exactly one"),
     ],
 )
-def test_a_badly_filled_job_is_refused_with_its_label(conn, rating_line, reason, problem):
+def test_a_badly_filled_job_is_refused_with_its_label(conn, ticks, reason, problem):
     sheet = rate.render_sheet(conn, rate.sample(conn))
     a = sheet.index("### J03.")
     b = sheet.index("job_id:", a)
-    block = (
-        sheet[a:b]
-        .replace("Rating: [ ] apply   [ ] maybe   [ ] skip", rating_line)
-        .replace("Reason: ", f"Reason: {reason}")
-    )
+    block = sheet[a:b]
+    for t in ticks:
+        block = block.replace(f"- [ ] {t}", f"- [x] {t}")
+    block = block.replace("Reason: ", f"Reason: {reason}")
     with pytest.raises(rate.SheetError, match=f"J03: .*{problem}"):
         rate.parse_sheet(sheet[:a] + block + sheet[b:])
 
@@ -156,3 +155,8 @@ def test_sample_refuses_to_overwrite_an_existing_sheet(conn, tmp_path):
     with pytest.raises(rate.SheetError, match="already exists"):
         rate.write_sample(conn, sheet=sheet, key=key)
     assert rate.write_sample(conn, sheet=sheet, key=key, force=True) == 30
+
+
+def test_an_uppercase_x_counts_as_a_tick(conn):
+    sheet = _tick(rate.render_sheet(conn, rate.sample(conn)), 1, "maybe", "fine")
+    assert [r[1] for r in rate.parse_sheet(sheet.replace("- [x] maybe", "- [X] maybe"))] == ["maybe"]

@@ -84,7 +84,7 @@ def render_sheet(conn, picks: list[dict]) -> str:
     out = [
         "# Step 7: rate these 30 jobs",
         "",
-        "For each job tick ONE box, `[x]`, and write one line saying why. Your answers teach the scorer your",
+        "For each job tick ONE box (click it, or type x inside the brackets) and write one line saying why. Your answers teach the scorer your",
         "judgment, so rate them yourself: no AI help, and don't look anything up about how Hiredra ranked them.",
         "",
         "- **apply**: I would apply to this today.",
@@ -117,7 +117,9 @@ def render_sheet(conn, picks: list[dict]) -> str:
             "",
             "</details>",
             "",
-            "Rating: [ ] apply   [ ] maybe   [ ] skip",
+            "- [ ] apply",
+            "- [ ] maybe",
+            "- [ ] skip",
             "",
             "Reason: ",
             "",
@@ -153,7 +155,7 @@ def write_sample(conn, *, sheet: Path = SHEET_PATH, key: Path = KEY_PATH, seed: 
 
 
 _BLOCK_RE = re.compile(r"^### (J\d+)\.", re.M)
-_TICK_RE = re.compile(r"\[([ xX])\]\s*(apply|maybe|skip)\b")
+_TICK_RE = re.compile(r"^- \[([ xX])\] (apply|maybe|skip)\s*$", re.M)  # one task-list line per option
 
 
 def parse_sheet(text: str) -> list[tuple[str, str, str]]:
@@ -163,8 +165,7 @@ def parse_sheet(text: str) -> list[tuple[str, str, str]]:
     for a, b in zip(starts, starts[1:]):
         block = text[a:b]
         label = _BLOCK_RE.match(block).group(1)
-        rating_line = next((ln for ln in block.splitlines() if ln.startswith("Rating:")), "")
-        ticked = [r for mark, r in _TICK_RE.findall(rating_line) if mark != " "]
+        ticked = [r for mark, r in _TICK_RE.findall(block) if mark != " "]
         reason = next((ln[len("Reason:") :].strip() for ln in block.splitlines() if ln.startswith("Reason:")), "")
         jid = re.search(r"^job_id: `([^`]+)`", block, re.M)
         if not ticked and not reason:
