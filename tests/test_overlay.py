@@ -39,8 +39,8 @@ def _unit(i: int, cosine: float = 1.0) -> np.ndarray:
 
 
 @pytest.fixture()
-def conn():
-    c = connect(":memory:")
+def conn(pg_url):
+    c = connect(pg_url)
     init_db(c)
     yield c
     c.close()
@@ -163,7 +163,7 @@ def _plan_and_links(conn, tmp_path, approve: bool):
 
 
 def _mine(conn) -> dict[str, str]:
-    return {r[0]: r[1] for r in conn.execute("SELECT name, level FROM skill_vocab WHERE mine = 1")}
+    return {r[0]: r[1] for r in conn.execute("SELECT name, level FROM skill_vocab WHERE mine = true")}
 
 
 def test_apply_with_the_link_approved(conn, tmp_path):
@@ -267,19 +267,19 @@ def test_a_failed_apply_changes_nothing(conn, tmp_path, monkeypatch):
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────────
-def _cli(tmp_path, *extra):
+def _cli(tmp_path, pg_url, *extra):
     return [
-        "--db", str(tmp_path / "h.db"), "--usage-path", str(tmp_path / "u.json"), "--lock-path", str(tmp_path / "g.lock"),
+        "--db", pg_url, "--usage-path", str(tmp_path / "u.json"), "--lock-path", str(tmp_path / "g.lock"),
         "overlay", "--profile", str(tmp_path / "p.md"),
         "--links-path", str(tmp_path / "links.json"), "--overlay-path", str(tmp_path / "overlay.json"), *extra,
     ]  # fmt: skip
 
 
-def test_cli_dry_run_then_apply(tmp_path, monkeypatch, capsys):
+def test_cli_dry_run_then_apply(tmp_path, monkeypatch, capsys, pg_url):
     from hiredra.graph.config import load_graph_config
 
     cfg = load_graph_config()
-    c = connect(tmp_path / "h.db")
+    c = connect(pg_url)
     init_db(c)
     for name, axis in (("python", 0), ("large language models", 6)):
         v = np.zeros(cfg.dimensions, dtype=np.float32)
@@ -299,37 +299,37 @@ def test_cli_dry_run_then_apply(tmp_path, monkeypatch, capsys):
         return embed
 
     monkeypatch.setattr("hiredra.graph.embedder.build_embedder", fake_builder)
-    assert graph_main(_cli(tmp_path)) == 0
+    assert graph_main(_cli(tmp_path, pg_url)) == 0
     out = capsys.readouterr().out
     assert "DRY RUN" in out and "[working] llms -> large language models" in out and "[familiar] rust" in out
-    c = connect(tmp_path / "h.db")
-    assert c.execute("SELECT COUNT(*) FROM skill_vocab WHERE mine = 1").fetchone()[0] == 0  # dry run changed nothing
+    c = connect(pg_url)
+    assert c.execute("SELECT COUNT(*) FROM skill_vocab WHERE mine = true").fetchone()[0] == 0  # dry run changed nothing
     c.close()
 
-    assert graph_main(_cli(tmp_path, "--apply")) == 0
+    assert graph_main(_cli(tmp_path, pg_url, "--apply")) == 0
     assert "overlay applied: 3 mine node(s)" in capsys.readouterr().out
-    c = connect(tmp_path / "h.db")
-    assert {r[0] for r in c.execute("SELECT name FROM skill_vocab WHERE mine = 1")} == {"python", "llms", "rust"}
+    c = connect(pg_url)
+    assert {r[0] for r in c.execute("SELECT name FROM skill_vocab WHERE mine = true")} == {"python", "llms", "rust"}
     c.close()
 
 
-def test_cli_without_a_profile_names_the_owner_task(tmp_path, capsys):
-    assert graph_main(_cli(tmp_path)) == 1
+def test_cli_without_a_profile_names_the_owner_task(tmp_path, capsys, pg_url):
+    assert graph_main(_cli(tmp_path, pg_url)) == 1
     assert "owner task O1a" in capsys.readouterr().out
 
 
-def test_cli_bad_profile_shows_the_line(tmp_path, capsys):
+def test_cli_bad_profile_shows_the_line(tmp_path, capsys, pg_url):
     (tmp_path / "p.md").write_text("## Skills\n**Strong:**\nPython\n", encoding="utf-8")
-    assert graph_main(_cli(tmp_path)) == 1
+    assert graph_main(_cli(tmp_path, pg_url)) == 1
     assert "line 3: rule 4" in capsys.readouterr().out
 
 
-def test_cli_budget_stop_writes_nothing(tmp_path, monkeypatch, capsys):
+def test_cli_budget_stop_writes_nothing(tmp_path, monkeypatch, capsys, pg_url):
     from hiredra.graph.embedder import DailyQuotaExceeded
     from hiredra.graph.config import load_graph_config
 
     cfg = load_graph_config()
-    c = connect(tmp_path / "h.db")
+    c = connect(pg_url)
     init_db(c)
     add_market_skill(c, "python")
     save_vectors(
@@ -348,6 +348,6 @@ def test_cli_budget_stop_writes_nothing(tmp_path, monkeypatch, capsys):
         return embed
 
     monkeypatch.setattr("hiredra.graph.embedder.build_embedder", no_budget)
-    assert graph_main(_cli(tmp_path)) == 2
+    assert graph_main(_cli(tmp_path, pg_url)) == 2
     assert "STOPPED (daily_quota)" in capsys.readouterr().out
     assert not (tmp_path / "links.json").exists()

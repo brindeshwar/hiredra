@@ -62,8 +62,8 @@ def _at(cosine: float, axis: int = 1, base: int = 0) -> np.ndarray:
 
 
 @pytest.fixture()
-def conn():
-    c = connect(":memory:")
+def conn(pg_url):
+    c = connect(pg_url)
     init_db(c)
     yield c
     c.close()
@@ -73,9 +73,9 @@ def _node(conn, cfg, name, vec=None, *, seen=0, mine=False, embed=True):
     add_market_skill(conn, name)
     if embed:
         save_vectors(conn, [name], np.asarray([vec], dtype=np.float32), cfg.embed_tag)
-    conn.execute("UPDATE skill_vocab SET seen_count = ?, mine = ? WHERE name = ?", (seen, int(mine), name))
+    conn.execute("UPDATE skill_vocab SET seen_count = %s, mine = %s WHERE name = %s", (seen, bool(mine), name))
     if mine:
-        conn.execute("UPDATE skill_vocab SET source = 'profile', level = 'production' WHERE name = ?", (name,))
+        conn.execute("UPDATE skill_vocab SET source = 'profile', level = 'production' WHERE name = %s", (name,))
     conn.commit()
 
 

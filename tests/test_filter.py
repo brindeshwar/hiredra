@@ -13,7 +13,7 @@ CONFIG = funnel.load_filter_config()
 
 def _job(**overrides):
     job = {
-        "job_id": overrides.pop("job_id", "j1"),
+        "job_id": overrides.pop("job_id", "greenhouse:j1"),
         "url": overrides.pop("url", "https://example.com/j1"),
         "title": "Backend Engineer",
         "company": "Acme",
@@ -256,14 +256,20 @@ def test_role_type_block_wins_on_both():
 
 
 # --- wiring ----------------------------------------------------------------
-def test_run_funnel_advances_and_drops_with_reasons():
-    conn = connect(":memory:")
+def test_run_funnel_advances_and_drops_with_reasons(pg_url):
+    conn = connect(pg_url)
     init_db(conn)
     upsert_job(
-        conn, _job(job_id="keep1", url="u1", title="Backend Engineer", description="Great team, no years stated.")
+        conn,
+        _job(job_id="greenhouse:keep1", url="u1", title="Backend Engineer", description="Great team, no years stated."),
     )
-    upsert_job(conn, _job(job_id="drop-sen", url="u2", title="Engineering Manager", description="5+ years required."))
-    upsert_job(conn, _job(job_id="drop-role", url="u3", title="Content Writer", description="Write great content."))
+    upsert_job(
+        conn,
+        _job(job_id="greenhouse:drop-sen", url="u2", title="Engineering Manager", description="5+ years required."),
+    )
+    upsert_job(
+        conn, _job(job_id="greenhouse:drop-role", url="u3", title="Content Writer", description="Write great content.")
+    )
 
     stats = funnel.run_funnel(conn, CONFIG)
 
@@ -272,26 +278,26 @@ def test_run_funnel_advances_and_drops_with_reasons():
     assert stats.dropped_seniority == 1
     assert stats.dropped_role_type == 1
 
-    keep = get_job(conn, "keep1")
+    keep = get_job(conn, "greenhouse:keep1")
     assert keep["status"] == "filtered"
     assert keep["years_required"] is None
 
-    dropped_sen = get_job(conn, "drop-sen")
+    dropped_sen = get_job(conn, "greenhouse:drop-sen")
     assert dropped_sen["status"] == "dropped"
     assert dropped_sen["years_required"] == 5
     assert dropped_sen["status_detail"].startswith("seniority:")
 
-    dropped_role = get_job(conn, "drop-role")
+    dropped_role = get_job(conn, "greenhouse:drop-role")
     assert dropped_role["status"] == "dropped"
     assert dropped_role["status_detail"].startswith("role_type:")
 
     conn.close()
 
 
-def test_run_funnel_is_idempotent_on_a_rerun():
-    conn = connect(":memory:")
+def test_run_funnel_is_idempotent_on_a_rerun(pg_url):
+    conn = connect(pg_url)
     init_db(conn)
-    upsert_job(conn, _job(job_id="keep1", url="u1"))
+    upsert_job(conn, _job(job_id="greenhouse:keep1", url="u1"))
     funnel.run_funnel(conn, CONFIG)
     stats2 = funnel.run_funnel(conn, CONFIG)
     assert stats2.seen == 0  # nothing left at status='fetched'

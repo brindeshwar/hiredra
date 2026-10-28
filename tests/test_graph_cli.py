@@ -61,11 +61,11 @@ class FakeEmbedder:
 
 
 @pytest.fixture()
-def env(tmp_path):
+def env(tmp_path, pg_url):
     cfg = tmp_path / "graph.yml"
     cfg.write_text(CONFIG, encoding="utf-8")
     return {
-        "db": tmp_path / "t.db",
+        "db": pg_url,
         "cfg": cfg,
         "df": tmp_path / "df.json",
         "review": tmp_path / "review.json",
@@ -240,7 +240,7 @@ def _two_near_dups(env):
         vec = np.zeros(DIM, dtype=np.float32)
         vec[: len(v)] = v
         save_vectors(c, [n], np.asarray([vec / np.linalg.norm(vec)]), cfg.embed_tag)
-        c.execute("UPDATE skill_vocab SET seen_count = ? WHERE name = ?", (seen, n))
+        c.execute("UPDATE skill_vocab SET seen_count = %s WHERE name = %s", (seen, n))
     c.commit()
     c.close()
 
@@ -485,7 +485,7 @@ def _bands_db(env):
     for name, vec, seen in nodes:
         add_market_skill(c, name)
         save_vectors(c, [name], np.asarray([vec]), cfg.embed_tag)
-        c.execute("UPDATE skill_vocab SET seen_count = ? WHERE name = ?", (seen, name))
+        c.execute("UPDATE skill_vocab SET seen_count = %s WHERE name = %s", (seen, name))
     c.commit()
     c.close()
 

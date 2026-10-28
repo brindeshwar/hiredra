@@ -1,17 +1,14 @@
-"""``python -m hiredra.sourcing run --config PATH [--db PATH] [--resume]``
-``python -m hiredra.sourcing runs [--db PATH] [--limit N]``
-``python -m hiredra.sourcing backfill-slugs [--db PATH] [--lists YML ...] [--roster JSON]``
+"""``python -m hiredra.sourcing run --config PATH [--db URL] [--resume]``
+``python -m hiredra.sourcing runs [--db URL] [--limit N]``
 
 The CLI owns the one shared connection to the operational DB: opens it once,
-closes it once in a ``finally``. ``ScoringSink`` and ``SqliteRunStore`` share it.
+closes it once in a ``finally``. ``ScoringSink`` and ``PgRunStore`` share it.
 """
 
 from __future__ import annotations
 
 import argparse
-import json
 import sys
-from pathlib import Path
 
 # Job titles/companies/detail strings can carry arbitrary Unicode; a Windows
 # console's default codepage (cp1252 etc.) can't encode all of it. Replace
@@ -20,10 +17,9 @@ for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
         _stream.reconfigure(errors="replace")
 
-from hiredra.sourcing.config import load_companies, load_run_config
+from hiredra.sourcing.config import load_run_config
 from hiredra.sourcing.orchestrator import RunReport, run as run_orchestrator
-from hiredra.sourcing.persist import backfill_slugs
-from hiredra.sourcing.runstore import SqliteRunStore
+from hiredra.sourcing.runstore import PgRunStore
 from hiredra.sourcing.sink import ScoringSink
 from hiredra.storage import db
 
@@ -67,7 +63,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     conn = db.connect(args.db)
     try:
         db.init_db(conn)
-        run_store = SqliteRunStore(conn)
+        run_store = PgRunStore(conn)
         report = run_orchestrator(
             config,
             sink_factory=lambda run_id: ScoringSink(conn, run_id),
@@ -98,58 +94,20 @@ def _cmd_runs(args: argparse.Namespace) -> int:
         conn.close()
 
 
-def _cmd_backfill_slugs(args: argparse.Namespace) -> int:
-    entries = []
-    for path in args.lists:
-        if Path(path).exists():
-            entries.extend(load_companies(path))
-        else:
-            print(f"  (list not found, skipped: {path})")
-    roster: set[tuple[str, str]] = set()
-    if Path(args.roster).exists():
-        data = json.loads(Path(args.roster).read_text(encoding="utf-8"))["ats"]
-        roster = {(ats, slug.lower()) for ats, slugs in data.items() for slug in slugs}
-    else:
-        print(f"  (roster not found, skipped: {args.roster})")
-
-    conn = db.connect(args.db)
-    try:
-        db.init_db(conn)  # migrates to v5 first if needed
-        s = backfill_slugs(conn, entries, roster)
-        total = conn.execute("SELECT COUNT(*) FROM jobs WHERE source IN ('greenhouse', 'lever', 'ashby')").fetchone()[0]
-        with_slug = conn.execute(
-            "SELECT COUNT(*) FROM jobs WHERE source IN ('greenhouse', 'lever', 'ashby') AND company_slug IS NOT NULL"
-        ).fetchone()[0]
-    finally:
-        conn.close()
-    print(
-        f"backfill-slugs: {s.rows} row(s) looked at -- slug from url={s.from_url} list={s.from_list} "
-        f"roster={s.from_roster} unresolved={s.unresolved}; tagged={s.tagged}"
-    )
-    print(f"  ATS rows with a slug: {with_slug}/{total} ({100 * with_slug / total if total else 100:.1f}%)")
-    return 0
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m hiredra.sourcing")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_run = sub.add_parser("run", help="run a sourcing config")
     p_run.add_argument("--config", required=True)
-    p_run.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
+    p_run.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
     p_run.add_argument("--resume", action="store_true")
     p_run.set_defaults(func=_cmd_run)
 
     p_runs = sub.add_parser("runs", help="list recent runs")
-    p_runs.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
+    p_runs.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
     p_runs.add_argument("--limit", type=int, default=20)
     p_runs.set_defaults(func=_cmd_runs)
-
-    p_bf = sub.add_parser("backfill-slugs", help="fill company_slug / list_tag on rows stored before v5")
-    p_bf.add_argument("--db", default=str(db.DEFAULT_DB_PATH))
-    p_bf.add_argument("--lists", nargs="+", default=["config/companies.yml", "config/companies.wide.yml"])
-    p_bf.add_argument("--roster", default="reference/open-jobs/slugs.json")
-    p_bf.set_defaults(func=_cmd_backfill_slugs)
 
     args = parser.parse_args(argv)
     return args.func(args)

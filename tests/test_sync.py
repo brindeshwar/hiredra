@@ -76,8 +76,8 @@ def _transient(msg: str = "Error embedding content (503 after retries)") -> Exce
 
 
 @pytest.fixture()
-def conn():
-    c = connect(":memory:")
+def conn(pg_url):
+    c = connect(pg_url)
     init_db(c)
     yield c
     c.close()
@@ -450,7 +450,7 @@ def test_a_network_failure_is_a_transient_stop(conn):
     assert r.stopped == "transient"
 
 
-def test_each_stop_reason_is_distinct(conn):
+def test_each_stop_reason_is_distinct(conn, pg_url):
     """quota / budget / transient / api_error / bad_response are five different labels."""
     from hiredra.graph.usage import DailyBudgetReached
 
@@ -462,7 +462,7 @@ def test_each_stop_reason_is_distinct(conn):
         _wrapped(ClientError(400, {"error": {"message": "bad request"}})),
         EmbeddingError("zero norm"),
     ):
-        c = connect(":memory:")
+        c = connect(pg_url)
         init_db(c)
         _seed(c, "a")
         reasons.add(embed_pending(c, _cfg(), FakeEmbedder(script={1: exc})).stopped)

@@ -30,7 +30,7 @@ and clusters reposts only with the description in the key.
 from __future__ import annotations
 
 import re
-import sqlite3
+import psycopg
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -283,10 +283,12 @@ class _SeenIndex:
         return None
 
 
-def _load_seen_index(conn: sqlite3.Connection) -> _SeenIndex:
+def _load_seen_index(conn: psycopg.Connection) -> _SeenIndex:
     idx = _SeenIndex()
-    for row in conn.execute("SELECT job_id, url, apply_url, company, title, source, location FROM jobs"):
-        jid = row["job_id"]
+    # Insertion order, as SQLite gave it: the first stored job claims a url / role key (setdefault, first match).
+    rows = conn.execute("SELECT job_key, url, apply_url, company, title, source, location FROM jobs ORDER BY id")
+    for row in rows:
+        jid = row["job_key"]
         idx.by_job_id.add(jid)
         for candidate in (_norm_url(row["url"]), _norm_url(row["apply_url"])):
             if candidate:
@@ -298,7 +300,7 @@ def _load_seen_index(conn: sqlite3.Connection) -> _SeenIndex:
 
 
 # ── entry point ────────────────────────────────────────────────────────────
-def dedup(conn: sqlite3.Connection, jobs: Iterable[Job]) -> DedupResult:
+def dedup(conn: psycopg.Connection, jobs: Iterable[Job]) -> DedupResult:
     trace: list[MergeTrace] = []
     unique, collapsed = _collapse(list(jobs), trace)
 

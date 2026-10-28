@@ -151,14 +151,14 @@ class _FakeNvidia:
         return extraction.ExtractionResult(**GOOD)
 
 
-def _db(tmp_path, n=3):
-    path = tmp_path / "h.db"
+def _db(tmp_path, pg_url, n=3):
+    path = pg_url
     conn = connect(path)
     init_db(conn)
     for i in range(n):
-        upsert_job(conn, {"job_id": f"j{i}", "url": f"u://{i}", "title": "Engineer", "company": "Acme",
+        upsert_job(conn, {"job_id": f"greenhouse:j{i}", "url": f"u://{i}", "title": "Engineer", "company": "Acme",
                           "source": "greenhouse", "description": "We write Python services daily. " * 10})  # fmt: skip
-        set_status(conn, f"j{i}", "filtered")
+        set_status(conn, f"greenhouse:j{i}", "filtered")
     conn.close()
     return path
 
@@ -193,8 +193,8 @@ class _GeminiThenSpent:
         return extraction.ExtractionResult(**GOOD)
 
 
-def test_fallback_takes_over_when_gemini_budget_is_spent(tmp_path, monkeypatch, fakes, capsys):
-    path = _db(tmp_path, n=3)
+def test_fallback_takes_over_when_gemini_budget_is_spent(tmp_path, monkeypatch, fakes, capsys, pg_url):
+    path = _db(tmp_path, pg_url, n=3)
     from hiredra.quota import DailyUsage
 
     gemini = DailyUsage(1, tmp_path / "gem.json")  # budget of ONE call
@@ -205,7 +205,7 @@ def test_fallback_takes_over_when_gemini_budget_is_spent(tmp_path, monkeypatch, 
     out = capsys.readouterr().out
     assert "gemini STOPPED (daily_quota)" in out and "nvidia: seen=2 extracted=2" in out
     conn = connect(path)
-    stamps = [get_job(conn, f"j{i}")["extraction_version"] for i in range(3)]
+    stamps = [get_job(conn, f"greenhouse:j{i}")["extraction_version"] for i in range(3)]
     conn.close()
     cfg = extraction.load_extraction_config()
     assert stamps[0] == extraction.extraction_version(cfg)
@@ -213,16 +213,16 @@ def test_fallback_takes_over_when_gemini_budget_is_spent(tmp_path, monkeypatch, 
     assert gemini.used() == 1
 
 
-def test_provider_nvidia_skips_gemini(tmp_path, monkeypatch, fakes, capsys):
-    path = _db(tmp_path, n=2)
+def test_provider_nvidia_skips_gemini(tmp_path, monkeypatch, fakes, capsys, pg_url):
+    path = _db(tmp_path, pg_url, n=2)
     monkeypatch.setattr(extraction, "build_extraction_chain", lambda **kw: pytest.fail("gemini used"))
     assert extraction.main(_args(tmp_path, path, "--provider", "nvidia")) == 0
     assert "nvidia: seen=2 extracted=2" in capsys.readouterr().out
     assert (tmp_path / "nvidia_nemotron-3.5-super-vl-120b-a12b.json").exists()  # its own visible counter
 
 
-def test_a_non_quota_stop_does_not_hand_over(tmp_path, monkeypatch, fakes, capsys):
-    path = _db(tmp_path, n=2)
+def test_a_non_quota_stop_does_not_hand_over(tmp_path, monkeypatch, fakes, capsys, pg_url):
+    path = _db(tmp_path, pg_url, n=2)
     from google.genai.errors import ClientError
 
     class Refused:
@@ -235,24 +235,27 @@ def test_a_non_quota_stop_does_not_hand_over(tmp_path, monkeypatch, fakes, capsy
     assert "gemini STOPPED (api_error)" in out and "nvidia:" not in out and _FakeNvidia.instances == []
 
 
-def test_without_a_key_the_fallback_is_skipped_cleanly(tmp_path, monkeypatch, capsys):
-    path = _db(tmp_path, n=1)
+def test_without_a_key_the_fallback_is_skipped_cleanly(tmp_path, monkeypatch, capsys, pg_url):
+    path = _db(tmp_path, pg_url, n=1)
     monkeypatch.setattr(extraction, "build_extraction_chain", lambda **kw: pytest.fail("gemini used"))
     assert extraction.main(_args(tmp_path, path, "--provider", "nvidia")) == 0
     assert "nvidia NOT RUN: NVIDIA_API_KEY is not set" in capsys.readouterr().out
 
 
-def test_stale_counts_both_providers_stamps_as_current(tmp_path):
+def test_stale_counts_both_providers_stamps_as_current(tmp_path, pg_url):
     cfg = extraction.load_extraction_config()
-    conn = connect(":memory:")
+    conn = connect(pg_url)
     init_db(conn)
     for i, stamp in enumerate(
         [extraction.extraction_version(cfg), extraction.extraction_version(cfg, cfg.fallback_model), "old:stamp"]
     ):
-        upsert_job(conn, {"job_id": f"s{i}", "url": f"u://s{i}", "title": "E", "company": "A", "source": "greenhouse"})
-        set_status(conn, f"s{i}", "filtered")
-        set_status(conn, f"s{i}", "extracted")
-        conn.execute("UPDATE jobs SET extraction_version = ? WHERE job_id = ?", (stamp, f"s{i}"))
+        upsert_job(
+            conn,
+            {"job_id": f"greenhouse:s{i}", "url": f"u://s{i}", "title": "E", "company": "A", "source": "greenhouse"},
+        )
+        set_status(conn, f"greenhouse:s{i}", "filtered")
+        set_status(conn, f"greenhouse:s{i}", "extracted")
+        conn.execute("UPDATE jobs SET extraction_version = %s WHERE job_key = %s", (stamp, f"greenhouse:s{i}"))
     conn.commit()
     assert list(extraction.stale_jobs(conn, cfg)) == ["old:stamp"]
 

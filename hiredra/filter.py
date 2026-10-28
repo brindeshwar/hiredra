@@ -31,7 +31,6 @@ import yaml
 from hiredra.liveness import check_liveness
 from hiredra.location import eligibility, parse
 from hiredra.storage import (
-    DEFAULT_DB_PATH,
     add_note,
     connect,
     init_db,
@@ -378,7 +377,7 @@ def run_funnel(conn, config: FilterConfig) -> FunnelStats:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m hiredra.filter")
-    parser.add_argument("--db", default=str(DEFAULT_DB_PATH))
+    parser.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
     args = parser.parse_args(argv)
 

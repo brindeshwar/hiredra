@@ -12,6 +12,8 @@ services:
       POSTGRES_USER: hiredra
       POSTGRES_DB: hiredra
       POSTGRES_PASSWORD: ${HIREDRA_PG_PASSWORD:?set HIREDRA_PG_PASSWORD in .env}
+      # Code-point text order, as SQLite and Python sort (en_US would reorder ties: "B" after "alpha").
+      POSTGRES_INITDB_ARGS: --locale-provider=builtin --builtin-locale=C.UTF-8 --encoding=UTF8
     ports:
       - "127.0.0.1:5432:5432"
     volumes:

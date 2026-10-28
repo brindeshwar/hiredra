@@ -18,7 +18,7 @@ from hiredra.graph.__main__ import main as graph_main
 from hiredra.graph.config import GraphConfig, load_graph_config
 from hiredra.graph.index import save_vectors
 from hiredra.graph.embedder import DailyQuotaExceeded
-from hiredra.storage import add_market_skill, connect, init_db, set_status, upsert_job
+from hiredra.storage import add_market_skill, connect, init_db, set_extraction, set_status, upsert_job
 
 DIM = 128
 REPO = Path(__file__).resolve().parents[1]
@@ -53,8 +53,8 @@ def _tilted(i: int, cosine: float) -> np.ndarray:
 
 
 @pytest.fixture()
-def conn():
-    c = connect(":memory:")
+def conn(pg_url):
+    c = connect(pg_url)
     init_db(c)
     yield c
     c.close()
@@ -65,7 +65,7 @@ def _node(conn, cfg, name, vec, *, mine=False):
     save_vectors(conn, [name], np.asarray([vec], dtype=np.float32), cfg.embed_tag)
     if mine:
         conn.execute(
-            "UPDATE skill_vocab SET mine = 1, source = 'profile', level = 'production' WHERE name = ?", (name,)
+            "UPDATE skill_vocab SET mine = true, source = 'profile', level = 'production' WHERE name = %s", (name,)
         )
     conn.commit()
 
@@ -254,7 +254,7 @@ def test_pair_cosines_from_nodes_aliases_and_fresh_embeddings(conn, tmp_path):
     cfg = _cfg()
     _node(conn, cfg, "kubernetes", _basis(0))
     _node(conn, cfg, "docker", _tilted(0, 0.755))
-    conn.execute("INSERT INTO skill_alias (alias, canonical, created_at) VALUES ('k8s', 'kubernetes', 't')")
+    conn.execute("INSERT INTO skill_alias (alias, canonical, created_at) VALUES ('k8s', 'kubernetes', now())")
     conn.commit()
     p = _write(tmp_path, "k8s,docker,related,tune,real,\nkubernetes,helm chart,related,holdout,trap,\n")
     pairs = cal.load_pairs(p, enforce_counts=False)
@@ -312,11 +312,8 @@ def _extracted_job(conn, job_id, skills):
     upsert_job(
         conn, {"job_id": job_id, "url": f"u://{job_id}", "title": "Engineer", "company": "Acme", "source": "greenhouse"}
     )
-    conn.execute(
-        "UPDATE jobs SET skills = ? WHERE job_id = ?",
-        (json.dumps([{"name": s, "requirement": "required"} for s in skills]), job_id),
-    )
-    conn.commit()
+    set_extraction(conn, job_id, skills=[{"name": s, "requirement": "required"} for s in skills],
+                   domain_bucket=None, legitimacy=None, extraction_confidence="high")  # fmt: skip
     set_status(conn, job_id, "filtered")
     set_status(conn, job_id, "extracted")
 
@@ -335,8 +332,8 @@ def _sampler_graph(conn, cfg):
     for name, (axis, c) in names.items():
         _node(conn, cfg, name, _tilted(axis, c))
     _node(conn, cfg, "fortran", _tilted(20, 0.9))  # nearest mine is far below 0.40 -> never suggested
-    _extracted_job(conn, "j1", ["Django", "flask", "pandas", "python"])
-    _extracted_job(conn, "j2", ["mysql", "redis", "cobol", "fortran", "not a node"])
+    _extracted_job(conn, "greenhouse:j1", ["Django", "flask", "pandas", "python"])
+    _extracted_job(conn, "greenhouse:j2", ["mysql", "redis", "cobol", "fortran", "not a node"])
 
 
 def test_suggest_draws_across_bands_and_keeps_the_cosines_private(conn):
@@ -399,13 +396,13 @@ def test_the_shipped_config_is_calibrated_and_has_its_report():
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────────
-def _cli_env(tmp_path, cfg_cosines=None):
+def _cli_env(tmp_path, pg_url, cfg_cosines=None):
     """A real DB with every pair's two names as nodes at the pair's exact cosine."""
     config = tmp_path / "graph.yml"
     shutil.copy(REPO / "config" / "graph.yml", config)
     cfg = load_graph_config(config)
     pairs_path, cosines = _full_file(tmp_path, cfg_cosines)
-    db = tmp_path / "h.db"
+    db = pg_url
     c = connect(db)
     init_db(c)
     for i, ((a, b), cosine) in enumerate(cosines.items()):
@@ -426,8 +423,8 @@ def _cli_env(tmp_path, cfg_cosines=None):
     return args, config
 
 
-def test_cli_dry_run_writes_nothing(tmp_path, capsys):
-    args, config = _cli_env(tmp_path)
+def test_cli_dry_run_writes_nothing(tmp_path, capsys, pg_url):
+    args, config = _cli_env(tmp_path, pg_url)
     before = config.read_text(encoding="utf-8")
     assert graph_main(args) == 0
     out = capsys.readouterr().out
@@ -436,8 +433,8 @@ def test_cli_dry_run_writes_nothing(tmp_path, capsys):
     assert (tmp_path / "cos.csv").exists()  # the snapshot is always kept
 
 
-def test_cli_write_updates_config_and_saves_the_report(tmp_path):
-    args, config = _cli_env(tmp_path)
+def test_cli_write_updates_config_and_saves_the_report(tmp_path, pg_url):
+    args, config = _cli_env(tmp_path, pg_url)
     assert graph_main([*args, "--write"]) == 0
     cfg = load_graph_config(config)
     assert (cfg.have, cfg.adj) == (0.87, 0.63) and cfg.calibration_id.startswith("step5-")
@@ -445,26 +442,28 @@ def test_cli_write_updates_config_and_saves_the_report(tmp_path):
     assert "**HAVE = 0.87**" in report and "## Misclassified holdout pairs" in report
 
 
-def test_cli_broken_result_exits_3_and_writes_nothing(tmp_path):
-    args, config = _cli_env(tmp_path, lambda label, i: {"same": 0.95, "related": 0.95, "unrelated": 0.30}[label])
+def test_cli_broken_result_exits_3_and_writes_nothing(tmp_path, pg_url):
+    args, config = _cli_env(
+        tmp_path, pg_url, lambda label, i: {"same": 0.95, "related": 0.95, "unrelated": 0.30}[label]
+    )
     before = config.read_text(encoding="utf-8")
     assert graph_main([*args, "--write"]) == 3
     assert config.read_text(encoding="utf-8") == before
 
 
-def test_cli_bad_pair_file_exits_1(tmp_path, capsys):
-    args, _ = _cli_env(tmp_path)
+def test_cli_bad_pair_file_exits_1(tmp_path, capsys, pg_url):
+    args, _ = _cli_env(tmp_path, pg_url)
     bad = _write(tmp_path, "a,b,same,,trap,\n", name="bad.csv")
     args[args.index("--pairs") + 1] = str(bad)
     assert graph_main(args) == 1
     assert "line 5: no split" in capsys.readouterr().out
 
 
-def test_cli_suggest_prints_only_names(tmp_path, capsys):
+def test_cli_suggest_prints_only_names(tmp_path, capsys, pg_url):
     config = tmp_path / "graph.yml"
     shutil.copy(REPO / "config" / "graph.yml", config)
     cfg = load_graph_config(config)
-    db = tmp_path / "h.db"
+    db = pg_url
     c = connect(db)
     init_db(c)
 
@@ -482,10 +481,10 @@ def test_cli_suggest_prints_only_names(tmp_path, capsys):
         save_vectors(c, [name], np.asarray([v]), cfg.embed_tag)
         if mine:
             c.execute(
-                "UPDATE skill_vocab SET mine = 1, source = 'profile', level = 'production' WHERE name = ?", (name,)
+                "UPDATE skill_vocab SET mine = true, source = 'profile', level = 'production' WHERE name = %s", (name,)
             )
     c.commit()
-    _extracted_job(c, "j1", ["django", "pandas"])
+    _extracted_job(c, "greenhouse:j1", ["django", "pandas"])
     c.close()
     sidecar = tmp_path / "private" / "bands.json"
 

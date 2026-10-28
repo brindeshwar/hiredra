@@ -193,14 +193,15 @@ CREATE TABLE skill_vocab (
     description    text,                         -- freehire descriptions.tsv; the embedding input is "name: description"
     first_seen_at  timestamptz NOT NULL DEFAULT now(),
     seen_count     integer NOT NULL DEFAULT 1,
-    vector         vector(1024),                 -- Qwen3-Embedding-0.6B (D1.15)
+    vector         vector,                       -- any width: embed_tag pins model + width (D1.15: Qwen3, 1024)
     embed_tag      text,
     mine           boolean NOT NULL DEFAULT false,
     level          text CHECK (level IS NULL OR level IN ('production', 'built-with', 'learned', 'interview-ready')),
     source         text NOT NULL DEFAULT 'jd' CHECK (source IN ('market', 'jd', 'profile')),
     edges          jsonb NOT NULL DEFAULT '[]'
 );
-CREATE INDEX skill_vocab_vector ON skill_vocab USING hnsw (vector vector_cosine_ops);
+-- No HNSW index: nearest-skill matching is exact, in memory, over the ~140 mine skills. Measured 2026-10-29
+-- on the real 2,223 vectors: HNSW (default ef_search) changed 161 fit scores, exact matching changed none.
 
 CREATE TABLE skill_alias (
     alias       text PRIMARY KEY,

@@ -72,8 +72,8 @@ def test_concurrent_trips_are_consistent():
 
 # ── storage: load_cooldowns / save_cooldown ───────────────────────────────
 @pytest.fixture()
-def conn():
-    c = db.connect(":memory:")
+def conn(pg_url):
+    c = db.connect(pg_url)
     db.init_db(c)
     yield c
     c.close()

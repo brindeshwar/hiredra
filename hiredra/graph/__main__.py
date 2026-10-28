@@ -42,7 +42,6 @@ from hiredra.graph.lock import DEFAULT_LOCK_PATH, LockHeld, RunLock
 from hiredra.graph.merge import DEFAULT_REVIEW_PATH, apply_review, propose_merges, write_review
 from hiredra.graph.usage import DEFAULT_USAGE_PATH, DailyUsage, reset_text
 from hiredra.storage import (
-    DEFAULT_DB_PATH,
     connect,
     init_db,
     invalidate_skill_vectors,
@@ -456,7 +455,7 @@ def _lock_label(args) -> str | None:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m hiredra.graph", description=__doc__.split("\n\n")[0])
-    ap.add_argument("--db", default=str(DEFAULT_DB_PATH))
+    ap.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
     ap.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
     ap.add_argument("--df-path", default=str(DEFAULT_DF_PATH), help="market document-frequency sidecar")
     ap.add_argument("--usage-path", default=str(DEFAULT_USAGE_PATH), help="local daily request counter")

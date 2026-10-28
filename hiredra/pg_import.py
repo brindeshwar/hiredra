@@ -36,10 +36,11 @@ from hiredra.sourcing.config import load_companies
 from hiredra.sourcing.identity import company_slug, content_hash, role_fingerprint
 from hiredra.sourcing.provider import company_slug as list_board
 from hiredra.sourcing.registry import REGISTRY, route
-from hiredra.storage import DEFAULT_DB_PATH
+from hiredra.storage import DATA_DIR
 
 REPO = Path(__file__).resolve().parents[1]
-DATA = Path(DEFAULT_DB_PATH).parent
+DATA = DATA_DIR
+SQLITE_PATH = DATA_DIR / "hiredra.db"  # today's SQLite file, the import's source
 COMPANY_LISTS = (("openjobs", REPO / "config" / "companies.wide.yml"), ("curated", REPO / "config" / "companies.yml"))
 USAGE_DIR = DATA / "usage"
 EMBED_USAGE = DATA / "embed_usage.json"
@@ -75,7 +76,7 @@ TIMESTAMPS = (
 )
 
 
-def open_sqlite(path: Path | str = DEFAULT_DB_PATH) -> sqlite3.Connection:
+def open_sqlite(path: Path | str = SQLITE_PATH) -> sqlite3.Connection:
     lite = sqlite3.connect(f"file:{Path(path).as_posix()}?mode=ro", uri=True)
     lite.row_factory = sqlite3.Row
     return lite
@@ -531,7 +532,7 @@ def render(checks: list[tuple[str, bool, str]], facts: dict, conn: psycopg.Conne
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m hiredra.pg_import", description=__doc__.split("\n\n")[0])
-    ap.add_argument("--sqlite", default=str(DEFAULT_DB_PATH), help="the SQLite file to copy (opened read-only)")
+    ap.add_argument("--sqlite", default=str(SQLITE_PATH), help="the SQLite file to copy (opened read-only)")
     mode = ap.add_mutually_exclusive_group()
     mode.add_argument("--reset", action="store_true", help="empty every Postgres table first")
     mode.add_argument("--verify", action="store_true", help="verify only; import nothing")

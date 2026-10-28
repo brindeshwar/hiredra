@@ -9,6 +9,7 @@ import math
 from pathlib import Path
 
 import numpy as np
+import psycopg
 import pytest
 import yaml
 
@@ -33,7 +34,6 @@ from hiredra.storage import (
     set_status,
     upsert_job,
 )
-from tests.test_migration_v4 import _make_v3_db
 
 DIM = 128
 REPO = Path(__file__).resolve().parents[1]
@@ -116,12 +116,12 @@ class World:
         set_extraction(
             self.conn,
             job_id,
-            skills=json.dumps([{"name": n, "requirement": r} for n, r in skills]),
+            skills=[{"name": n, "requirement": r} for n, r in skills],
             domain_bucket=bucket,
             legitimacy=legitimacy,
             extraction_confidence=confidence,
         )
-        self.conn.execute("UPDATE jobs SET extraction_version = 'x:1' WHERE job_id = ?", (job_id,))
+        self.conn.execute("UPDATE jobs SET extraction_version = 'x:1' WHERE job_key = %s", (job_id,))
         self.conn.commit()
         set_status(self.conn, job_id, "extracted")
         return job_id
@@ -131,8 +131,8 @@ class World:
 
 
 @pytest.fixture()
-def world(tmp_path):
-    c = connect(":memory:")
+def world(tmp_path, pg_url):
+    c = connect(pg_url)
     init_db(c)
     yield World(c, tmp_path)
     c.close()
@@ -142,31 +142,12 @@ def _no_embed():
     pytest.fail("the embedder was built")
 
 
-# ── migration v6 ────────────────────────────────────────────────────────────
-def test_v5_to_v6_keeps_rows_and_adds_the_columns(tmp_path):
-    conn = _make_v3_db(tmp_path / "old.db")
-    db._migrate_v4(conn)
-    db._migrate_v5(conn)
-    conn.execute("PRAGMA user_version = 5")
-    conn.commit()
-    conn.close()
-    conn = connect(tmp_path / "old.db")
-    init_db(conn)
-    cols = {r[1] for r in conn.execute("PRAGMA table_info(jobs)")}
-    assert {c for c, _ in db._JOBS_V6_COLUMNS} <= cols
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == 6
-    assert conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 2
-    assert conn.execute("SELECT COUNT(*) FROM job_events").fetchone()[0] == 3
-    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
-    assert conn.execute("SELECT name FROM sqlite_master WHERE name = 'idx_jobs_status_score'").fetchone()
-    conn.close()
-
-
 # ── scoring ─────────────────────────────────────────────────────────────────
 def test_a_job_is_scored_with_its_features_and_stamps(world):
     w, _ = _weights(world.tmp, world.cfg)
     jid = world.job(
-        "j1", [("django", "required"), ("flask", "required"), ("mysql", "good_to_have"), ("cobol", "required")]
+        "greenhouse:j1",
+        [("django", "required"), ("flask", "required"), ("mysql", "good_to_have"), ("cobol", "required")],
     )
     stats = world.run(w, _no_embed)
     assert (stats.selected, stats.scored, stats.embedded) == (1, 1, 0)
@@ -176,7 +157,7 @@ def test_a_job_is_scored_with_its_features_and_stamps(world):
     # weights 1, 1, 0.4, 1 ; covered: django (1.0) + mysql (0.88) -> 1.4 / 3.4 ; gaps: flask (1-0.8), cobol (1-0)
     coverage, gap = 1.4 / 3.4, math.sqrt(0.2**2 + 1.0)
     assert row["score"] == pytest.approx(0.5 + coverage - 0.5 * gap, abs=1e-5)
-    f = json.loads(row["score_features"])
+    f = row["score_features"]
     assert f["v"] == 1 and f["domain_bucket"] == "backend" and f["coverage"] == pytest.approx(coverage, abs=1e-6)
     assert [(s["skill"], s["band"], s["nearest"]) for s in f["skills"]] == [
         ("django", "have", "python"),
@@ -194,29 +175,29 @@ def test_a_job_is_scored_with_its_features_and_stamps(world):
 
 def test_review_reasons_are_stored_but_the_job_is_still_scored(world):
     w, _ = _weights(world.tmp, world.cfg)
-    world.job("j1", [("django", "required")], legitimacy="likely_ghost", confidence="low")
+    world.job("greenhouse:j1", [("django", "required")], legitimacy="likely_ghost", confidence="low")
     world.run(w)
-    row = get_job(world.conn, "j1")
-    assert row["status"] == "scored" and json.loads(row["review_reason"]) == ["likely_ghost", "low_confidence"]
+    row = get_job(world.conn, "greenhouse:j1")
+    assert row["status"] == "scored" and row["review_reason"] == ["likely_ghost", "low_confidence"]
     assert row["score"] is not None
 
 
 def test_a_job_with_too_few_skills_goes_to_review_and_is_never_promoted(world):
     w, _ = _weights(world.tmp, world.cfg, min_skills=3, apply_line=-10.0)
-    world.job("few", [("django", "required"), ("flask", "required")])
-    world.job("enough", [("django", "required"), ("flask", "required"), ("mysql", "good_to_have")])
+    world.job("greenhouse:few", [("django", "required"), ("flask", "required")])
+    world.job("greenhouse:enough", [("django", "required"), ("flask", "required"), ("mysql", "good_to_have")])
     world.run(w)
-    few, enough = get_job(world.conn, "few"), get_job(world.conn, "enough")
-    assert few["status"] == "scored" and json.loads(few["review_reason"]) == ["few_skills"]
+    few, enough = get_job(world.conn, "greenhouse:few"), get_job(world.conn, "greenhouse:enough")
+    assert few["status"] == "scored" and few["review_reason"] == ["few_skills"]
     assert enough["review_reason"] is None
     assert [j["job_id"] for j in sr.promoted(world.conn, w)] == [
-        "enough"
+        "greenhouse:enough"
     ]  # below-floor apply line: only skill count gates
 
 
 def test_force_rescores_fresh_jobs_and_picks_up_a_merge(world):
     w, _ = _weights(world.tmp, world.cfg)
-    world.job("j1", [("django", "required")])
+    world.job("greenhouse:j1", [("django", "required")])
     assert world.run(w).scored == 1
     assert world.run(w).selected == 0  # nothing stale: a plain run selects nothing
     stats = world.run(w, force=True)
@@ -227,17 +208,17 @@ def test_f2_a_merge_after_extraction_scores_against_the_survivor_with_zero_embed
     w, _ = _weights(world.tmp, world.cfg)
     add_market_skill(world.conn, "django framework")  # B, extracted before the merge
     save_vectors(world.conn, ["django framework"], np.asarray([_vec(30)]), world.cfg.embed_tag)
-    world.job("j1", [("django framework", "required")])
+    world.job("greenhouse:j1", [("django framework", "required")])
     merge_skill(world.conn, "django framework", "django")  # B merged into A after extraction
     stats = world.run(w, _no_embed)
-    f = json.loads(get_job(world.conn, "j1")["score_features"])
+    f = get_job(world.conn, "greenhouse:j1")["score_features"]
     assert stats.embedded == 0 and f["skills"][0]["skill"] == "django" and f["skills"][0]["band"] == "have"
 
 
 def test_a_cache_miss_is_embedded_once(world):
     w, _ = _weights(world.tmp, world.cfg)
-    world.job("j1", [("brand new skill", "required")])
-    world.job("j2", [("brand new skill", "required"), ("django", "required")])
+    world.job("greenhouse:j1", [("brand new skill", "required")])
+    world.job("greenhouse:j2", [("brand new skill", "required"), ("django", "required")])
     built: list[int] = []
 
     def factory():
@@ -246,13 +227,13 @@ def test_a_cache_miss_is_embedded_once(world):
 
     stats = world.run(w, factory)
     assert stats.embedded == 1 and built == [1] and stats.scored == 2
-    assert json.loads(get_job(world.conn, "j2")["score_features"])["skills"][0]["band"] == "have"
+    assert get_job(world.conn, "greenhouse:j2")["score_features"]["skills"][0]["band"] == "have"
 
 
 def test_the_embedder_is_built_once_for_many_misses(world):
     w, _ = _weights(world.tmp, world.cfg)
-    world.job("j1", [("new skill a", "required")])
-    world.job("j2", [("new skill b", "required")])
+    world.job("greenhouse:j1", [("new skill a", "required")])
+    world.job("greenhouse:j2", [("new skill b", "required")])
     built: list[int] = []
 
     def factory():
@@ -265,8 +246,8 @@ def test_the_embedder_is_built_once_for_many_misses(world):
 
 def test_an_unknown_error_is_raised_not_turned_into_a_stop(world):
     w, _ = _weights(world.tmp, world.cfg)
-    world.job("j1", [("django", "required")])
-    world.job("j2", [("new skill", "required")])
+    world.job("greenhouse:j1", [("django", "required")])
+    world.job("greenhouse:j2", [("new skill", "required")])
 
     def factory():
         def embed(names):
@@ -276,21 +257,21 @@ def test_an_unknown_error_is_raised_not_turned_into_a_stop(world):
 
     with pytest.raises(RuntimeError, match="a bug"):
         world.run(w, factory)
-    assert get_job(world.conn, "j1")["status"] == "scored"  # finished rows stay
+    assert get_job(world.conn, "greenhouse:j1")["status"] == "scored"  # finished rows stay
 
 
 def test_a_miss_without_an_embedder_names_the_sync_command(world):
     w, _ = _weights(world.tmp, world.cfg)
-    world.job("j1", [("new skill", "required")])
+    world.job("greenhouse:j1", [("new skill", "required")])
     with pytest.raises(sr.PreconditionError, match="graph sync"):
         world.run(w, None)
 
 
 def test_a_budget_stop_keeps_finished_rows(world):
     w, _ = _weights(world.tmp, world.cfg)
-    world.job("j1", [("django", "required")])
-    world.job("j2", [("brand new skill", "required")])
-    world.job("j3", [("flask", "required")])
+    world.job("greenhouse:j1", [("django", "required")])
+    world.job("greenhouse:j2", [("brand new skill", "required")])
+    world.job("greenhouse:j3", [("flask", "required")])
 
     def factory():
         def embed(names):
@@ -300,53 +281,52 @@ def test_a_budget_stop_keeps_finished_rows(world):
 
     stats = world.run(w, factory)
     assert stats.stopped == "daily_quota" and stats.scored == 1
-    assert [get_job(world.conn, j)["status"] for j in ("j1", "j2", "j3")] == ["scored", "extracted", "extracted"]
+    assert [get_job(world.conn, j)["status"] for j in ("greenhouse:j1", "greenhouse:j2", "greenhouse:j3")] == [
+        "scored",
+        "extracted",
+        "extracted",
+    ]
 
 
-def test_malformed_skills_are_noted_skipped_and_counted(world):
-    w, _ = _weights(world.tmp, world.cfg)
-    world.job("good", [("django", "required")])
-    for jid, blob in (
-        ("bad1", "not json"),
-        ("bad2", '{"a": 1}'),
-        ("bad3", '[{"requirement": "required"}]'),
-        ("bad4", '[{"name": "x", "requirement": "maybe"}]'),
-    ):
-        world.job(jid, [])
-        world.conn.execute("UPDATE jobs SET skills = ? WHERE job_id = ?", (blob, jid))
-    world.conn.commit()
-    stats = world.run(w)
-    assert stats.malformed == 4 and stats.scored == 1
-    assert get_job(world.conn, "bad1")["status"] == "extracted"
-    assert any("malformed skills" in e["detail"] for e in get_events(world.conn, "bad1") if e["kind"] == "note")
+def test_the_store_refuses_malformed_skills_so_scoring_never_sees_them(world):
+    world.job("greenhouse:bad", [])
+    with pytest.raises(psycopg.errors.CheckViolation):
+        set_extraction(world.conn, "greenhouse:bad", skills=[{"name": "x", "requirement": "maybe"}],
+                       domain_bucket=None, legitimacy=None, extraction_confidence="high")  # fmt: skip
+    with pytest.raises(KeyError):
+        set_extraction(world.conn, "greenhouse:bad", skills=[{"requirement": "required"}],
+                       domain_bucket=None, legitimacy=None, extraction_confidence="high")  # fmt: skip
 
 
 def test_a_job_with_no_skills_scores_on_domain_alone(world):
     w, _ = _weights(world.tmp, world.cfg)
-    world.job("j1", [], bucket="agent_llm")
+    world.job("greenhouse:j1", [], bucket="agent_llm")
     world.run(w)
-    assert get_job(world.conn, "j1")["score"] == pytest.approx(1.0)
+    assert get_job(world.conn, "greenhouse:j1")["score"] == pytest.approx(1.0)
 
 
 # ── rescore triggers ────────────────────────────────────────────────────────
 @pytest.mark.parametrize("column", ["score_version", "score_embed_tag", "score_skills_hash"])
 def test_each_stale_stamp_triggers_a_rescore(world, column):
     w, _ = _weights(world.tmp, world.cfg)
-    world.job("j1", [("django", "required")])
-    world.job("j2", [("flask", "required")])
+    world.job("greenhouse:j1", [("django", "required")])
+    world.job("greenhouse:j2", [("flask", "required")])
     world.run(w)
     assert world.run(w).selected == 0  # nothing stale
-    world.conn.execute(f"UPDATE jobs SET {column} = 'old' WHERE job_id = 'j1'")
+    world.conn.execute(f"UPDATE jobs SET {column} = 'old' WHERE job_key = 'greenhouse:j1'")
     world.conn.commit()
     stats = world.run(w)
     assert (stats.selected, stats.rescored, stats.scored) == (1, 1, 0)
-    assert get_job(world.conn, "j1")[column] != "old" and get_job(world.conn, "j1")["status"] == "scored"
-    assert any("re-scored" in e["detail"] for e in get_events(world.conn, "j1") if e["kind"] == "note")
+    assert (
+        get_job(world.conn, "greenhouse:j1")[column] != "old"
+        and get_job(world.conn, "greenhouse:j1")["status"] == "scored"
+    )
+    assert any("re-scored" in e["detail"] for e in get_events(world.conn, "greenhouse:j1") if e["kind"] == "note")
 
 
 def test_new_weights_rescore_everything_and_the_profile_file_hash_does_not(world):
     w, _ = _weights(world.tmp, world.cfg)
-    world.job("j1", [("django", "required")])
+    world.job("greenhouse:j1", [("django", "required")])
     world.run(w)
     world.conn.execute("UPDATE jobs SET score_profile_hash = 'old'")  # tracing only
     world.conn.commit()
@@ -361,7 +341,7 @@ def test_preconditions(world):
     with pytest.raises(sr.PreconditionError, match="no profile overlay yet"):
         sr.check_preconditions(world.conn, world.cfg, world.profile, world.tmp / "missing.json")
     stale = world.tmp / "stale.json"
-    stale.write_text(json.dumps({"skills_hash": "old"}), encoding="utf-8")
+    stale.write_text(json.dumps({"skills_hash": "greenhouse:old"}), encoding="utf-8")
     with pytest.raises(sr.PreconditionError, match="re-run `python -m hiredra.graph overlay`"):
         sr.check_preconditions(world.conn, world.cfg, world.profile, stale)
     add_market_skill(world.conn, "docker")
@@ -376,35 +356,46 @@ def test_preconditions(world):
 # ── gating and release ──────────────────────────────────────────────────────
 def test_gating_release_and_reject(world):
     w, _ = _weights(world.tmp, world.cfg)
-    world.job("high", [("django", "required")], bucket="agent_llm")  # 2.0
-    world.job("ghost", [("django", "required")], bucket="agent_llm", legitimacy="suspect")  # 2.0 but review
-    world.job("low", [("cobol", "required")], bucket="other")  # -0.5
+    world.job("greenhouse:high", [("django", "required")], bucket="agent_llm")  # 2.0
+    world.job("greenhouse:ghost", [("django", "required")], bucket="agent_llm", legitimacy="suspect")  # 2.0 but review
+    world.job("greenhouse:low", [("cobol", "required")], bucket="other")  # -0.5
     world.run(w)
     assert sr.promoted(world.conn, w) == []  # no apply line yet: nothing promoted
 
     lined, _ = _weights(world.tmp, world.cfg, apply_line=1.0)
-    assert [r["job_id"] for r in sr.promoted(world.conn, lined)] == ["high"]
-    assert [r["job_id"] for r in sr.review_list(world.conn)] == ["ghost"]
-    assert [r["job_id"] for r in sr.all_scored(world.conn)] == ["ghost", "high", "low"]  # score desc, ties by id
+    assert [r["job_id"] for r in sr.promoted(world.conn, lined)] == ["greenhouse:high"]
+    assert [r["job_id"] for r in sr.review_list(world.conn)] == ["greenhouse:ghost"]
+    assert [r["job_id"] for r in sr.all_scored(world.conn)] == [
+        "greenhouse:ghost",
+        "greenhouse:high",
+        "greenhouse:low",
+    ]  # score desc, ties by id
 
-    db.release_job(world.conn, "low")  # D13: a below-line job can be released
-    db.release_job(world.conn, "ghost")  # and a review-list job
-    assert {r["job_id"] for r in sr.promoted(world.conn, lined)} == {"high", "low", "ghost"}
+    db.release_job(world.conn, "greenhouse:low")  # D13: a below-line job can be released
+    db.release_job(world.conn, "greenhouse:ghost")  # and a review-list job
+    assert {r["job_id"] for r in sr.promoted(world.conn, lined)} == {
+        "greenhouse:high",
+        "greenhouse:low",
+        "greenhouse:ghost",
+    }
     assert sr.review_list(world.conn) == []
-    assert [r["job_id"] for r in sr.promoted(world.conn, w)] == ["ghost", "low"]  # released: promoted with no line
+    assert [r["job_id"] for r in sr.promoted(world.conn, w)] == [
+        "greenhouse:ghost",
+        "greenhouse:low",
+    ]  # released: promoted with no line
 
-    set_status(world.conn, "high", "dropped", detail="review: rejected")
+    set_status(world.conn, "greenhouse:high", "dropped", detail="review: rejected")
     with pytest.raises(ValueError, match="only a scored job"):
-        db.release_job(world.conn, "high")
+        db.release_job(world.conn, "greenhouse:high")
 
 
 # ── CLI ─────────────────────────────────────────────────────────────────────
-def _cli_world(tmp_path):
+def _cli_world(tmp_path, pg_url):
     """A file DB plus the shipped graph config's dimensions/tag, for the CLI."""
     from hiredra.graph.config import load_graph_config
 
     cfg = load_graph_config()
-    path = tmp_path / "h.db"
+    path = pg_url
     c = connect(path)
     init_db(c)
     for name, axis in (("python", 0), ("django", 0)):
@@ -415,8 +406,8 @@ def _cli_world(tmp_path):
     apply_profile_overlay(c, mine={"python": "production"}, new_nodes={}, aliases=[])
     w = World.__new__(World)
     w.conn, w.tmp, w.cfg = c, tmp_path, cfg
-    w.job("j1", [("django", "required")], bucket="agent_llm")
-    w.job("j2", [("django", "required")], legitimacy="suspect")
+    w.job("greenhouse:j1", [("django", "required")], bucket="agent_llm")
+    w.job("greenhouse:j2", [("django", "required")], legitimacy="suspect")
     c.close()
     profile = tmp_path / "profile.md"
     profile.write_text(
@@ -432,53 +423,53 @@ def _cli_world(tmp_path):
     ]  # fmt: skip
 
 
-def test_cli_run_and_views(tmp_path, capsys):
-    base = _cli_world(tmp_path)
+def test_cli_run_and_views(tmp_path, capsys, pg_url):
+    base = _cli_world(tmp_path, pg_url)
     assert scoring_main([*base, "run"]) == 0
     assert "selected=2 scored=2" in capsys.readouterr().out
 
     assert scoring_main([*base, "list"]) == 0
     out = capsys.readouterr().out
-    assert "promoted jobs: 1" in out and "j1" in out and "j2" not in out
+    assert "promoted jobs: 1" in out and "greenhouse:j1" in out and "greenhouse:j2" not in out
     assert scoring_main([*base, "list", "--all"]) == 0
     assert "every scored job (D13: below the line too): 2" in capsys.readouterr().out
     assert scoring_main([*base, "review"]) == 0
     out = capsys.readouterr().out
     assert "review list: 1" in out and "[suspect]" in out
 
-    assert scoring_main([*base, "show", "j1"]) == 0
+    assert scoring_main([*base, "show", "greenhouse:j1"]) == 0
     out = capsys.readouterr().out
     assert "have (1):" in out and "django" in out and "nearest python" in out
 
-    assert scoring_main([*base, "release", "j2"]) == 0
+    assert scoring_main([*base, "release", "greenhouse:j2"]) == 0
     capsys.readouterr()
     assert scoring_main([*base, "list"]) == 0
     assert "promoted jobs: 2" in capsys.readouterr().out
-    assert scoring_main([*base, "reject", "j1"]) == 0
+    assert scoring_main([*base, "reject", "greenhouse:j1"]) == 0
     capsys.readouterr()
-    assert scoring_main([*base, "release", "j1"]) == 1  # dropped now
+    assert scoring_main([*base, "release", "greenhouse:j1"]) == 1  # dropped now
 
     assert scoring_main([*base, "status"]) == 0
     out = capsys.readouterr().out
     assert "Last updated 2026-10-18" in out and "STALE" not in out and "x:1" in out
 
 
-def test_cli_run_refuses_while_the_graph_lock_is_held(tmp_path, capsys):
-    base = _cli_world(tmp_path)
+def test_cli_run_refuses_while_the_graph_lock_is_held(tmp_path, capsys, pg_url):
+    base = _cli_world(tmp_path, pg_url)
     with RunLock(tmp_path / "graph.lock", what="sync"):
         assert scoring_main([*base, "run"]) == 4
     assert "another graph maintenance run is in progress" in capsys.readouterr().out
 
 
-def test_cli_run_exits_2_on_a_stale_overlay(tmp_path, capsys):
-    base = _cli_world(tmp_path)
-    (tmp_path / "overlay.json").write_text(json.dumps({"skills_hash": "old"}), encoding="utf-8")
+def test_cli_run_exits_2_on_a_stale_overlay(tmp_path, capsys, pg_url):
+    base = _cli_world(tmp_path, pg_url)
+    (tmp_path / "overlay.json").write_text(json.dumps({"skills_hash": "greenhouse:old"}), encoding="utf-8")
     assert scoring_main([*base, "run"]) == 2
     assert "re-run `python -m hiredra.graph overlay`" in capsys.readouterr().out
 
 
-def test_cli_bad_weights_exit_1(tmp_path, capsys):
-    base = _cli_world(tmp_path)
+def test_cli_bad_weights_exit_1(tmp_path, capsys, pg_url):
+    base = _cli_world(tmp_path, pg_url)
     bad = tmp_path / "bad.yml"
     bad.write_text("w_gap: 1\n", encoding="utf-8")
     base[base.index("--weights") + 1] = str(bad)

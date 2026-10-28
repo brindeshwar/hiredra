@@ -1,25 +1,22 @@
 """Tests for the SQLite -> Postgres import (hiredra/pg_import.py, plan unit DB2). They need Postgres, so they skip
-without HIREDRA_TEST_DATABASE_URL (the db_url fixture, conftest.py). The SQLite side is a small file built with the
-real storage layer, carrying each edge case the real database has."""
+without HIREDRA_TEST_DATABASE_URL (the db_url fixture, conftest.py). The SQLite side is a small legacy file built
+from the frozen v6 schema (tests/fixtures/sqlite_v6_schema.sql), the rows written the way the SQLite storage layer
+wrote them, carrying each edge case the real database has."""
 
 from __future__ import annotations
 
 import json
+import sqlite3
+from pathlib import Path
 
 import pytest
 
 psycopg = pytest.importorskip("psycopg")
 from hiredra import pg, pg_import  # noqa: E402
-from hiredra.storage import (
-    add_note,
-    connect,
-    fill_provenance,
-    finish_run,
-    init_db,
-    open_run,
-    set_extraction,
-    upsert_job,
-)  # noqa: E402
+
+V6_SCHEMA = Path(__file__).parent / "fixtures" / "sqlite_v6_schema.sql"
+T0 = "2026-10-17T16:38:34+00:00"
+RUN = "20261017T163834Z-cdc4"
 
 LISTED = {
     ("ashby", "elevenlabs"): {"board": "ElevenLabs", "name": "ElevenLabs", "tag": "confirmed", "careers_url": None,
@@ -38,17 +35,24 @@ SKILLS = [
 @pytest.fixture()
 def sqlite_path(tmp_path):
     path = tmp_path / "hiredra.db"
-    c = connect(path)
-    init_db(c)
-    open_run(c, "20261017T163834Z-cdc4", kind="scoring", config_name="scoring.wide.yml")
-    finish_run(c, "20261017T163834Z-cdc4", status="ok", touched=3, detail=json.dumps({"companies": 2}))
+    c = sqlite3.connect(path)
+    c.executescript(V6_SCHEMA.read_text(encoding="utf-8"))
+    c.execute(
+        "INSERT INTO runs (run_id, kind, config_name, started_at, finished_at, status, touched, detail) "
+        "VALUES (?, 'scoring', 'scoring.wide.yml', ?, ?, 'ok', 3, ?)",
+        (RUN, T0, T0, json.dumps({"companies": 2})),
+    )
 
     def job(jid, company, slug=None, tag=None, location="Pune, India"):
-        upsert_job(c, {"job_id": jid, "url": f"https://x/{jid}", "title": "Backend Engineer, Pune", "company": company,
-                       "source": jid.split(":")[0], "location": location, "description": "<p>Build APIs.</p>"},
-                   first_seen_run="20261017T163834Z-cdc4")  # fmt: skip
-        if slug or tag:
-            fill_provenance(c, [jid], company_slug=slug, list_tag=tag)
+        c.execute(
+            "INSERT INTO jobs (job_id, url, title, company, description, source, location, status, status_changed_at, "
+            "first_seen_at, last_seen_at, updated_at, first_seen_run, company_slug, list_tag) "
+            "VALUES (?, ?, 'Backend Engineer, Pune', ?, '<p>Build APIs.</p>', ?, ?, 'fetched', ?, ?, ?, ?, ?, ?, ?)",
+            (jid, f"https://x/{jid}", company, jid.split(":")[0], location, T0, T0, T0, T0, RUN, slug, tag),
+        )
+        c.execute(
+            "INSERT INTO job_events (job_id, kind, detail, at) VALUES (?, 'seen', 'first sighting', ?)", (jid, T0)
+        )
 
     job("ashby:a1", "ElevenLabs", "ElevenLabs", "confirmed")
     job("ashby:a2", "ElevenLabs", "elevenlabs", "confirmed")  # same board, other case
@@ -56,10 +60,9 @@ def sqlite_path(tmp_path):
     job("greenhouse:7", "Acme Inc.", "acme", "unknown", location="London, UK")  # a board on no list: orphan
     job("greenhouse:8", "Acme", "acme", "unknown")  # same role as :7, but in India
     job("jobspy-indeed:in-1", "Acme", "acme", "confirmed")  # JobSpy with a slug: gets no board
-    set_extraction(c, "greenhouse:7", skills=json.dumps(SKILLS), domain_bucket="backend", legitimacy="ok",
-                   extraction_confidence="high", extraction_version="v1")  # fmt: skip
-    set_extraction(c, "ashby:a1", skills="[]", domain_bucket=None, legitimacy=None, extraction_confidence="low",
-                   extraction_version="v1")  # fmt: skip
+    extract = "UPDATE jobs SET skills = ?, domain_bucket = ?, legitimacy = ?, extraction_confidence = ?, extraction_version = 'v1' WHERE job_id = ?"
+    c.execute(extract, (json.dumps(SKILLS), "backend", "ok", "high", "greenhouse:7"))
+    c.execute(extract, ("[]", None, None, "low", "ashby:a1"))
     c.execute(
         "UPDATE jobs SET status = 'scored', score = -0.527244, score_features = ?, review_reason = ?, is_remote = 1, "
         "date_posted = '2026-10-01', years_required = 0, scored_at = '2026-10-25T09:43:32+00:00' WHERE job_id = 'greenhouse:7'",
@@ -76,7 +79,7 @@ def sqlite_path(tmp_path):
          ("entity framework", "2026-09-12T07:16:25+00:00", 1, 0, None, "jd")],
     )  # fmt: skip
     c.execute("INSERT INTO skill_alias VALUES ('py', 'python', '2026-09-10T07:16:25+00:00')")
-    add_note(c, "greenhouse:7", "a note")
+    c.execute("INSERT INTO job_events (job_id, kind, detail, at) VALUES ('greenhouse:7', 'note', 'a note', ?)", (T0,))
     c.commit()
     c.close()
     return path

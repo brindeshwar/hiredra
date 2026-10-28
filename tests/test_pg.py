@@ -12,14 +12,14 @@ from hiredra import pg  # noqa: E402
 # db_url (a scratch database per test, skipped without HIREDRA_TEST_DATABASE_URL) is in conftest.py.
 
 
-def test_migrate_applies_0001_once(db_url):
+def test_migrate_applies_each_migration_once(db_url):
     with pg.connect(db_url) as conn:
-        assert pg.migrate(conn) == ["0001_init"]
+        assert pg.migrate(conn) == ["0001_init", "0002_cooldowns"]
         assert pg.migrate(conn) == []  # idempotent: nothing pending the second time
         tables = {r[0] for r in conn.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")}
     assert tables >= {
         "schema_migrations", "companies", "company_slug_aliases", "boards", "board_health", "runs", "board_crawls",
-        "jobs", "job_skills", "job_events", "skill_vocab", "skill_alias", "api_usage",
+        "jobs", "job_skills", "job_events", "skill_vocab", "skill_alias", "api_usage", "cooldowns",
     }  # fmt: skip
 
 
@@ -38,17 +38,19 @@ def test_job_key_keeps_the_old_id_format(db_url):
             )
 
 
-def test_vectors_are_1024_wide_and_search_is_generated(db_url):
+def test_vectors_take_any_width_and_search_is_generated(db_url):
+    """No fixed width (owner's call 2026-10-29, measured: exact matching beats an HNSW index here); embed_tag pins
+    the model and width. Text sorts by code point, as SQLite and Python do (docker-compose initdb args)."""
     with pg.connect(db_url) as conn:
         pg.migrate(conn)
         conn.execute(
-            "INSERT INTO skill_vocab (name, vector) VALUES ('python', array_fill(0.1::real, ARRAY[1024])::vector)"
+            "INSERT INTO skill_vocab (name, vector) VALUES ('python', array_fill(0.1::real, ARRAY[1024])::vector), "
+            "('go', array_fill(0.1::real, ARRAY[8])::vector)"
         )
-        with pytest.raises(psycopg.errors.DataException):
-            conn.execute(
-                "INSERT INTO skill_vocab (name, vector) VALUES ('go', array_fill(0.1::real, ARRAY[768])::vector)"
-            )
-        conn.rollback()
+        assert conn.execute("SELECT name FROM skill_vocab WHERE vector IS NOT NULL ORDER BY name").fetchall() == [
+            ("go",), ("python",)
+        ]  # fmt: skip
+        assert conn.execute("SELECT to_regclass('skill_vocab_vector')").fetchone() == (None,)  # no HNSW index
         conn.execute(
             "INSERT INTO jobs (source, external_id, url, title, company, description) "
             "VALUES ('lever', 'abc', 'https://x/3', 'LLM Engineer', 'Acme', 'Build retrieval pipelines')"

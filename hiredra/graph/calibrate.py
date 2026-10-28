@@ -24,7 +24,6 @@ from __future__ import annotations
 
 import csv
 import io
-import json
 import random
 import re
 from collections import Counter
@@ -162,12 +161,14 @@ def load_pairs(path: Path | str = DEFAULT_PAIRS_PATH, *, enforce_counts: bool = 
 def _jd_skill_names(conn) -> set[str]:
     """Every skill name on an extracted (or later) job, resolved through the alias table."""
     names: set[str] = set()
-    rows = conn.execute("SELECT skills FROM jobs WHERE skills IS NOT NULL AND status NOT IN ('fetched', 'filtered')")
-    for (blob,) in rows:
-        for item in json.loads(blob or "[]"):
-            name = normalize(str(item.get("name", "")))
-            if name:
-                names.add(resolve_alias(conn, name) or name)
+    rows = conn.execute(
+        "SELECT DISTINCT s.skill FROM job_skills s JOIN jobs j ON j.id = s.job_id "
+        "WHERE j.status NOT IN ('fetched', 'filtered')"
+    )
+    for (skill,) in rows:
+        name = normalize(str(skill))
+        if name:
+            names.add(resolve_alias(conn, name) or name)
     return names
 
 

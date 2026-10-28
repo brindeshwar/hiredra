@@ -1,15 +1,26 @@
-"""SQLite storage layer for Hiredra (build sub-slice 2a.1).
+"""Postgres storage layer for Hiredra (build sub-slice 2a.1; moved from SQLite in plan unit DB3).
 
 Single source of truth for jobs, their pipeline status, the scoring ledger, and
 outcomes. Every later stage reads and updates rows here; cross-run dedup and
-status tracking work against it.
+status tracking work against it. The schema is ``migrations/*.sql`` (applied by
+``hiredra.pg.migrate``; ``init_db`` is that call).
 
-This module is persistence only — no sourcing, filtering, or scoring logic.
+This module is persistence only -- no sourcing, filtering, or scoring logic. The
+one exception is that ``upsert_job`` stamps a new job's derived identity columns
+(company, countries, content hash, role fingerprint), so every write path keeps
+them consistent.
 
 Conventions
 -----------
-* All timestamps are ISO-8601 UTC strings (second precision). They sort
-  lexicographically, so range queries are plain string comparisons.
+* ``connect()`` returns an AUTOCOMMIT connection: each statement commits on its
+  own, and every multi-statement write here runs in ``conn.transaction()``.
+  Never ``with conn:`` -- in psycopg that CLOSES the connection.
+* Rows read by position or by column name (``Row``), as ``sqlite3.Row`` did.
+* A job is addressed by its readable key ``job_key`` (``source:external_id``,
+  e.g. ``greenhouse:105736``); every job dict carries it as ``job_id``, the name
+  every caller already uses. The bigint ``id`` stays inside this module.
+* Timestamps are ``timestamptz``. ``_now()`` returns an ISO-8601 UTC string
+  (tests monkeypatch it); reads return aware ``datetime`` values.
 * ``years_required`` is ``None`` when unknown and ``0`` only for an explicitly
   zero-experience role. The two are never conflated.
 * A re-sight (``upsert_job`` on an existing ``job_id``) bumps ``last_seen_at``
@@ -21,19 +32,24 @@ Conventions
 from __future__ import annotations
 
 import secrets
-import sqlite3
+import struct
 import time
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
-# data/hiredra.db at the repo root (this file lives at hiredra/storage/db.py).
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_DB_PATH: Path = _REPO_ROOT / "data" / "hiredra.db"
+import psycopg
+from psycopg.types.json import Jsonb
 
-_SCHEMA_PATH = Path(__file__).with_name("schema.sql")
-SCHEMA_VERSION = 6
+from hiredra import pg
+from hiredra.location import parse as parse_location
+from hiredra.sourcing.identity import company_slug as company_key
+from hiredra.sourcing.identity import content_hash, role_fingerprint
+
+# data/ at the repo root (this file lives at hiredra/storage/db.py): calibration files, logs, the old SQLite file.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+DATA_DIR: Path = _REPO_ROOT / "data"
 
 #: run statuses (see schema `runs.status`).
 RUN_STATUSES: tuple[str, ...] = ("running", "ok", "partial", "failed")
@@ -63,10 +79,13 @@ OUTCOMES: tuple[str, ...] = (
     "hired",
 )
 
+#: skill_vocab vocabularies (schema CHECKs).
+SKILL_LEVELS: tuple[str, ...] = ("production", "built-with", "learned", "interview-ready")
+SKILL_SOURCES: tuple[str, ...] = ("market", "jd", "profile")
+
 #: Job-object columns written by ``upsert_job`` (docs/sourcing.md §2). Written
 #: once, on first insert; a re-sight does not overwrite them.
 _JOB_COLUMNS: tuple[str, ...] = (
-    "job_id",
     "url",
     "title",
     "company",
@@ -82,6 +101,25 @@ _JOB_COLUMNS: tuple[str, ...] = (
 )
 
 _REQUIRED_JOB_FIELDS = ("url", "title", "company", "source")
+
+# Every job column a caller reads (not ``search``, the generated tsvector), plus the board's slug and tag and the
+# skills list, in the shapes the SQLite rows had them: ``job_id`` is the key, ``skills`` is None until extraction
+# ran and then a list of {name, requirement} in extraction order.
+_JOB_SELECT = """
+SELECT j.job_key AS job_id, j.id, j.source, j.external_id, j.url, j.apply_url, j.title, j.company, j.location,
+       j.countries, j.is_remote, j.work_mode, j.date_posted, j.job_type, j.employment_type, j.salary,
+       j.description, j.content_hash, j.role_fingerprint, j.duplicate_of, j.years_required,
+       j.status, j.status_detail, j.status_changed_at,
+       j.domain_bucket, j.legitimacy, j.extraction_confidence, j.extraction_version,
+       CASE WHEN j.extraction_confidence IS NULL THEN NULL ELSE COALESCE(
+           (SELECT json_agg(json_build_object('name', s.skill, 'requirement', s.requirement) ORDER BY s.position)
+              FROM job_skills s WHERE s.job_id = j.id), '[]'::json) END AS skills,
+       j.score, j.score_features, j.review_reason, j.released_at, j.scored_at, j.score_version, j.score_embed_tag,
+       j.score_skills_hash, j.score_profile_hash, j.outcome, j.outcome_at, j.outcome_detail,
+       j.first_seen_run, j.first_seen_at, j.last_seen_at, j.closed_at, j.updated_at,
+       j.board_id, j.company_id, b.board AS company_slug, b.list_tag
+  FROM jobs j LEFT JOIN boards b ON b.id = j.board_id
+"""
 
 
 def _now() -> str:
@@ -107,285 +145,73 @@ def new_run_id() -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 # connection / setup
 # ─────────────────────────────────────────────────────────────────────────────
-def connect(path: Path | str = DEFAULT_DB_PATH) -> sqlite3.Connection:
-    """Open and return a tuned connection.
+class Row(tuple):
+    """A result row readable by position (``row[0]``) and by column name (``row["status"]``), and convertible
+    with ``dict(row)`` -- what ``sqlite3.Row`` gave every caller."""
 
-    Creates the parent directory if needed. ``row_factory`` is ``sqlite3.Row``
-    and foreign keys are enforced. Pass ``":memory:"`` for an ephemeral DB.
-    """
-    if str(path) == ":memory:":
-        conn = sqlite3.connect(":memory:")
-    else:
-        path = Path(path)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        conn = sqlite3.connect(str(path))
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
-    return conn
+    def __new__(cls, values: Sequence[Any], index: dict[str, int]) -> Row:
+        row = super().__new__(cls, values)
+        row._index = index
+        return row
 
+    def __getitem__(self, key):  # type: ignore[override]
+        return super().__getitem__(self._index[key] if isinstance(key, str) else key)
 
-def init_db(conn: sqlite3.Connection) -> None:
-    """Apply ``schema.sql`` (idempotent) + any pending migrations; stamp the version.
-
-    A brand-new DB gets everything from ``schema.sql`` directly. An existing DB
-    at an older ``user_version`` is migrated with guarded ``ALTER TABLE``s (each
-    checks the column is actually absent, so re-running is harmless).
-    """
-    version = conn.execute("PRAGMA user_version").fetchone()[0]
-    conn.executescript(_SCHEMA_PATH.read_text(encoding="utf-8"))
-    if version < 2:
-        _migrate_v2(conn)
-    if version < 3:
-        _migrate_v3(conn)
-    if version < 4:
-        _migrate_v4(conn)
-    if version < 5:
-        _migrate_v5(conn)
-    if version < 6:
-        _migrate_v6(conn)
-    conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
-    conn.commit()
+    def keys(self) -> list[str]:
+        return list(self._index)
 
 
-def _migrate_v2(conn: sqlite3.Connection) -> None:
-    """v1 → v2: add ``jobs.first_seen_run`` (``runs``/``cooldowns`` come from
-    ``schema.sql``'s ``CREATE TABLE IF NOT EXISTS``)."""
-    cols = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
-    if "first_seen_run" not in cols:
-        conn.execute("ALTER TABLE jobs ADD COLUMN first_seen_run TEXT")
+def _row_factory(cursor: psycopg.Cursor) -> Any:
+    index = {c.name: i for i, c in enumerate(cursor.description or ())}
+    return lambda values: Row(values, index)
 
 
-#: The pre-v3 ``jobs`` columns, in order -- frozen here (not derived from
-#: ``PRAGMA table_info`` at migration time) so the copy step in ``_migrate_v3``
-#: is an explicit, reviewable list rather than "whatever columns happen to be
-#: there."
-_JOBS_V2_COLUMNS: tuple[str, ...] = (
-    "job_id",
-    "url",
-    "title",
-    "company",
-    "description",
-    "years_required",
-    "source",
-    "location",
-    "date_posted",
-    "job_type",
-    "salary",
-    "apply_url",
-    "is_remote",
-    "status",
-    "status_detail",
-    "status_changed_at",
-    "score",
-    "score_features",
-    "outcome",
-    "outcome_at",
-    "outcome_detail",
-    "first_seen_at",
-    "last_seen_at",
-    "updated_at",
-    "first_seen_run",
-)
-
-#: The v3 ``jobs`` table shape, frozen as a migration-time snapshot (mirrors
-#: schema.sql's own CREATE TABLE -- kept in sync by hand, same as any other
-#: point-in-time migration DDL). SQLite can't ALTER a CHECK constraint or add
-#: columns in the middle of a table, so adding both the 'extracted' status and
-#: the four extraction columns means rebuilding the table. Kept as two
-#: separate statements (not one script): the index names are still held by
-#: the renamed-aside old table when the new ``jobs`` is created, so the
-#: indexes can only be (re)created after that old table is dropped.
-_JOBS_V3_TABLE_DDL = """
-CREATE TABLE jobs (
-    job_id            TEXT PRIMARY KEY,
-    url               TEXT NOT NULL UNIQUE,
-    title             TEXT NOT NULL,
-    company           TEXT NOT NULL,
-    description       TEXT,
-    years_required    INTEGER,
-    source            TEXT NOT NULL,
-    location          TEXT,
-    date_posted       TEXT,
-    job_type          TEXT,
-    salary            TEXT,
-    apply_url         TEXT,
-    is_remote         INTEGER,
-    status            TEXT NOT NULL DEFAULT 'fetched'
-                          CHECK (status IN (
-                              'fetched','filtered','extracted','scored','tailored',
-                              'queued','applied','outcome','dropped')),
-    status_detail     TEXT,
-    status_changed_at TEXT NOT NULL,
-    skills                 TEXT,
-    domain_bucket          TEXT,
-    legitimacy             TEXT,
-    extraction_confidence  TEXT,
-    score             REAL,
-    score_features    TEXT,
-    outcome           TEXT,
-    outcome_at        TEXT,
-    outcome_detail    TEXT,
-    first_seen_at     TEXT NOT NULL,
-    last_seen_at      TEXT NOT NULL,
-    updated_at        TEXT NOT NULL,
-    first_seen_run    TEXT
-);
-"""
-
-_JOBS_V3_INDEX_DDL = """
-CREATE INDEX idx_jobs_status        ON jobs (status);
-CREATE INDEX idx_jobs_source        ON jobs (source);
-CREATE INDEX idx_jobs_company_title ON jobs (company, title);
-CREATE INDEX idx_jobs_outcome       ON jobs (outcome);
-CREATE INDEX idx_jobs_date_posted   ON jobs (date_posted);
-"""
+def connect(url: str | None = None) -> psycopg.Connection:
+    """Open an autocommit connection to ``url`` (default: ``HIREDRA_DATABASE_URL``)."""
+    return psycopg.connect(url or pg.database_url(), autocommit=True, row_factory=_row_factory)
 
 
-def _migrate_v3(conn: sqlite3.Connection) -> None:
-    """v2 → v3: add the skill-extraction columns and the 'extracted' status.
-
-    SQLite has no ALTER for a CHECK constraint, so this rebuilds ``jobs``:
-    rename it aside (its indexes go with it, still under their old names),
-    create the new-shaped table, copy every pre-v3 column across explicitly,
-    drop the renamed-aside table (freeing the index names), recreate the
-    indexes on the new table, and verify ``job_events``'s foreign key into
-    ``jobs`` survived the swap.
-
-    ``legacy_alter_table`` matters here: modern SQLite's default RENAME
-    TABLE behavior rewrites *other* tables' foreign-key definitions to keep
-    pointing at the renamed table by name -- exactly wrong for this "rename
-    the old one out of the way, put a new one in its place" pattern, since
-    ``job_events``'s FK would end up following ``jobs_old`` and go dangling
-    once it's dropped. ``legacy_alter_table = ON`` makes RENAME a pure name
-    swap, so ``job_events``'s (unchanged) ``REFERENCES jobs (job_id)`` text
-    resolves to the *new* ``jobs`` table once it exists -- SQLite's own
-    documented approach for this exact rebuild pattern.
-    """
-    cols = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
-    if "skills" in cols:
-        return  # a fresh DB's schema.sql already created the v3 shape
-    conn.execute("PRAGMA foreign_keys = OFF")
-    conn.execute("PRAGMA legacy_alter_table = ON")
-    conn.execute("ALTER TABLE jobs RENAME TO jobs_old")
-    conn.execute("PRAGMA legacy_alter_table = OFF")
-    conn.executescript(_JOBS_V3_TABLE_DDL)
-    col_list = ", ".join(_JOBS_V2_COLUMNS)
-    conn.execute(f"INSERT INTO jobs ({col_list}) SELECT {col_list} FROM jobs_old")
-    conn.execute("DROP TABLE jobs_old")
-    conn.executescript(_JOBS_V3_INDEX_DDL)
-    bad_fk = conn.execute("PRAGMA foreign_key_check").fetchall()
-    if bad_fk:
-        raise RuntimeError(f"v3 migration broke a foreign key: {bad_fk}")
-    conn.execute("PRAGMA foreign_keys = ON")
+def init_db(conn: psycopg.Connection) -> None:
+    """Apply every pending migration (``hiredra.pg.migrate``) -- idempotent."""
+    pg.migrate(conn)
 
 
-#: The v4 ``skill_vocab`` additions, in order. The DDL text is identical to
-#: schema.sql's own CREATE TABLE (kept in sync by hand, like ``_JOBS_V3_*``), so a
-#: migrated table and a fresh one have the same shape and the same CHECKs.
-_SKILL_VOCAB_V4_COLUMNS: tuple[tuple[str, str], ...] = (
-    ("vector", "BLOB"),
-    ("embed_tag", "TEXT"),
-    ("mine", "INTEGER NOT NULL DEFAULT 0 CHECK (mine IN (0, 1))"),
-    (
-        "level",
-        "TEXT CHECK (level IS NULL OR level IN ('production','built-with','learned','interview-ready'))",
-    ),
-    ("source", "TEXT NOT NULL DEFAULT 'jd' CHECK (source IN ('market','jd','profile'))"),
-    ("edges", "TEXT NOT NULL DEFAULT '[]'"),
-)
-
-#: Vocabulary for ``skill_vocab.level`` / ``.source`` -- mirrors the CHECKs above.
-SKILL_LEVELS: tuple[str, ...] = ("production", "built-with", "learned", "interview-ready")
-SKILL_SOURCES: tuple[str, ...] = ("market", "jd", "profile")
-
-
-def _migrate_v4(conn: sqlite3.Connection) -> None:
-    """v3 -> v4: extend ``skill_vocab`` into the graph's node table and add
-    ``skill_alias`` (the latter comes from ``schema.sql``'s CREATE TABLE IF NOT
-    EXISTS, which ``init_db`` has already applied).
-
-    Unlike v3 this needs no table rebuild: every added column is either nullable
-    or NOT NULL with a constant default, which ``ALTER TABLE ADD COLUMN`` handles
-    in place, and existing rows pick up the defaults (``mine=0``, ``source='jd'``
-    -- Step 3 wrote them from real JDs -- ``edges='[]'``, no vector). Each column
-    is added only if absent, so a half-finished run resumes and a fresh DB (whose
-    schema.sql already has them) is a no-op. ``jobs`` and ``job_events`` are not
-    touched at all; the closing ``foreign_key_check`` is the same
-    belt-and-braces guard v3 used, to prove the FK into ``jobs`` is still intact.
-    """
-    cols = {row[1] for row in conn.execute("PRAGMA table_info(skill_vocab)")}
-    for name, ddl in _SKILL_VOCAB_V4_COLUMNS:
-        if name not in cols:
-            conn.execute(f"ALTER TABLE skill_vocab ADD COLUMN {name} {ddl}")
-    bad_fk = conn.execute("PRAGMA foreign_key_check").fetchall()
-    if bad_fk:
-        raise RuntimeError(f"v4 migration broke a foreign key: {bad_fk}")
-
-
-#: The v5 ``jobs`` additions, in order (same text as schema.sql's CREATE TABLE).
-_JOBS_V5_COLUMNS: tuple[tuple[str, str], ...] = (
-    ("company_slug", "TEXT"),
-    ("list_tag", "TEXT"),
-    ("extraction_version", "TEXT"),
-)
-
-
-def _migrate_v5(conn: sqlite3.Connection) -> None:
-    """v4 -> v5: add the provenance columns to ``jobs`` (all nullable, so ``ALTER TABLE ADD
-    COLUMN`` works in place, the same way v4 did). Each is added only if absent, so a fresh DB
-    (whose schema.sql already has them) and a re-run are no-ops. Existing rows get NULL; the
-    ``backfill-slugs`` command fills slug and tag afterwards."""
-    cols = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
-    for name, ddl in _JOBS_V5_COLUMNS:
-        if name not in cols:
-            conn.execute(f"ALTER TABLE jobs ADD COLUMN {name} {ddl}")
-    bad_fk = conn.execute("PRAGMA foreign_key_check").fetchall()
-    if bad_fk:
-        raise RuntimeError(f"v5 migration broke a foreign key: {bad_fk}")
-
-
-#: The v6 ``jobs`` additions, in order (same text as schema.sql's CREATE TABLE).
-_JOBS_V6_COLUMNS: tuple[tuple[str, str], ...] = (
-    ("review_reason", "TEXT"),
-    ("released_at", "TEXT"),
-    ("scored_at", "TEXT"),
-    ("score_version", "TEXT"),
-    ("score_embed_tag", "TEXT"),
-    ("score_skills_hash", "TEXT"),
-    ("score_profile_hash", "TEXT"),
-)
-
-
-def _migrate_v6(conn: sqlite3.Connection) -> None:
-    """v5 -> v6: the scoring-run columns on ``jobs`` (all nullable, added in place like v5).
-    The ``(status, score)`` index uses v1 columns only, so ``schema.sql`` creates it."""
-    cols = {row[1] for row in conn.execute("PRAGMA table_info(jobs)")}
-    for name, ddl in _JOBS_V6_COLUMNS:
-        if name not in cols:
-            conn.execute(f"ALTER TABLE jobs ADD COLUMN {name} {ddl}")
-    bad_fk = conn.execute("PRAGMA foreign_key_check").fetchall()
-    if bad_fk:
-        raise RuntimeError(f"v6 migration broke a foreign key: {bad_fk}")
+def _id(conn: psycopg.Connection, job_id: str) -> int:
+    """The bigint id behind ``job_id`` (a ``job_key``). ``KeyError`` if unknown."""
+    row = conn.execute("SELECT id FROM jobs WHERE job_key = %s", (job_id,)).fetchone()
+    if row is None:
+        raise KeyError(f"no job with job_id {job_id!r}")
+    return row[0]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # writes
 # ─────────────────────────────────────────────────────────────────────────────
+def _company_id(conn: psycopg.Connection, name: str) -> int | None:
+    key = company_key(name)
+    if not key:
+        return None
+    conn.execute("INSERT INTO companies (slug, name) VALUES (%s, %s) ON CONFLICT (slug) DO NOTHING", (key, name))
+    return conn.execute("SELECT id FROM companies WHERE slug = %s", (key,)).fetchone()[0]
+
+
 def upsert_job(
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,
     job: Mapping[str, Any],
     *,
     first_seen_run: str | None = None,
 ) -> str:
     """Insert a new job, or re-sight an existing one. Returns the ``job_id``.
 
-    ``job_id`` falls back to ``job["url"]`` when absent. ``url``, ``title``,
-    ``company`` and ``source`` are required. ``years_required``, if given, must
-    be an ``int`` (``0`` is valid; unknown is ``None``).
+    ``job_id`` is ``source:raw_id`` (it becomes ``job_key``); it falls back to
+    ``source:url`` when absent. ``url``, ``title``, ``company`` and ``source`` are
+    required. ``years_required``, if given, must be an ``int`` (``0`` is valid;
+    unknown is ``None``).
 
     New row: every Job column written, ``first_seen_run`` set (if given),
     ``status`` defaults to ``fetched``, ``first_seen_at``/``last_seen_at``/
-    ``updated_at`` set, a ``seen`` event appended.
+    ``updated_at`` set, the company linked (created if new), the countries,
+    content hash and role fingerprint computed, a ``seen`` event appended.
 
     Existing row (matched by ``job_id``): only ``last_seen_at``/``updated_at``
     are bumped and a ``seen`` event appended. Status, the scoring ledger, the
@@ -395,72 +221,98 @@ def upsert_job(
     listed again is reopened to ``filtered`` (the only status liveness drops
     from) -- a take-down and repost under the same id (2026-10-27).
     """
-    job_id = job.get("job_id") or job.get("url")
-    if not job_id:
-        raise ValueError("job needs a 'job_id' or a 'url'")
-    job_id = str(job_id)
-
     for field in _REQUIRED_JOB_FIELDS:
         if not job.get(field):
-            raise ValueError(f"job {job_id!r} is missing required field {field!r}")
+            raise ValueError(f"job {job.get('job_id') or job.get('url')!r} is missing required field {field!r}")
+    source = str(job["source"])
+    job_id = str(job.get("job_id") or f"{source}:{job['url']}")
+    if not job_id.startswith(source + ":"):
+        raise ValueError(f"job_id {job_id!r} must start with its source {source!r} and ':' (D1.5)")
 
     yr = job.get("years_required")
     if yr is not None and not isinstance(yr, int):
         raise TypeError("years_required must be an int or None (0 = explicitly zero-experience role; unknown = None)")
 
     now = _now()
-    with conn:
-        exists = conn.execute("SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
-
-        if exists is None:
-            cols = (*_JOB_COLUMNS, "status_changed_at", "first_seen_at", "last_seen_at", "updated_at", "first_seen_run")
-            values = [job_id if c == "job_id" else job.get(c) for c in _JOB_COLUMNS]
-            values += [now, now, now, now, first_seen_run]
-            placeholders = ", ".join("?" for _ in cols)
+    reopen = False
+    with conn.transaction():
+        row = conn.execute("SELECT id, status, status_detail FROM jobs WHERE job_key = %s", (job_id,)).fetchone()
+        if row is None:
+            title, company = job["title"], job["company"]
+            countries = sorted(parse_location(job.get("location") or "", "", title)["countries"])
+            values = [job.get(c) for c in _JOB_COLUMNS]
+            if values[_JOB_COLUMNS.index("is_remote")] is not None:  # a 0/1 from an older caller is a bool
+                values[_JOB_COLUMNS.index("is_remote")] = bool(values[_JOB_COLUMNS.index("is_remote")])
+            values += [
+                job_id[len(source) + 1 :], _company_id(conn, company), countries,
+                content_hash(title, company, job.get("location"), job.get("description")),
+                role_fingerprint(company_key(company), title, job.get("description"), countries),
+                now, now, now, now, first_seen_run,
+            ]  # fmt: skip
+            cols = (*_JOB_COLUMNS, "external_id", "company_id", "countries", "content_hash", "role_fingerprint",
+                    "status_changed_at", "first_seen_at", "last_seen_at", "updated_at", "first_seen_run")  # fmt: skip
             try:
-                conn.execute(
-                    f"INSERT INTO jobs ({', '.join(cols)}) VALUES ({placeholders})",
-                    values,
-                )
-            except sqlite3.IntegrityError as err:
+                with conn.transaction():
+                    new_id = conn.execute(
+                        f"INSERT INTO jobs ({', '.join(cols)}) VALUES ({', '.join('%s' for _ in cols)}) RETURNING id",
+                        values,
+                    ).fetchone()[0]
+            except psycopg.errors.UniqueViolation as err:
                 raise ValueError(
                     f"url {job.get('url')!r} is already stored under a different "
                     f"job_id (dedup should have merged these upstream)"
                 ) from err
-            _add_event(conn, job_id, "seen", detail="first sighting", at=now)
+            _add_event(conn, new_id, "seen", detail="first sighting", at=now)
         else:
-            _touch(conn, job_id, detail="re-sighted", now=now)
-            row = conn.execute("SELECT status, status_detail FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+            _touch(conn, row[0], detail="re-sighted", now=now)
+            reopen = row[1] == "dropped" and (row[2] or "").startswith("liveness: gone")
 
-    if exists is not None and row[0] == "dropped" and (row[1] or "").startswith("liveness: gone"):
+    if reopen:
         set_status(conn, job_id, "filtered", detail="reopened: listed again after liveness: gone")
     return job_id
 
 
 def fill_provenance(
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,
     job_ids: Iterable[str],
     *,
     company_slug: str | None,
     list_tag: str | None,
+    provenance: str = "orphan",
 ) -> None:
-    """Set ``company_slug`` / ``list_tag`` on each job where it is still NULL.
+    """Put each ATS job on its board (``provider`` = the job's source, ``board`` = ``company_slug``), where the
+    job has no board yet. A board new to the store is created with ``provenance`` (the company list it came
+    from) and ``list_tag``; an existing board's tag is filled only if it has none. JobSpy jobs get no board.
 
     Never overwrites a stored value: the first sighting's provenance wins, so a later fetch
-    from a differently tagged list can't rewrite history. Changes no other column.
+    from a differently tagged list can't rewrite history. Changes no other job column.
     """
-    if company_slug is None and list_tag is None:
+    job_ids = list(job_ids)
+    if company_slug is None or not job_ids:
         return
-    with conn:
-        conn.executemany(
-            "UPDATE jobs SET company_slug = COALESCE(company_slug, ?), list_tag = COALESCE(list_tag, ?) "
-            "WHERE job_id = ?",
-            [(company_slug, list_tag, job_id) for job_id in job_ids],
-        )
+    with conn.transaction():
+        for source in {r[0] for r in _sources(conn, job_ids)}:
+            if source.startswith("jobspy-"):
+                continue
+            conn.execute(
+                "INSERT INTO boards (provider, board, status, provenance, list_tag) VALUES (%s, %s, 'active', %s, %s) "
+                "ON CONFLICT (provider, lower(board), region) DO UPDATE SET list_tag = COALESCE(boards.list_tag, "
+                "excluded.list_tag)",
+                (source, company_slug, provenance, list_tag),
+            )
+            conn.execute(
+                "UPDATE jobs SET board_id = (SELECT id FROM boards WHERE provider = %s AND lower(board) = lower(%s) "
+                "AND region = '') WHERE job_key = ANY(%s) AND source = %s AND board_id IS NULL",
+                (source, company_slug, job_ids, source),
+            )
+
+
+def _sources(conn: psycopg.Connection, job_ids: list[str]) -> list[Row]:
+    return conn.execute("SELECT DISTINCT source FROM jobs WHERE job_key = ANY(%s)", (job_ids,)).fetchall()
 
 
 def set_status(
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,
     job_id: str,
     to_status: str,
     detail: str | None = None,
@@ -474,33 +326,24 @@ def set_status(
         raise ValueError(f"unknown status {to_status!r}; must be one of {STATUSES}")
 
     now = _now()
-    with conn:
-        row = conn.execute("SELECT status FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+    with conn.transaction():
+        row = conn.execute("SELECT id, status FROM jobs WHERE job_key = %s FOR UPDATE", (job_id,)).fetchone()
         if row is None:
             raise KeyError(f"no job with job_id {job_id!r}")
-        from_status = row["status"]
         conn.execute(
-            "UPDATE jobs SET status = ?, status_detail = ?, status_changed_at = ?, updated_at = ? WHERE job_id = ?",
-            (to_status, detail, now, now, job_id),
+            "UPDATE jobs SET status = %s, status_detail = %s, status_changed_at = %s, updated_at = %s WHERE id = %s",
+            (to_status, detail, now, now, row["id"]),
         )
-        _add_event(
-            conn,
-            job_id,
-            "status",
-            from_status=from_status,
-            to_status=to_status,
-            detail=detail,
-            at=now,
-        )
+        _add_event(conn, row["id"], "status", from_status=row["status"], to_status=to_status, detail=detail, at=now)
 
 
 def set_score(
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,
     job_id: str,
     *,
     score: float,
-    features: str,
-    review_reason: str | None,
+    features: Mapping[str, Any],
+    review_reason: Sequence[str] | None,
     score_version: str,
     embed_tag: str,
     skills_hash: str,
@@ -509,52 +352,49 @@ def set_score(
     """Store one scoring result and its four reproducibility stamps (v6). Not a status change:
     the caller moves ``extracted`` -> ``scored`` with ``set_status``."""
     now = _now()
-    with conn:
-        cur = conn.execute(
-            "UPDATE jobs SET score = ?, score_features = ?, review_reason = ?, scored_at = ?, score_version = ?, "
-            "score_embed_tag = ?, score_skills_hash = ?, score_profile_hash = ?, updated_at = ? WHERE job_id = ?",
-            (score, features, review_reason, now, score_version, embed_tag, skills_hash, profile_hash, now, job_id),
-        )
-        if cur.rowcount != 1:
-            raise KeyError(f"no job with job_id {job_id!r}")
+    cur = conn.execute(
+        "UPDATE jobs SET score = %s, score_features = %s, review_reason = %s, scored_at = %s, score_version = %s, "
+        "score_embed_tag = %s, score_skills_hash = %s, score_profile_hash = %s, updated_at = %s WHERE job_key = %s",
+        (score, Jsonb(dict(features)), list(review_reason) if review_reason is not None else None, now,
+         score_version, embed_tag, skills_hash, profile_hash, now, job_id),
+    )  # fmt: skip
+    if cur.rowcount != 1:
+        raise KeyError(f"no job with job_id {job_id!r}")
 
 
-def release_job(conn: sqlite3.Connection, job_id: str) -> None:
+def release_job(conn: psycopg.Connection, job_id: str) -> None:
     """The owner's override (D13): promote a scored job out of the review list and/or from below
     the apply line. Only a ``scored`` job can be released; a note event records it."""
     now = _now()
-    with conn:
-        row = conn.execute("SELECT status FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+    with conn.transaction():
+        row = conn.execute("SELECT id, status FROM jobs WHERE job_key = %s FOR UPDATE", (job_id,)).fetchone()
         if row is None:
             raise KeyError(f"no job with job_id {job_id!r}")
         if row["status"] != "scored":
             raise ValueError(f"job {job_id!r} is {row['status']!r}; only a scored job can be released")
-        conn.execute("UPDATE jobs SET released_at = ?, updated_at = ? WHERE job_id = ?", (now, now, job_id))
-        _add_event(conn, job_id, "note", detail="scoring: released by the owner", at=now)
+        conn.execute("UPDATE jobs SET released_at = %s, updated_at = %s WHERE id = %s", (now, now, row["id"]))
+        _add_event(conn, row["id"], "note", detail="scoring: released by the owner", at=now)
 
 
-def set_years_required(conn: sqlite3.Connection, job_id: str, years: int | None) -> None:
+def set_years_required(conn: psycopg.Connection, job_id: str, years: int | None) -> None:
     """Store the filter funnel's extracted years-required feature.
 
     Not a status change and not an event — ``years_required`` is a stored
     feature (docs/scoring.md §1), written once by the seniority gate regardless
     of whether the gate then keeps or drops the job.
     """
-    with conn:
-        row = conn.execute("SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
-        if row is None:
-            raise KeyError(f"no job with job_id {job_id!r}")
-        conn.execute(
-            "UPDATE jobs SET years_required = ?, updated_at = ? WHERE job_id = ?",
-            (years, _now(), job_id),
-        )
+    cur = conn.execute(
+        "UPDATE jobs SET years_required = %s, updated_at = %s WHERE job_key = %s", (years, _now(), job_id)
+    )
+    if cur.rowcount != 1:
+        raise KeyError(f"no job with job_id {job_id!r}")
 
 
 def set_extraction(
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,
     job_id: str,
     *,
-    skills: str,
+    skills: Sequence[Mapping[str, str]],
     domain_bucket: str | None,
     legitimacy: str | None,
     extraction_confidence: str,
@@ -564,27 +404,53 @@ def set_extraction(
 
     Not a status change and not an event — same convention as
     ``set_years_required``: a stored feature, written once per job regardless
-    of what the caller does with ``status`` next. ``skills`` is a JSON string
-    (a list of ``{name, requirement}``, already vocab-canonicalized by the
-    caller — this function does not touch the vocabulary). ``domain_bucket``/
-    ``legitimacy`` are ``None`` on a too-thin-to-call skip; ``skills``/
-    ``extraction_confidence`` are always given (``"[]"`` / ``"low"`` for a
-    skip). ``extraction_version`` (v5) stamps which model + prompt + schema
-    produced it; the extraction stage always passes it.
+    of what the caller does with ``status`` next. ``skills`` is a list of
+    ``{name, requirement}``, already vocab-canonicalized by the caller (this
+    function does not touch the vocabulary); it replaces the job's
+    ``job_skills`` rows in order, a name repeated in one list kept once (its
+    first occurrence). ``domain_bucket``/``legitimacy`` are ``None`` on a
+    too-thin-to-call skip; ``skills``/``extraction_confidence`` are always given
+    (``[]`` / ``"low"`` for a skip). ``extraction_version`` (v5) stamps which
+    model + prompt + schema produced it; the extraction stage always passes it.
     """
-    with conn:
-        row = conn.execute("SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
-        if row is None:
-            raise KeyError(f"no job with job_id {job_id!r}")
+    with conn.transaction():
+        jid = _id(conn, job_id)
         conn.execute(
-            "UPDATE jobs SET skills = ?, domain_bucket = ?, legitimacy = ?, "
-            "extraction_confidence = ?, extraction_version = ?, updated_at = ? WHERE job_id = ?",
-            (skills, domain_bucket, legitimacy, extraction_confidence, extraction_version, _now(), job_id),
+            "UPDATE jobs SET domain_bucket = %s, legitimacy = %s, extraction_confidence = %s, "
+            "extraction_version = %s, updated_at = %s WHERE id = %s",
+            (domain_bucket, legitimacy, extraction_confidence, extraction_version, _now(), jid),
+        )
+        _replace_skills(conn, jid, skills)
+
+
+def _replace_skills(conn: psycopg.Connection, jid: int, skills: Sequence[Mapping[str, str]]) -> None:
+    conn.execute("DELETE FROM job_skills WHERE job_id = %s", (jid,))
+    rows, names = [], set()
+    for item in skills:
+        if item["name"] not in names:
+            rows.append((jid, item["name"], item["requirement"], len(names)))
+            names.add(item["name"])
+    if rows:
+        conn.cursor().executemany(
+            "INSERT INTO job_skills (job_id, skill, requirement, position) VALUES (%s, %s, %s, %s)", rows
         )
 
 
+def set_skills(conn: psycopg.Connection, job_id: str, skills: Sequence[Mapping[str, str]], **columns: Any) -> None:
+    """Rewrite a job's skills list (and any extraction ``columns`` given) without touching the rest -- for the
+    re-canonicalization pass that rewrites spellings after a vocabulary merge."""
+    allowed = {"extraction_confidence", "extraction_version"}
+    if set(columns) - allowed:
+        raise ValueError(f"set_skills only updates {sorted(allowed)}")
+    with conn.transaction():
+        jid = _id(conn, job_id)
+        for col, value in columns.items():
+            conn.execute(f"UPDATE jobs SET {col} = %s WHERE id = %s", (value, jid))
+        _replace_skills(conn, jid, skills)
+
+
 def record_outcome(
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,
     job_id: str,
     outcome: str,
     detail: str | None = None,
@@ -597,33 +463,21 @@ def record_outcome(
     ``OUTCOMES`` tuple is the documented vocabulary, not a DB constraint.
     """
     now = _now()
-    with conn:
-        row = conn.execute("SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
-        if row is None:
-            raise KeyError(f"no job with job_id {job_id!r}")
+    with conn.transaction():
+        jid = _id(conn, job_id)
         conn.execute(
-            "UPDATE jobs SET outcome = ?, outcome_at = ?, outcome_detail = ?, updated_at = ? WHERE job_id = ?",
-            (outcome, at or now, detail, now, job_id),
+            "UPDATE jobs SET outcome = %s, outcome_at = %s, outcome_detail = %s, updated_at = %s WHERE id = %s",
+            (outcome, at or now, detail, now, jid),
         )
-        _add_event(
-            conn,
-            job_id,
-            "outcome",
-            detail=f"{outcome}: {detail}" if detail else outcome,
-            at=now,
-        )
+        _add_event(conn, jid, "outcome", detail=f"{outcome}: {detail}" if detail else outcome, at=now)
 
 
-def add_note(conn: sqlite3.Connection, job_id: str, text: str) -> None:
+def add_note(conn: psycopg.Connection, job_id: str, text: str) -> None:
     """Append a free-text ``note`` event. Changes no column."""
-    with conn:
-        row = conn.execute("SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
-        if row is None:
-            raise KeyError(f"no job with job_id {job_id!r}")
-        _add_event(conn, job_id, "note", detail=text, at=_now())
+    _add_event(conn, _id(conn, job_id), "note", detail=text, at=_now())
 
 
-def touch_job(conn: sqlite3.Connection, job_id: str, *, run_id: str | None = None) -> None:
+def touch_job(conn: psycopg.Connection, job_id: str, *, run_id: str | None = None) -> None:
     """Record a re-sighting (dedup's cross-run match).
 
     Bumps ``last_seen_at``/``updated_at`` and appends a ``seen`` event. Does not
@@ -632,24 +486,18 @@ def touch_job(conn: sqlite3.Connection, job_id: str, *, run_id: str | None = Non
     """
     now = _now()
     detail = "re-sighted (dedup match)" + (f" [{run_id}]" if run_id else "")
-    with conn:
-        row = conn.execute("SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
-        if row is None:
-            raise KeyError(f"no job with job_id {job_id!r}")
-        _touch(conn, job_id, detail=detail, now=now)
+    with conn.transaction():
+        _touch(conn, _id(conn, job_id), detail=detail, now=now)
 
 
-def _touch(conn: sqlite3.Connection, job_id: str, *, detail: str, now: str) -> None:
-    conn.execute(
-        "UPDATE jobs SET last_seen_at = ?, updated_at = ? WHERE job_id = ?",
-        (now, now, job_id),
-    )
-    _add_event(conn, job_id, "seen", detail=detail, at=now)
+def _touch(conn: psycopg.Connection, jid: int, *, detail: str, now: str) -> None:
+    conn.execute("UPDATE jobs SET last_seen_at = %s, updated_at = %s WHERE id = %s", (now, now, jid))
+    _add_event(conn, jid, "seen", detail=detail, at=now)
 
 
 def _add_event(
-    conn: sqlite3.Connection,
-    job_id: str,
+    conn: psycopg.Connection,
+    jid: int,
     kind: str,
     *,
     from_status: str | None = None,
@@ -658,26 +506,32 @@ def _add_event(
     at: str | None = None,
 ) -> None:
     conn.execute(
-        "INSERT INTO job_events (job_id, kind, from_status, to_status, detail, at) VALUES (?, ?, ?, ?, ?, ?)",
-        (job_id, kind, from_status, to_status, detail, at or _now()),
+        "INSERT INTO job_events (job_id, kind, from_status, to_status, detail, at) VALUES (%s, %s, %s, %s, %s, %s)",
+        (jid, kind, from_status, to_status, detail, at or _now()),
     )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # reads
 # ─────────────────────────────────────────────────────────────────────────────
-def get_job(conn: sqlite3.Connection, job_id: str) -> dict | None:
-    row = conn.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
+def get_job(conn: psycopg.Connection, job_id: str) -> dict | None:
+    row = conn.execute(_JOB_SELECT + " WHERE j.job_key = %s", (job_id,)).fetchone()
     return dict(row) if row is not None else None
 
 
-def job_exists(conn: sqlite3.Connection, job_id: str) -> bool:
+def job_exists(conn: psycopg.Connection, job_id: str) -> bool:
     """True if ``job_id`` is already stored — the cross-run dedup check (§8)."""
-    return conn.execute("SELECT 1 FROM jobs WHERE job_id = ?", (job_id,)).fetchone() is not None
+    return conn.execute("SELECT 1 FROM jobs WHERE job_key = %s", (job_id,)).fetchone() is not None
+
+
+def select_jobs(conn: psycopg.Connection, where: str = "", params: Sequence[Any] = (), order: str = "") -> list[dict]:
+    """Job dicts (``get_job``'s shape) for a ``where`` clause over the alias ``j`` (jobs) / ``b`` (boards)."""
+    sql = _JOB_SELECT + (f" WHERE {where}" if where else "") + (f" ORDER BY {order}" if order else "")
+    return [dict(r) for r in conn.execute(sql, params)]
 
 
 def iter_jobs(
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,
     *,
     status: str | None = None,
     source: str | None = None,
@@ -686,24 +540,25 @@ def iter_jobs(
     clauses: list[str] = []
     params: list[Any] = []
     if status is not None:
-        clauses.append("status = ?")
+        clauses.append("j.status = %s")
         params.append(status)
     if source is not None:
-        clauses.append("source = ?")
+        clauses.append("j.source = %s")
         params.append(source)
-    where = f" WHERE {' AND '.join(clauses)}" if clauses else ""
-    cur = conn.execute(f"SELECT * FROM jobs{where} ORDER BY first_seen_at, job_id", params)
-    for row in cur:
-        yield dict(row)
+    yield from select_jobs(conn, " AND ".join(clauses), params, "j.first_seen_at, j.job_key")
 
 
-def get_events(conn: sqlite3.Connection, job_id: str) -> list[dict]:
+def get_events(conn: psycopg.Connection, job_id: str) -> list[dict]:
     """All events for a job, oldest first."""
-    cur = conn.execute("SELECT * FROM job_events WHERE job_id = ? ORDER BY id", (job_id,))
+    cur = conn.execute(
+        "SELECT e.id, j.job_key AS job_id, e.kind, e.from_status, e.to_status, e.detail, e.at "
+        "FROM job_events e JOIN jobs j ON j.id = e.job_id WHERE j.job_key = %s ORDER BY e.id",
+        (job_id,),
+    )
     return [dict(r) for r in cur]
 
 
-def status_counts(conn: sqlite3.Connection) -> dict[str, int]:
+def status_counts(conn: psycopg.Connection) -> dict[str, int]:
     """``{status: count}`` over every known status — the dashboard funnel snapshot."""
     counts = dict.fromkeys(STATUSES, 0)
     for row in conn.execute("SELECT status, COUNT(*) AS n FROM jobs GROUP BY status"):
@@ -714,27 +569,25 @@ def status_counts(conn: sqlite3.Connection) -> dict[str, int]:
 # ─────────────────────────────────────────────────────────────────────────────
 # runs (v2) — the orchestrator's run bookkeeping. See docs/sourcing.md §9-10.
 # ─────────────────────────────────────────────────────────────────────────────
-def open_run(conn: sqlite3.Connection, run_id: str, *, kind: str, config_name: str | None) -> str:
+def open_run(conn: psycopg.Connection, run_id: str, *, kind: str, config_name: str | None) -> str:
     """Insert the ``running`` row. Returns ``started_at`` (the caller often wants it)."""
     if kind not in ("scoring", "backfill"):
         raise ValueError(f"unknown run kind {kind!r}")
     now = _now()
-    with conn:
-        conn.execute(
-            "INSERT INTO runs (run_id, kind, config_name, started_at, status) VALUES (?, ?, ?, ?, 'running')",
-            (run_id, kind, config_name, now),
-        )
+    conn.execute(
+        "INSERT INTO runs (run_id, kind, config_name, started_at, status) VALUES (%s, %s, %s, %s, 'running')",
+        (run_id, kind, config_name, now),
+    )
     return now
 
 
-def checkpoint_run(conn: sqlite3.Connection, run_id: str, *, detail: str) -> None:
+def checkpoint_run(conn: psycopg.Connection, run_id: str, *, detail: str) -> None:
     """Update only ``detail`` (the JSON progress blob) — a mid-run checkpoint."""
-    with conn:
-        conn.execute("UPDATE runs SET detail = ? WHERE run_id = ?", (detail, run_id))
+    conn.execute("UPDATE runs SET detail = %s::jsonb WHERE run_id = %s", (detail, run_id))
 
 
 def finish_run(
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,
     run_id: str,
     *,
     status: str,
@@ -747,26 +600,25 @@ def finish_run(
 ) -> None:
     if status not in RUN_STATUSES or status == "running":
         raise ValueError(f"cannot finish a run with status {status!r}")
-    with conn:
-        conn.execute(
-            "UPDATE runs SET finished_at = ?, status = ?, fetched = ?, "
-            "collapsed_in_run = ?, matched_in_store = ?, persisted_new = ?, "
-            "touched = ?, detail = COALESCE(?, detail) WHERE run_id = ?",
-            (_now(), status, fetched, collapsed_in_run, matched_in_store, persisted_new, touched, detail, run_id),
-        )
+    conn.execute(
+        "UPDATE runs SET finished_at = %s, status = %s, fetched = %s, "
+        "collapsed_in_run = %s, matched_in_store = %s, persisted_new = %s, "
+        "touched = %s, detail = COALESCE(%s::jsonb, detail) WHERE run_id = %s",
+        (_now(), status, fetched, collapsed_in_run, matched_in_store, persisted_new, touched, detail, run_id),
+    )
 
 
-def unfinished_run(conn: sqlite3.Connection, kind: str, config_name: str | None) -> dict | None:
+def unfinished_run(conn: psycopg.Connection, kind: str, config_name: str | None) -> dict | None:
     """Most recent ``running`` row for this (kind, config_name) — for ``--resume``."""
     row = conn.execute(
-        "SELECT * FROM runs WHERE kind = ? AND config_name IS ? "
+        "SELECT * FROM runs WHERE kind = %s AND config_name IS NOT DISTINCT FROM %s "
         "AND finished_at IS NULL ORDER BY started_at DESC LIMIT 1",
         (kind, config_name),
     ).fetchone()
     return dict(row) if row is not None else None
 
 
-def sweep_stale_runs(conn: sqlite3.Connection, kind: str, config_name: str | None) -> int:
+def sweep_stale_runs(conn: psycopg.Connection, kind: str, config_name: str | None) -> int:
     """Mark still-``running`` rows for this (kind, config_name) as ``failed``.
 
     Called ONLY on a fresh (non-``--resume``) start, before ``open_run``. Scoped
@@ -775,30 +627,30 @@ def sweep_stale_runs(conn: sqlite3.Connection, kind: str, config_name: str | Non
     single-user CLI; add a lock/heartbeat if concurrent same-config runs appear.
     Returns the count swept.
     """
-    with conn:
-        cur = conn.execute(
-            "UPDATE runs SET status = 'failed', finished_at = ? "
-            "WHERE kind = ? AND config_name IS ? AND finished_at IS NULL",
-            (_now(), kind, config_name),
-        )
-        return cur.rowcount
+    cur = conn.execute(
+        "UPDATE runs SET status = 'failed', finished_at = %s "
+        "WHERE kind = %s AND config_name IS NOT DISTINCT FROM %s AND finished_at IS NULL",
+        (_now(), kind, config_name),
+    )
+    return cur.rowcount
 
 
-def list_runs(conn: sqlite3.Connection, *, limit: int = 20) -> list[dict]:
-    cur = conn.execute("SELECT * FROM runs ORDER BY started_at DESC LIMIT ?", (limit,))
+def list_runs(conn: psycopg.Connection, *, limit: int = 20) -> list[dict]:
+    cur = conn.execute("SELECT * FROM runs ORDER BY started_at DESC LIMIT %s", (limit,))
     return [dict(r) for r in cur]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
-# cooldowns (v2) — cross-process durability for CooldownRegistry (docs §5).
+# cooldowns (v2, migration 0002) — cross-process durability for CooldownRegistry
+# (docs §5). Kept until the sourcing unit's board_health replaces it.
 # ─────────────────────────────────────────────────────────────────────────────
-def load_cooldowns(conn: sqlite3.Connection) -> dict[str, float]:
+def load_cooldowns(conn: psycopg.Connection) -> dict[str, float]:
     """``{key: until}`` (epoch seconds) for cooldowns that haven't expired."""
     now = time.time()
     return {r["key"]: r["until"] for r in conn.execute("SELECT key, until FROM cooldowns") if r["until"] > now}
 
 
-def save_cooldown(conn: sqlite3.Connection, key: str, until: float, reason: str | None = None) -> None:
+def save_cooldown(conn: psycopg.Connection, key: str, until: float, reason: str | None = None) -> None:
     """Write-through from ``CooldownRegistry.on_trip``. Extends, never shortens.
 
     NOTE: called on the same thread as the ``trip()`` that produced ``until``.
@@ -806,54 +658,68 @@ def save_cooldown(conn: sqlite3.Connection, key: str, until: float, reason: str 
     this directly — marshal the save to the main thread. The single-connection /
     main-thread rule is load-bearing.
     """
-    with conn:
-        conn.execute(
-            "INSERT INTO cooldowns (key, until, tripped_at, reason) VALUES (?, ?, ?, ?) "
-            "ON CONFLICT(key) DO UPDATE SET until = max(until, excluded.until), "
-            "tripped_at = excluded.tripped_at, reason = excluded.reason",
-            (key, until, _now(), reason),
-        )
+    conn.execute(
+        "INSERT INTO cooldowns (key, until, tripped_at, reason) VALUES (%s, %s, %s, %s) "
+        "ON CONFLICT (key) DO UPDATE SET until = GREATEST(cooldowns.until, excluded.until), "
+        "tripped_at = excluded.tripped_at, reason = excluded.reason",
+        (key, until, _now(), reason),
+    )
 
 
-def clear_cooldown(conn: sqlite3.Connection, key: str | None = None) -> None:
+def clear_cooldown(conn: psycopg.Connection, key: str | None = None) -> None:
     """Drop one cooldown, or all of them (manual override)."""
-    with conn:
-        if key is None:
-            conn.execute("DELETE FROM cooldowns")
-        else:
-            conn.execute("DELETE FROM cooldowns WHERE key = ?", (key,))
+    if key is None:
+        conn.execute("DELETE FROM cooldowns")
+    else:
+        conn.execute("DELETE FROM cooldowns WHERE key = %s", (key,))
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # skill_vocab (v3) — the growing canonical skill vocabulary (build step 3,
 # see hiredra/vocab.py for the resolve logic that calls these).
 # ─────────────────────────────────────────────────────────────────────────────
-def touch_skill_vocab(conn: sqlite3.Connection, name: str) -> None:
+def touch_skill_vocab(conn: psycopg.Connection, name: str) -> None:
     """Record a sighting of ``name``: insert it (``seen_count=1``) if new,
     else bump ``seen_count``. ``name`` is stored exactly as given — callers
     normalize case/whitespace before calling, this function does no folding.
     """
-    with conn:
-        conn.execute(
-            "INSERT INTO skill_vocab (name, first_seen_at, seen_count) "
-            "VALUES (?, ?, 1) "
-            "ON CONFLICT(name) DO UPDATE SET seen_count = seen_count + 1",
-            (name, _now()),
-        )
+    conn.execute(
+        "INSERT INTO skill_vocab (name, first_seen_at, seen_count) VALUES (%s, %s, 1) "
+        "ON CONFLICT (name) DO UPDATE SET seen_count = skill_vocab.seen_count + 1",
+        (name, _now()),
+    )
 
 
-def get_skill_vocab(conn: sqlite3.Connection, name: str) -> dict | None:
+# Vectors cross this boundary as opaque little-endian float32 ``bytes`` (hiredra.graph.index owns the codec), so
+# the graph code is unchanged by the move; Postgres stores them as pgvector ``vector`` (float4 too: exact).
+_VOCAB_SELECT = (
+    "SELECT name, description, first_seen_at, seen_count, vector::real[] AS vector, embed_tag, mine, level, source, "
+    "edges FROM skill_vocab"
+)
+
+
+def _vocab_row(row: Row) -> dict:
+    d = dict(row)
+    if d["vector"] is not None:
+        d["vector"] = struct.pack(f"<{len(d['vector'])}f", *d["vector"])
+    return d
+
+
+def _vector_text(blob: bytes) -> str:
+    return "[" + ",".join(repr(x) for x in struct.unpack(f"<{len(blob) // 4}f", blob)) + "]"
+
+
+def get_skill_vocab(conn: psycopg.Connection, name: str) -> dict | None:
     """Exact lookup by canonical name (case-sensitive — fold before calling)."""
-    row = conn.execute("SELECT * FROM skill_vocab WHERE name = ?", (name,)).fetchone()
-    return dict(row) if row is not None else None
+    row = conn.execute(_VOCAB_SELECT + " WHERE name = %s", (name,)).fetchone()
+    return _vocab_row(row) if row is not None else None
 
 
 # ─────────────────────────────────────────────────────────────────────────────
 # skill graph nodes + aliases (v4) — build step 4. Persistence only: the Skill
-# object, the vector codec and the embed/merge policy live in hiredra.graph;
-# vectors cross this boundary as opaque ``bytes`` so storage stays stdlib-only.
+# object, the vector codec and the embed/merge policy live in hiredra.graph.
 # ─────────────────────────────────────────────────────────────────────────────
-def add_market_skill(conn: sqlite3.Connection, name: str) -> bool:
+def add_market_skill(conn: psycopg.Connection, name: str) -> bool:
     """Insert ``name`` as a ``source='market'`` node (``seen_count=0``: it has
     never been seen in one of OUR jobs). Insert-or-ignore: an existing node is
     left untouched (its ``seen_count``/``source`` are not bumped or rewritten),
@@ -861,24 +727,24 @@ def add_market_skill(conn: sqlite3.Connection, name: str) -> bool:
     or an alias, never both. Returns True only if a new row was inserted.
     ``name`` is stored exactly as given (fold before calling).
     """
-    with conn:
-        if conn.execute("SELECT 1 FROM skill_alias WHERE alias = ?", (name,)).fetchone():
+    with conn.transaction():
+        if conn.execute("SELECT 1 FROM skill_alias WHERE alias = %s", (name,)).fetchone():
             return False
         cur = conn.execute(
             "INSERT INTO skill_vocab (name, first_seen_at, seen_count, source) "
-            "VALUES (?, ?, 0, 'market') ON CONFLICT(name) DO NOTHING",
+            "VALUES (%s, %s, 0, 'market') ON CONFLICT (name) DO NOTHING",
             (name, _now()),
         )
         return cur.rowcount == 1
 
 
-def resolve_alias(conn: sqlite3.Connection, name: str) -> str | None:
+def resolve_alias(conn: psycopg.Connection, name: str) -> str | None:
     """The canonical node ``name`` was merged into, or None if it isn't an alias."""
-    row = conn.execute("SELECT canonical FROM skill_alias WHERE alias = ?", (name,)).fetchone()
+    row = conn.execute("SELECT canonical FROM skill_alias WHERE alias = %s", (name,)).fetchone()
     return row["canonical"] if row is not None else None
 
 
-def add_alias(conn: sqlite3.Connection, alias: str, canonical: str) -> None:
+def add_alias(conn: psycopg.Connection, alias: str, canonical: str) -> None:
     """Record that ``alias`` is another spelling of the existing node ``canonical``.
 
     Raises ``ValueError`` if ``canonical`` is not a node, if ``alias`` is itself a
@@ -889,10 +755,10 @@ def add_alias(conn: sqlite3.Connection, alias: str, canonical: str) -> None:
     """
     if alias == canonical:
         raise ValueError(f"alias {alias!r} cannot point at itself")
-    with conn:
-        if conn.execute("SELECT 1 FROM skill_vocab WHERE name = ?", (canonical,)).fetchone() is None:
+    with conn.transaction():
+        if conn.execute("SELECT 1 FROM skill_vocab WHERE name = %s", (canonical,)).fetchone() is None:
             raise ValueError(f"canonical skill {canonical!r} does not exist")
-        if conn.execute("SELECT 1 FROM skill_vocab WHERE name = ?", (alias,)).fetchone() is not None:
+        if conn.execute("SELECT 1 FROM skill_vocab WHERE name = %s", (alias,)).fetchone() is not None:
             raise ValueError(f"{alias!r} is a canonical skill, not an alias -- use merge_skill")
         existing = resolve_alias(conn, alias)
         if existing is not None:
@@ -900,12 +766,11 @@ def add_alias(conn: sqlite3.Connection, alias: str, canonical: str) -> None:
                 raise ValueError(f"alias {alias!r} already points at {existing!r}, not {canonical!r}")
             return
         conn.execute(
-            "INSERT INTO skill_alias (alias, canonical, created_at) VALUES (?, ?, ?)",
-            (alias, canonical, _now()),
+            "INSERT INTO skill_alias (alias, canonical, created_at) VALUES (%s, %s, %s)", (alias, canonical, _now())
         )
 
 
-def merge_skill(conn: sqlite3.Connection, dup: str, canonical: str) -> None:
+def merge_skill(conn: psycopg.Connection, dup: str, canonical: str) -> None:
     """Fold node ``dup`` into node ``canonical`` (one transaction).
 
     ``canonical`` gains ``dup``'s ``seen_count`` and the earlier ``first_seen_at``;
@@ -915,38 +780,39 @@ def merge_skill(conn: sqlite3.Connection, dup: str, canonical: str) -> None:
     Which node survives is the caller's decision (this is mechanism, not policy).
 
     A ``mine`` node is never absorbed (``ValueError``): the owner's capability is
-    edited in the master profile, not silently folded away. ``jobs.skills`` still
+    edited in the master profile, not silently folded away. ``job_skills`` still
     stores whatever spelling extraction wrote; ``resolve_alias`` maps it back.
     """
     if dup == canonical:
         raise ValueError("cannot merge a skill into itself")
-    with conn:
-        d = conn.execute("SELECT * FROM skill_vocab WHERE name = ?", (dup,)).fetchone()
-        c = conn.execute("SELECT * FROM skill_vocab WHERE name = ?", (canonical,)).fetchone()
+    with conn.transaction():
+        d = conn.execute("SELECT * FROM skill_vocab WHERE name = %s FOR UPDATE", (dup,)).fetchone()
+        c = conn.execute("SELECT * FROM skill_vocab WHERE name = %s FOR UPDATE", (canonical,)).fetchone()
         if d is None or c is None:
             missing = dup if d is None else canonical
             raise ValueError(f"skill {missing!r} does not exist")
         if d["mine"]:
             raise ValueError(f"{dup!r} is a 'mine' skill and is never merged away")
         conn.execute(
-            "UPDATE skill_vocab SET seen_count = seen_count + ?, first_seen_at = MIN(first_seen_at, ?) WHERE name = ?",
+            "UPDATE skill_vocab SET seen_count = seen_count + %s, first_seen_at = LEAST(first_seen_at, %s) "
+            "WHERE name = %s",
             (d["seen_count"], d["first_seen_at"], canonical),
         )
-        conn.execute("UPDATE skill_alias SET canonical = ? WHERE canonical = ?", (canonical, dup))
-        conn.execute("DELETE FROM skill_vocab WHERE name = ?", (dup,))
+        # The alias rows are moved before the node goes: skill_alias.canonical cascades on delete.
+        conn.execute("UPDATE skill_alias SET canonical = %s WHERE canonical = %s", (canonical, dup))
+        conn.execute("DELETE FROM skill_vocab WHERE name = %s", (dup,))
         conn.execute(
-            "INSERT INTO skill_alias (alias, canonical, created_at) VALUES (?, ?, ?)",
-            (dup, canonical, _now()),
+            "INSERT INTO skill_alias (alias, canonical, created_at) VALUES (%s, %s, %s)", (dup, canonical, _now())
         )
 
 
-def iter_skill_vocab(conn: sqlite3.Connection) -> list[dict]:
+def iter_skill_vocab(conn: psycopg.Connection) -> list[dict]:
     """Every node as a plain dict (all columns incl. ``vector`` bytes), by name."""
-    return [dict(r) for r in conn.execute("SELECT * FROM skill_vocab ORDER BY name")]
+    return [_vocab_row(r) for r in conn.execute(_VOCAB_SELECT + " ORDER BY name")]
 
 
 def apply_profile_overlay(
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,
     *,
     mine: Mapping[str, str],
     new_nodes: Mapping[str, str],
@@ -963,44 +829,45 @@ def apply_profile_overlay(
     a new name already exists.
     """
     now = _now()
-    with conn:
-        conn.execute("UPDATE skill_vocab SET mine = 0, level = NULL WHERE mine = 1 OR level IS NOT NULL")
+    with conn.transaction():
+        conn.execute("UPDATE skill_vocab SET mine = false, level = NULL WHERE mine OR level IS NOT NULL")
         for name, level in mine.items():
-            cur = conn.execute("UPDATE skill_vocab SET mine = 1, level = ? WHERE name = ?", (level, name))
+            cur = conn.execute("UPDATE skill_vocab SET mine = true, level = %s WHERE name = %s", (level, name))
             if cur.rowcount != 1:
                 raise ValueError(f"profile overlay: {name!r} is not a node")
         for name, level in new_nodes.items():
-            if conn.execute("SELECT 1 FROM skill_vocab WHERE name = ?", (name,)).fetchone():
+            if conn.execute("SELECT 1 FROM skill_vocab WHERE name = %s", (name,)).fetchone():
                 raise ValueError(f"profile overlay: new node {name!r} already exists")
             conn.execute(
                 "INSERT INTO skill_vocab (name, first_seen_at, seen_count, source, mine, level) "
-                "VALUES (?, ?, 0, 'profile', 1, ?)",
+                "VALUES (%s, %s, 0, 'profile', true, %s)",
                 (name, now, level),
             )
         for alias, canonical in aliases:
-            existing = conn.execute("SELECT canonical FROM skill_alias WHERE alias = ?", (alias,)).fetchone()
+            existing = conn.execute("SELECT canonical FROM skill_alias WHERE alias = %s", (alias,)).fetchone()
             if existing is not None:
                 if existing["canonical"] != canonical:
                     raise ValueError(f"profile overlay: alias {alias!r} already points at {existing['canonical']!r}")
                 continue
+            if conn.execute("SELECT 1 FROM skill_vocab WHERE name = %s", (canonical,)).fetchone() is None:
+                raise ValueError(
+                    f"profile overlay broke the alias invariant: node+alias [], chains [], dangling [{alias!r}]"
+                )
             conn.execute(
-                "INSERT INTO skill_alias (alias, canonical, created_at) VALUES (?, ?, ?)", (alias, canonical, now)
+                "INSERT INTO skill_alias (alias, canonical, created_at) VALUES (%s, %s, %s)", (alias, canonical, now)
             )
         both = conn.execute("SELECT alias FROM skill_alias WHERE alias IN (SELECT name FROM skill_vocab)").fetchall()
         chains = conn.execute(
             "SELECT alias FROM skill_alias WHERE canonical IN (SELECT alias FROM skill_alias)"
         ).fetchall()
-        dangling = conn.execute(
-            "SELECT alias FROM skill_alias WHERE canonical NOT IN (SELECT name FROM skill_vocab)"
-        ).fetchall()
-        if both or chains or dangling:
+        if both or chains:
             raise ValueError(
                 "profile overlay broke the alias invariant: "
-                f"node+alias {[r[0] for r in both]}, chains {[r[0] for r in chains]}, dangling {[r[0] for r in dangling]}"
+                f"node+alias {[r[0] for r in both]}, chains {[r[0] for r in chains]}, dangling []"
             )
 
 
-def list_skill_aliases(conn: sqlite3.Connection) -> dict[str, list[str]]:
+def list_skill_aliases(conn: psycopg.Connection) -> dict[str, list[str]]:
     """``{canonical: [aliases…]}`` (aliases sorted), only for nodes that have any."""
     out: dict[str, list[str]] = {}
     for r in conn.execute("SELECT canonical, alias FROM skill_alias ORDER BY canonical, alias"):
@@ -1009,7 +876,7 @@ def list_skill_aliases(conn: sqlite3.Connection) -> dict[str, list[str]]:
 
 
 def skills_needing_embedding(
-    conn: sqlite3.Connection,
+    conn: psycopg.Connection,
     embed_tag: str,
     limit: int | None = None,
     weights: Mapping[str, int] | None = None,
@@ -1023,7 +890,7 @@ def skills_needing_embedding(
     is most likely to need.
     """
     rows = conn.execute(
-        "SELECT name, mine, seen_count FROM skill_vocab WHERE vector IS NULL OR embed_tag IS NOT ?",
+        "SELECT name, mine, seen_count FROM skill_vocab WHERE vector IS NULL OR embed_tag IS DISTINCT FROM %s",
         (embed_tag,),
     ).fetchall()
     w = weights or {}
@@ -1032,18 +899,18 @@ def skills_needing_embedding(
     return names if limit is None else names[:limit]
 
 
-def skill_index_status(conn: sqlite3.Connection, embed_tag: str) -> dict[str, int]:
+def skill_index_status(conn: psycopg.Connection, embed_tag: str) -> dict[str, int]:
     """Counts describing the embedded index against the live ``embed_tag``:
     ``total`` nodes, ``current`` (vector under this tag), ``stale`` (a vector
     under another tag), ``unembedded`` (no vector), plus ``market``/``jd``/
     ``profile`` node counts and ``aliases``."""
     row = conn.execute(
         "SELECT COUNT(*) AS total, "
-        "SUM(vector IS NOT NULL AND embed_tag IS ?) AS current, "
-        "SUM(vector IS NOT NULL AND embed_tag IS NOT ?) AS stale, "
-        "SUM(vector IS NULL) AS unembedded, "
-        "SUM(source = 'market') AS market, SUM(source = 'jd') AS jd, "
-        "SUM(source = 'profile') AS profile FROM skill_vocab",
+        "COUNT(*) FILTER (WHERE vector IS NOT NULL AND embed_tag IS NOT DISTINCT FROM %s) AS current, "
+        "COUNT(*) FILTER (WHERE vector IS NOT NULL AND embed_tag IS DISTINCT FROM %s) AS stale, "
+        "COUNT(*) FILTER (WHERE vector IS NULL) AS unembedded, "
+        "COUNT(*) FILTER (WHERE source = 'market') AS market, COUNT(*) FILTER (WHERE source = 'jd') AS jd, "
+        "COUNT(*) FILTER (WHERE source = 'profile') AS profile FROM skill_vocab",
         (embed_tag, embed_tag),
     ).fetchone()
     out = {k: int(row[k] or 0) for k in row.keys()}
@@ -1051,26 +918,25 @@ def skill_index_status(conn: sqlite3.Connection, embed_tag: str) -> dict[str, in
     return out
 
 
-def invalidate_skill_vectors(conn: sqlite3.Connection) -> int:
+def invalidate_skill_vectors(conn: psycopg.Connection) -> int:
     """Drop EVERY stored vector and its tag, so the whole index re-enters the
     embedding queue. Used when the canary shows the provider changed weights
     under an unchanged model id: those vectors are no longer comparable to
     anything embedded from now on. Returns the number of rows cleared."""
-    with conn:
-        cur = conn.execute("UPDATE skill_vocab SET vector = NULL, embed_tag = NULL WHERE vector IS NOT NULL")
-        return cur.rowcount
+    cur = conn.execute("UPDATE skill_vocab SET vector = NULL, embed_tag = NULL WHERE vector IS NOT NULL")
+    return cur.rowcount
 
 
-def set_skill_vectors(conn: sqlite3.Connection, items: list[tuple[str, bytes]], embed_tag: str) -> None:
+def set_skill_vectors(conn: psycopg.Connection, items: list[tuple[str, bytes]], embed_tag: str) -> None:
     """Write ``(name, vector_blob)`` pairs and stamp them with ``embed_tag``, all
     in ONE transaction: a chunk lands whole or not at all. An unknown ``name``
     raises ``KeyError`` and rolls the whole batch back -- vectors are never
     silently dropped."""
-    with conn:
+    with conn.transaction():
         for name, blob in items:
             cur = conn.execute(
-                "UPDATE skill_vocab SET vector = ?, embed_tag = ? WHERE name = ?",
-                (blob, embed_tag, name),
+                "UPDATE skill_vocab SET vector = %s::vector, embed_tag = %s WHERE name = %s",
+                (_vector_text(blob), embed_tag, name),
             )
             if cur.rowcount != 1:
                 raise KeyError(f"no skill_vocab row named {name!r}")

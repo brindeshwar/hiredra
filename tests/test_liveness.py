@@ -17,7 +17,7 @@ from hiredra.storage import connect, get_events, get_job, init_db, set_status, u
 
 def _job(**overrides):
     job = {
-        "job_id": overrides.pop("job_id", "j1"),
+        "job_id": overrides.pop("job_id", "greenhouse:j1"),
         "url": overrides.pop("url", "https://example.com/j1"),
         "title": "Backend Engineer",
         "company": "Acme",
@@ -69,10 +69,10 @@ def _filtered_job(conn, **overrides):
     return job["job_id"]
 
 
-def test_liveness_keeps_a_job_still_in_the_fresh_listing(ctx):
-    conn = connect(":memory:")
+def test_liveness_keeps_a_job_still_in_the_fresh_listing(ctx, pg_url):
+    conn = connect(pg_url)
     init_db(conn)
-    job_id = _filtered_job(conn, job_id="p1", url="https://fake.example/p1")
+    job_id = _filtered_job(conn, job_id="greenhouse:p1", url="https://fake.example/p1")
     fresh = [Job(job_id=job_id, url="https://fake.example/p1", title="x", company="Acme", source="greenhouse")]
     provider = _FakeLivenessProvider("greenhouse", jobs=fresh)
 
@@ -84,11 +84,11 @@ def test_liveness_keeps_a_job_still_in_the_fresh_listing(ctx):
     conn.close()
 
 
-def test_liveness_drops_a_job_absent_from_the_fresh_listing(ctx):
-    conn = connect(":memory:")
+def test_liveness_drops_a_job_absent_from_the_fresh_listing(ctx, pg_url):
+    conn = connect(pg_url)
     init_db(conn)
-    job_id = _filtered_job(conn, job_id="p1", url="https://fake.example/p1")
-    other = Job(job_id="p9", url="https://fake.example/p9", title="x", company="Acme", source="greenhouse")
+    job_id = _filtered_job(conn, job_id="greenhouse:p1", url="https://fake.example/p1")
+    other = Job(job_id="greenhouse:p9", url="https://fake.example/p9", title="x", company="Acme", source="greenhouse")
     provider = _FakeLivenessProvider("greenhouse", jobs=[other])  # board is alive, this posting isn't listed
 
     stats = liveness.check_liveness(conn, ctx=ctx, registry=[provider])
@@ -99,11 +99,11 @@ def test_liveness_drops_a_job_absent_from_the_fresh_listing(ctx):
     conn.close()
 
 
-def test_liveness_drops_the_whole_board_on_a_404(ctx):
-    conn = connect(":memory:")
+def test_liveness_drops_the_whole_board_on_a_404(ctx, pg_url):
+    conn = connect(pg_url)
     init_db(conn)
-    j1 = _filtered_job(conn, job_id="p1", url="https://fake.example/p1")
-    j2 = _filtered_job(conn, job_id="p2", url="https://fake.example/p2", company="Acme")
+    j1 = _filtered_job(conn, job_id="greenhouse:p1", url="https://fake.example/p1")
+    j2 = _filtered_job(conn, job_id="greenhouse:p2", url="https://fake.example/p2", company="Acme")
     provider = _FakeLivenessProvider("greenhouse", error=HTTPError("gone", status=404))
 
     stats = liveness.check_liveness(conn, ctx=ctx, registry=[provider])
@@ -115,12 +115,12 @@ def test_liveness_drops_the_whole_board_on_a_404(ctx):
     conn.close()
 
 
-def test_liveness_keeps_jobs_when_the_board_lists_nothing(ctx):
+def test_liveness_keeps_jobs_when_the_board_lists_nothing(ctx, pg_url):
     # an empty listing reads the same as a broken feed: never a reason to drop a whole board at once
-    conn = connect(":memory:")
+    conn = connect(pg_url)
     init_db(conn)
-    j1 = _filtered_job(conn, job_id="p1", url="https://fake.example/p1")
-    j2 = _filtered_job(conn, job_id="p2", url="https://fake.example/p2")
+    j1 = _filtered_job(conn, job_id="greenhouse:p1", url="https://fake.example/p1")
+    j2 = _filtered_job(conn, job_id="greenhouse:p2", url="https://fake.example/p2")
     provider = _FakeLivenessProvider("greenhouse", jobs=[])
 
     stats = liveness.check_liveness(conn, ctx=ctx, registry=[provider])
@@ -130,16 +130,18 @@ def test_liveness_keeps_jobs_when_the_board_lists_nothing(ctx):
     conn.close()
 
 
-def test_a_gone_job_listed_again_is_reopened(ctx):
+def test_a_gone_job_listed_again_is_reopened(ctx, pg_url):
     # OpenAI took a posting down and republished it under the same id four days later (2026-10)
-    conn = connect(":memory:")
+    conn = connect(pg_url)
     init_db(conn)
-    job_id = _filtered_job(conn, job_id="p1", url="https://fake.example/p1")
-    other = Job(job_id="p9", url="https://fake.example/p9", title="x", company="Acme", source="greenhouse")
+    job_id = _filtered_job(conn, job_id="greenhouse:p1", url="https://fake.example/p1")
+    other = Job(job_id="greenhouse:p9", url="https://fake.example/p9", title="x", company="Acme", source="greenhouse")
     liveness.check_liveness(conn, ctx=ctx, registry=[_FakeLivenessProvider("greenhouse", jobs=[other])])
     assert get_job(conn, job_id)["status_detail"] == "liveness: gone"
 
-    upsert_job(conn, _job(job_id="p1", url="https://fake.example/p1"))  # the next sourcing run lists it again
+    upsert_job(
+        conn, _job(job_id="greenhouse:p1", url="https://fake.example/p1")
+    )  # the next sourcing run lists it again
 
     row = get_job(conn, job_id)
     assert row["status"] == "filtered"
@@ -147,22 +149,22 @@ def test_a_gone_job_listed_again_is_reopened(ctx):
     conn.close()
 
 
-def test_re_sighting_never_reopens_a_job_dropped_by_a_filter(ctx):
-    conn = connect(":memory:")
+def test_re_sighting_never_reopens_a_job_dropped_by_a_filter(ctx, pg_url):
+    conn = connect(pg_url)
     init_db(conn)
-    job_id = _filtered_job(conn, job_id="p1", url="https://fake.example/p1")
+    job_id = _filtered_job(conn, job_id="greenhouse:p1", url="https://fake.example/p1")
     set_status(conn, job_id, "dropped", detail="seniority: requires 5y (max 2)")
 
-    upsert_job(conn, _job(job_id="p1", url="https://fake.example/p1"))
+    upsert_job(conn, _job(job_id="greenhouse:p1", url="https://fake.example/p1"))
 
     assert get_job(conn, job_id)["status"] == "dropped"  # only a liveness 'gone' is undone by a sighting
     conn.close()
 
 
-def test_liveness_keeps_jobs_when_the_recheck_is_ambiguous(ctx):
-    conn = connect(":memory:")
+def test_liveness_keeps_jobs_when_the_recheck_is_ambiguous(ctx, pg_url):
+    conn = connect(pg_url)
     init_db(conn)
-    job_id = _filtered_job(conn, job_id="p1", url="https://fake.example/p1")
+    job_id = _filtered_job(conn, job_id="greenhouse:p1", url="https://fake.example/p1")
     provider = _FakeLivenessProvider("greenhouse", error=RuntimeError("timed out"))
 
     stats = liveness.check_liveness(conn, ctx=ctx, registry=[provider])
@@ -172,16 +174,16 @@ def test_liveness_keeps_jobs_when_the_recheck_is_ambiguous(ctx):
     conn.close()
 
 
-def test_liveness_groups_multiple_jobs_at_the_same_board_into_one_fetch(ctx):
-    conn = connect(":memory:")
+def test_liveness_groups_multiple_jobs_at_the_same_board_into_one_fetch(ctx, pg_url):
+    conn = connect(pg_url)
     init_db(conn)
-    _filtered_job(conn, job_id="p1", url="https://fake.example/p1", company="Acme")
-    _filtered_job(conn, job_id="p2", url="https://fake.example/p2", company="Acme")
-    _filtered_job(conn, job_id="p3", url="https://fake.example/p3", company="Acme")
+    _filtered_job(conn, job_id="greenhouse:p1", url="https://fake.example/p1", company="Acme")
+    _filtered_job(conn, job_id="greenhouse:p2", url="https://fake.example/p2", company="Acme")
+    _filtered_job(conn, job_id="greenhouse:p3", url="https://fake.example/p3", company="Acme")
     fresh = [
-        Job(job_id="p1", url="https://fake.example/p1", title="x", company="Acme", source="greenhouse"),
-        Job(job_id="p2", url="https://fake.example/p2", title="x", company="Acme", source="greenhouse"),
-        Job(job_id="p3", url="https://fake.example/p3", title="x", company="Acme", source="greenhouse"),
+        Job(job_id="greenhouse:p1", url="https://fake.example/p1", title="x", company="Acme", source="greenhouse"),
+        Job(job_id="greenhouse:p2", url="https://fake.example/p2", title="x", company="Acme", source="greenhouse"),
+        Job(job_id="greenhouse:p3", url="https://fake.example/p3", title="x", company="Acme", source="greenhouse"),
     ]
     provider = _FakeLivenessProvider("greenhouse", jobs=fresh)
 
@@ -192,10 +194,12 @@ def test_liveness_groups_multiple_jobs_at_the_same_board_into_one_fetch(ctx):
     conn.close()
 
 
-def test_liveness_skips_and_notes_jobs_with_no_board_mechanism(ctx):
-    conn = connect(":memory:")
+def test_liveness_skips_and_notes_jobs_with_no_board_mechanism(ctx, pg_url):
+    conn = connect(pg_url)
     init_db(conn)
-    job_id = _filtered_job(conn, job_id="js1", url="https://www.linkedin.com/jobs/view/123", source="jobspy-linkedin")
+    job_id = _filtered_job(
+        conn, job_id="jobspy-linkedin:js1", url="https://www.linkedin.com/jobs/view/123", source="jobspy-linkedin"
+    )
 
     stats = liveness.check_liveness(conn, ctx=ctx, registry=[])  # no provider handles "jobspy-linkedin"
 
@@ -207,15 +211,15 @@ def test_liveness_skips_and_notes_jobs_with_no_board_mechanism(ctx):
     conn.close()
 
 
-def test_liveness_never_touches_jobs_already_dropped_by_an_earlier_gate(ctx):
-    conn = connect(":memory:")
+def test_liveness_never_touches_jobs_already_dropped_by_an_earlier_gate(ctx, pg_url):
+    conn = connect(pg_url)
     init_db(conn)
-    upsert_job(conn, _job(job_id="d1", url="https://fake.example/d1"))
-    set_status(conn, "d1", "dropped", detail="role_type: no allow term matched")
+    upsert_job(conn, _job(job_id="greenhouse:d1", url="https://fake.example/d1"))
+    set_status(conn, "greenhouse:d1", "dropped", detail="role_type: no allow term matched")
     provider = _FakeLivenessProvider("greenhouse", jobs=[])
 
     stats = liveness.check_liveness(conn, ctx=ctx, registry=[provider])
 
     assert stats.checked == 0 and provider.fetch_calls == 0
-    assert get_job(conn, "d1")["status_detail"] == "role_type: no allow term matched"  # untouched
+    assert get_job(conn, "greenhouse:d1")["status_detail"] == "role_type: no allow term matched"  # untouched
     conn.close()

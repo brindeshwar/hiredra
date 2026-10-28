@@ -87,9 +87,10 @@ class RecordingSink:
         self.batches: list[list[Job]] = []
         self.provenance: list[tuple[str | None, str | None]] = []
 
-    def consume(self, jobs, *, company_slug=None, list_tag=None):
+    def consume(self, jobs, *, company_slug=None, list_tag=None, provenance="orphan"):
         self.batches.append(list(jobs))
         self.provenance.append((company_slug, list_tag))
+        self.list_provenance = provenance
 
     def stats(self):
         n = sum(len(b) for b in self.batches)

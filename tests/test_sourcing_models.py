@@ -33,7 +33,7 @@ def test_job_id_falls_back_to_url():
 
 
 def test_explicit_job_id_kept():
-    assert Job(**_kwargs(job_id="gh-42")).job_id == "gh-42"
+    assert Job(**_kwargs(job_id="greenhouse:gh-42")).job_id == "greenhouse:gh-42"
 
 
 def test_job_is_frozen():
@@ -85,13 +85,13 @@ def test_to_dict_maps_is_remote_to_int():
     assert Job(**_kwargs(is_remote=None)).to_dict()["is_remote"] is None
 
 
-def test_job_survives_a_full_storage_round_trip():
-    conn = db.connect(":memory:")
+def test_job_survives_a_full_storage_round_trip(pg_url):
+    conn = db.connect(pg_url)
     db.init_db(conn)
-    original = Job(**_kwargs(job_id="gh-1", years_required=0, is_remote=True))
+    original = Job(**_kwargs(job_id="greenhouse:gh-1", years_required=0, is_remote=True))
 
     db.upsert_job(conn, original.to_dict())
-    rebuilt = Job.from_row(db.get_job(conn, "gh-1"))
+    rebuilt = Job.from_row(db.get_job(conn, "greenhouse:gh-1"))
 
     assert rebuilt == original
     assert rebuilt.years_required == 0
@@ -99,16 +99,16 @@ def test_job_survives_a_full_storage_round_trip():
     conn.close()
 
 
-def test_from_row_ignores_non_job_columns():
-    conn = db.connect(":memory:")
+def test_from_row_ignores_non_job_columns(pg_url):
+    conn = db.connect(pg_url)
     db.init_db(conn)
-    db.upsert_job(conn, Job(**_kwargs(job_id="gh-1")).to_dict())
-    db.set_status(conn, "gh-1", "scored", detail="s=0.7")
+    db.upsert_job(conn, Job(**_kwargs(job_id="greenhouse:gh-1")).to_dict())
+    db.set_status(conn, "greenhouse:gh-1", "scored", detail="s=0.7")
 
-    row = db.get_job(conn, "gh-1")
+    row = db.get_job(conn, "greenhouse:gh-1")
     assert "status" in row and "first_seen_at" in row  # wider than Job
     job = Job.from_row(row)  # must not choke on the extra columns
-    assert job.job_id == "gh-1"
+    assert job.job_id == "greenhouse:gh-1"
     conn.close()
 
 

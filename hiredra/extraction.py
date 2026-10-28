@@ -61,12 +61,13 @@ from hiredra.lock import LockHeld, RunLock
 from hiredra.nvidia import NvidiaChain
 from hiredra.quota import DailyQuotaExceeded, DailyUsage, classify_failure, jittered_wait, reset_text
 from hiredra.storage import (
-    DEFAULT_DB_PATH,
     add_note,
     connect,
     init_db,
     iter_jobs,
+    select_jobs,
     set_extraction,
+    set_skills,
     set_status,
 )
 
@@ -547,7 +548,7 @@ def run_extraction(
             set_extraction(
                 conn,
                 job_id,
-                skills="[]",
+                skills=[],
                 domain_bucket=None,
                 legitimacy=None,
                 extraction_confidence="low",
@@ -596,7 +597,7 @@ def run_extraction(
         set_extraction(
             conn,
             job_id,
-            skills=json.dumps(skills),
+            skills=skills,
             domain_bucket=result.domain_bucket,
             legitimacy=result.legitimacy,
             extraction_confidence=confidence,
@@ -625,11 +626,11 @@ def stale_jobs(conn, config: ExtractionConfig | None = None) -> dict[str | None,
     groups: dict[str | None, list[dict]] = {}
     stamps = current_stamps(config)
     rows = conn.execute(
-        "SELECT job_id, company, title, extraction_version FROM jobs "
+        "SELECT job_key AS job_id, company, title, extraction_version FROM jobs "
         "WHERE status IN ('extracted', 'scored') "
-        f"AND (extraction_version IS NULL OR extraction_version NOT IN ({', '.join('?' for _ in stamps)})) "
-        "ORDER BY extraction_version, job_id",
-        stamps,
+        "AND (extraction_version IS NULL OR NOT extraction_version = ANY(%s)) "
+        "ORDER BY extraction_version, job_key",
+        (stamps,),
     )
     for row in rows:
         groups.setdefault(row["extraction_version"], []).append(dict(row))
@@ -643,14 +644,10 @@ def reguard_jobs(conn, config: ExtractionConfig) -> dict[str, int]:
     guarded stamp. Scored jobs are left alone (their scores would go stale silently)."""
     unguarded, guarded = extraction_version(), extraction_version(config)
     counts = {"jobs": 0, "skills_dropped": 0, "now_low_confidence": 0}
-    rows = conn.execute(
-        "SELECT job_id, company, description, skills, extraction_confidence FROM jobs "
-        "WHERE status = 'extracted' AND extraction_version = ?",
-        (unguarded,),
-    ).fetchall()
+    rows = select_jobs(conn, "j.status = 'extracted' AND j.extraction_version = %s", (unguarded,), "j.job_key")
     for row in rows:
         clean_text, _ = preprocess(row["description"] or "", row["company"], config)
-        items = [SkillItem(name=s["name"], requirement=s["requirement"]) for s in json.loads(row["skills"] or "[]")]
+        items = [SkillItem(name=s["name"], requirement=s["requirement"]) for s in row["skills"] or []]
         kept, dropped = apply_guards(items, clean_text, config)
         confidence = row["extraction_confidence"]
         if not kept and items and confidence == "high":
@@ -663,16 +660,13 @@ def reguard_jobs(conn, config: ExtractionConfig) -> dict[str, int]:
                 "extraction: guards dropped " + "; ".join(f"{k}: {', '.join(v)}" for k, v in dropped.items()),
             )
             counts["skills_dropped"] += sum(len(v) for v in dropped.values())
-        with conn:
-            conn.execute(
-                "UPDATE jobs SET skills = ?, extraction_confidence = ?, extraction_version = ? WHERE job_id = ?",
-                (
-                    json.dumps([{"name": i.name, "requirement": i.requirement} for i in kept]),
-                    confidence,
-                    guarded,
-                    row["job_id"],
-                ),
-            )
+        set_skills(
+            conn,
+            row["job_id"],
+            [{"name": i.name, "requirement": i.requirement} for i in kept],
+            extraction_confidence=confidence,
+            extraction_version=guarded,
+        )
         counts["jobs"] += 1
     return counts
 
@@ -688,7 +682,7 @@ _STOP_HINTS = {
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m hiredra.extraction")
-    parser.add_argument("--db", default=str(DEFAULT_DB_PATH))
+    parser.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
     parser.add_argument("--limit", type=int, default=None, help="process at most N filtered jobs")
     parser.add_argument("--stale", action="store_true", help="list jobs extracted with an older stamp (no API call)")

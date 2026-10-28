@@ -17,7 +17,6 @@ Exit codes: 0 ok, 1 config or input error, 2 stopped (precondition or budget), 4
 from __future__ import annotations
 
 import argparse
-import json
 import sys
 from datetime import datetime, timezone
 
@@ -29,7 +28,7 @@ from hiredra.profile import DEFAULT_PROFILE_PATH, ProfileError, parse_skills
 from hiredra.scoring import rate as srate
 from hiredra.scoring import run as sr
 from hiredra.scoring.score import DEFAULT_WEIGHTS_PATH, load_weights
-from hiredra.storage import DEFAULT_DB_PATH, connect, get_job, init_db, release_job, set_status
+from hiredra.storage import connect, get_job, init_db, release_job, set_status
 
 for _stream in (sys.stdout, sys.stderr):  # titles carry any Unicode; a cp1252 console must not crash
     if hasattr(_stream, "reconfigure"):
@@ -41,8 +40,8 @@ def _log(msg: str) -> None:
 
 
 def _row(r: dict) -> str:
-    f = json.loads(r["score_features"] or "{}")
-    flags = " ".join(json.loads(r["review_reason"])) if r["review_reason"] else ""
+    f = r["score_features"] or {}
+    flags = " ".join(r["review_reason"] or ())
     released = " RELEASED" if r["released_at"] else ""
     return (
         f"{r['score']:7.3f}  cov {f.get('coverage', 0):.2f}  gap {f.get('gap_distance', 0):.2f}  "
@@ -75,7 +74,7 @@ def _cmd_run(conn, args, graph_cfg, weights) -> int:
         return 2
     _log(
         f"scoring {weights.score_version}: selected={stats.selected} scored={stats.scored} rescored={stats.rescored} "
-        f"malformed={stats.malformed} embedded_misses={stats.embedded}"
+        f"embedded_misses={stats.embedded}"
     )
     if stats.embedded:
         _log("  hint: run `python -m hiredra.graph sync` after each extraction day, so scoring needs no embeddings")
@@ -112,7 +111,7 @@ def _cmd_show(conn, args, graph_cfg, weights) -> int:
     if job is None or not job["score_features"]:
         _log(f"no scored job {args.job_id!r}")
         return 1
-    f = json.loads(job["score_features"])
+    f = job["score_features"]
     _log(f"{job['title']} -- {job['company']}  [{job['status']}]")
     _log(f"  {job['url']}")
     _log(
@@ -204,7 +203,7 @@ def _cmd_rate(conn, args, graph_cfg, weights) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m hiredra.scoring", description=__doc__.split("\n\n")[0])
-    ap.add_argument("--db", default=str(DEFAULT_DB_PATH))
+    ap.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
     ap.add_argument("--graph-config", default=str(DEFAULT_CONFIG_PATH))
     ap.add_argument("--weights", default=str(DEFAULT_WEIGHTS_PATH))
     ap.add_argument("--profile", default=str(DEFAULT_PROFILE_PATH))
