@@ -8,6 +8,8 @@
     python -m hiredra.scoring release <job_id>     # the owner's override: promote it (review list or below the line)
     python -m hiredra.scoring reject <job_id>      # drop it with detail "review: rejected"
     python -m hiredra.scoring status               # stamps in use, stale counts, the profile export
+    python -m hiredra.scoring rate --sample        # Step 7: write the blind rating sheet (30 jobs)
+    python -m hiredra.scoring rate --ingest        # Step 7: read the ticked sheet into job_ratings.csv
 
 Exit codes: 0 ok, 1 config or input error, 2 stopped (precondition or budget), 4 lock held.
 """
@@ -24,6 +26,7 @@ from hiredra.graph.lock import DEFAULT_LOCK_PATH, LockHeld, RunLock
 from hiredra.graph.overlay import DEFAULT_OVERLAY_PATH
 from hiredra.graph.usage import DEFAULT_USAGE_PATH, DailyUsage, reset_text
 from hiredra.profile import DEFAULT_PROFILE_PATH, ProfileError, parse_skills
+from hiredra.scoring import rate as srate
 from hiredra.scoring import run as sr
 from hiredra.scoring.score import DEFAULT_WEIGHTS_PATH, load_weights
 from hiredra.storage import DEFAULT_DB_PATH, connect, get_job, init_db, release_job, set_status
@@ -185,6 +188,20 @@ def _cmd_status(conn, args, graph_cfg, weights) -> int:
     return 0
 
 
+def _cmd_rate(conn, args, graph_cfg, weights) -> int:
+    try:
+        if args.sample:
+            n = srate.write_sample(conn, force=args.force)
+            _log(f"wrote {srate.SHEET_PATH} ({n} jobs, two sittings); tick one box and write a reason per job")
+        else:
+            new, same = srate.ingest()
+            _log(f"saved {new} rating(s) to {srate.RATINGS_PATH} ({same} unchanged)")
+    except (srate.SheetError, OSError) as exc:
+        _log(f"rate: {exc}")
+        return 1
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(prog="python -m hiredra.scoring", description=__doc__.split("\n\n")[0])
     ap.add_argument("--db", default=str(DEFAULT_DB_PATH))
@@ -204,6 +221,11 @@ def main(argv: list[str] | None = None) -> int:
     for name in ("show", "release", "reject"):
         sub.add_parser(name).add_argument("job_id")
     sub.add_parser("status")
+    rate_p = sub.add_parser("rate", help="Step 7: the blind rating sheet")
+    mode = rate_p.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--sample", action="store_true", help="draw 30 jobs and write the sheet")
+    mode.add_argument("--ingest", action="store_true", help="save the ticked ratings")
+    rate_p.add_argument("--force", action="store_true", help="with --sample: replace an existing sheet")
     args = ap.parse_args(argv)
 
     try:
@@ -220,6 +242,7 @@ def main(argv: list[str] | None = None) -> int:
         "release": _cmd_release,
         "reject": _cmd_reject,
         "status": _cmd_status,
+        "rate": _cmd_rate,
     }
     conn = connect(args.db)
     try:
