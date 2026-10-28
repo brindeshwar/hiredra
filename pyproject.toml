@@ -33,6 +33,9 @@ dependencies = [
     # graph harvest -- reads open-jobs parquet over HTTPS (hiredra/graph/harvest.py) and the
     # discovery program's ingest/export.
     "duckdb>=1.1",
+    # storage -- Postgres + pgvector (plan unit DB1, decision D1.2: psycopg 3, sync). The binary extra ships libpq,
+    # so nothing extra is installed on Windows.
+    "psycopg[binary]>=3.2,<3.3",
 ]
 
 [dependency-groups]
