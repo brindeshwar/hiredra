@@ -285,3 +285,84 @@ def test_cooldown_registry_extends_never_shortens():
     long_until = reg.trip("k", 100)
     short_until = reg.trip("k", 10)  # must not shorten
     assert short_until == long_until
+
+
+# ── SSRF guard (D4.4; freehire platform/safehttp) ─────────────────────────
+import ipaddress  # noqa: E402
+import socket  # noqa: E402
+
+import httpcore  # noqa: E402
+
+from hiredra.sourcing import http as http_mod  # noqa: E402
+
+
+@pytest.mark.parametrize(
+    ("ip", "public"),
+    [
+        ("127.0.0.1", False),
+        ("10.1.2.3", False),
+        ("172.16.0.1", False),
+        ("192.168.1.1", False),
+        ("169.254.169.254", False),  # cloud metadata
+        ("100.64.0.1", False),  # CGNAT
+        ("192.0.2.1", False),  # TEST-NET-1
+        ("198.18.0.1", False),  # benchmarking
+        ("240.0.0.1", False),  # reserved
+        ("224.0.0.1", False),  # multicast
+        ("0.0.0.0", False),
+        ("::1", False),
+        ("fd00::1", False),
+        ("::ffff:127.0.0.1", False),  # IPv4-mapped loopback
+        ("8.8.8.8", True),
+        ("2606:4700:4700::1111", True),
+    ],
+)
+def test_public_address_classification(ip, public):
+    assert http_mod._public(ipaddress.ip_address(ip)) is public
+
+
+def _fake_dns(monkeypatch, *ips):
+    calls = []
+
+    def getaddrinfo(host, port, *a, **k):
+        calls.append(host)
+        return [(socket.AF_INET6 if ":" in ip else socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, port)) for ip in ips]
+
+    monkeypatch.setattr(http_mod.socket, "getaddrinfo", getaddrinfo)
+    return calls
+
+
+def test_a_host_resolving_to_a_private_address_is_refused_and_not_retried(monkeypatch):
+    calls = _fake_dns(monkeypatch, "127.0.0.1")
+    with HttpClient(HttpConfig(attempts=3), sleep=lambda s: None) as client:
+        with pytest.raises(http_mod.NonPublicAddress):
+            client.get_text("http://looks-public.example/")
+    assert calls == ["looks-public.example"]  # one lookup: a non-public address is not transient
+
+
+def test_a_host_with_any_private_address_is_refused(monkeypatch):
+    _fake_dns(monkeypatch, "93.184.216.34", "10.0.0.5")  # a rebinding-style mixed answer
+    with HttpClient(HttpConfig(attempts=1)) as client, pytest.raises(http_mod.NonPublicAddress):
+        client.get_text("http://mixed.example/")
+
+
+def test_the_default_client_is_guarded():
+    # httpx has no public hook for the network backend: this pins the private attribute the guard sets
+    with HttpClient() as client:
+        assert isinstance(client._client._transport._pool._network_backend, http_mod._PublicOnlyBackend)
+
+
+def test_the_guard_tries_each_checked_address_in_turn(monkeypatch):
+    _fake_dns(monkeypatch, "93.184.216.34", "93.184.216.35")
+    backend = http_mod._PublicOnlyBackend()
+    tried = []
+
+    def connect_tcp(host, port, *a, **k):
+        tried.append(host)
+        if host == "93.184.216.34":
+            raise httpcore.ConnectError("unreachable")
+        return "stream"
+
+    monkeypatch.setattr(backend._inner, "connect_tcp", connect_tcp)
+    assert backend.connect_tcp("two.example", 443) == "stream"
+    assert tried == ["93.184.216.34", "93.184.216.35"]

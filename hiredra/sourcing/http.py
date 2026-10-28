@@ -20,8 +20,10 @@ orchestrator's concern (sub-slice 8), not this layer's.
 from __future__ import annotations
 
 import datetime as _dt
+import ipaddress
 import logging
 import re
+import socket
 import threading
 import time
 from collections.abc import Callable, Mapping
@@ -30,6 +32,7 @@ from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urlsplit
 
+import httpcore
 import httpx
 from tenacity import (
     Retrying,
@@ -224,6 +227,53 @@ class CooldownRegistry:
 
 
 # ── the client ─────────────────────────────────────────────────────────────
+# ── SSRF guard (decisions D4.4) ────────────────────────────────────────────
+# Every connection is checked AFTER DNS resolution, at connect time, and goes to the checked address: a
+# public hostname that resolves to a private one is refused, and there is no gap for a second (rebinding)
+# lookup to slip through. Ported from freehire's platform/safehttp GuardedDialer (MIT). Matters once URLs
+# come from job data (company-hosted apply forms, posting pages), not only from the three ATS APIs.
+class NonPublicAddress(FetchError):
+    """The host resolves to a loopback, private, link-local, reserved or otherwise non-public address."""
+
+
+def _public(ip: ipaddress.IPv4Address | ipaddress.IPv6Address) -> bool:
+    # is_global already excludes CGNAT, TEST-NETs, 198.18/15, 240/4 and IPv4-mapped IPv6; not multicast
+    return ip.is_global and not ip.is_multicast
+
+
+class _PublicOnlyBackend(httpcore.NetworkBackend):
+    def __init__(self) -> None:
+        self._inner = httpcore.SyncBackend()
+
+    def connect_tcp(self, host, port, timeout=None, local_address=None, socket_options=None):  # noqa: ANN001
+        try:
+            infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+        except socket.gaierror as err:
+            raise httpcore.ConnectError(str(err)) from err
+        ips = [ipaddress.ip_address(info[4][0].split("%")[0]) for info in infos]
+        if not ips or not all(_public(ip) for ip in ips):
+            raise NonPublicAddress(f"{host} resolves to a non-public address ({', '.join(map(str, ips))})")
+        last: Exception | None = None
+        for ip in dict.fromkeys(ips):  # every checked address in turn, as a plain connect would
+            try:
+                return self._inner.connect_tcp(str(ip), port, timeout, local_address, socket_options)
+            except (httpcore.ConnectError, httpcore.ConnectTimeout) as err:
+                last = err
+        raise last  # type: ignore[misc]
+
+    def connect_unix_socket(self, path, timeout=None, socket_options=None):  # noqa: ANN001
+        raise NonPublicAddress("unix sockets are not fetched")
+
+    def sleep(self, seconds: float) -> None:
+        self._inner.sleep(seconds)
+
+
+def _public_only_transport() -> httpx.HTTPTransport:
+    transport = httpx.HTTPTransport()
+    transport._pool._network_backend = _PublicOnlyBackend()  # httpx has no public hook; a test pins this
+    return transport
+
+
 class HttpClient:
     """The shared client. ``ctx.http.get_json(url)`` etc. from every provider."""
 
@@ -247,7 +297,9 @@ class HttpClient:
         if transport is not None:
             kwargs["transport"] = transport
         elif self.config.proxy:
-            kwargs["proxy"] = self.config.proxy
+            kwargs["proxy"] = self.config.proxy  # the guard is not applied through a proxy (OFF by default)
+        else:
+            kwargs["transport"] = _public_only_transport()
         self._client = httpx.Client(**kwargs)
 
     # context manager ------------------------------------------------------
