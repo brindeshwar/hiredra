@@ -64,7 +64,7 @@ jobs:
       - name: Install from uv.lock
         run: uv sync --frozen
       - name: DB tests
-        run: uv run pytest -q tests/test_pg.py -rs
+        run: uv run pytest -q tests/test_pg.py tests/test_pg_import.py -rs
 
   secrets:
     name: Secret scan (gitleaks, full history)

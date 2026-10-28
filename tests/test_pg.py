@@ -4,28 +4,12 @@ locally: the docker compose service, see .env.example)."""
 
 from __future__ import annotations
 
-import os
-import uuid
-
 import pytest
 
 psycopg = pytest.importorskip("psycopg")
 from hiredra import pg  # noqa: E402
 
-ADMIN_URL = os.environ.get("HIREDRA_TEST_DATABASE_URL")
-pytestmark = pytest.mark.skipif(not ADMIN_URL, reason="HIREDRA_TEST_DATABASE_URL not set (needs a Postgres server)")
-
-
-@pytest.fixture()
-def db_url():
-    """A fresh, empty database for one test, dropped afterwards."""
-    name = f"hiredra_test_{uuid.uuid4().hex[:12]}"
-    with psycopg.connect(ADMIN_URL, autocommit=True) as admin:
-        admin.execute(f'CREATE DATABASE "{name}"')
-    url = psycopg.conninfo.make_conninfo(ADMIN_URL, dbname=name)
-    yield url
-    with psycopg.connect(ADMIN_URL, autocommit=True) as admin:
-        admin.execute(f'DROP DATABASE "{name}" WITH (FORCE)')
+# db_url (a scratch database per test, skipped without HIREDRA_TEST_DATABASE_URL) is in conftest.py.
 
 
 def test_migrate_applies_0001_once(db_url):

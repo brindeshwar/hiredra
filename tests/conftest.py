@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import uuid
+
 import httpx
 import pytest
 
@@ -137,3 +140,19 @@ def _no_real_nvidia_key(monkeypatch):
     overrides a variable that is already set), so a real NvidiaChain can't be built by accident.
     Tests that need one pass a fake client."""
     monkeypatch.setenv("NVIDIA_API_KEY", "")
+
+
+@pytest.fixture()
+def db_url():
+    """A fresh, empty Postgres database for one test, dropped afterwards (D1.12). Skips unless
+    HIREDRA_TEST_DATABASE_URL points at a server the tests may create and drop databases on."""
+    admin_url = os.environ.get("HIREDRA_TEST_DATABASE_URL")
+    if not admin_url:
+        pytest.skip("HIREDRA_TEST_DATABASE_URL not set (needs a Postgres server)")
+    psycopg = pytest.importorskip("psycopg")
+    name = f"hiredra_test_{uuid.uuid4().hex[:12]}"
+    with psycopg.connect(admin_url, autocommit=True) as admin:
+        admin.execute(f'CREATE DATABASE "{name}"')
+    yield psycopg.conninfo.make_conninfo(admin_url, dbname=name)
+    with psycopg.connect(admin_url, autocommit=True) as admin:
+        admin.execute(f'DROP DATABASE "{name}" WITH (FORCE)')

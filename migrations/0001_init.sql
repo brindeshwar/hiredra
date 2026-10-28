@@ -130,7 +130,7 @@ CREATE TABLE jobs (
     extraction_confidence  text,
     extraction_version     text,
     -- scoring
-    score              real,
+    score              double precision,  -- SQLite REAL is 8-byte; real (4-byte) would round today's scores
     score_features     jsonb,
     review_reason      text[],
     released_at        timestamptz,
