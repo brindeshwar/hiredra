@@ -38,9 +38,9 @@ from hiredra.graph.curation import (
     load_never_merge,
 )
 from hiredra.graph.harvest import DEFAULT_DF_PATH, harvest, load_df
-from hiredra.graph.lock import DEFAULT_LOCK_PATH, LockHeld, RunLock
+from hiredra.graph.lock import LockHeld, RunLock
 from hiredra.graph.merge import DEFAULT_REVIEW_PATH, apply_review, propose_merges, write_review
-from hiredra.graph.usage import DEFAULT_USAGE_PATH, DailyUsage, reset_text
+from hiredra.graph.usage import DailyUsage, reset_text
 from hiredra.storage import (
     connect,
     init_db,
@@ -54,8 +54,8 @@ def _log(msg: str) -> None:
     print(msg, flush=True)
 
 
-def _usage(cfg, args) -> DailyUsage:
-    return DailyUsage(cfg.rpd_budget, path=args.usage_path)
+def _usage(conn, cfg) -> DailyUsage:
+    return DailyUsage(cfg.rpd_budget, conn, "gemini", cfg.model)
 
 
 def _warn_if_no_df(conn, weights, args) -> None:
@@ -102,7 +102,7 @@ def _cmd_status(conn, cfg, args) -> int:
     _log(f"embedded  : {st['current']} current, {st['stale']} stale, {st['unembedded']} not yet")
     _log(f"aliases   : {st['aliases']}")
     _log(f"queue     : {len(skills_needing_embedding(conn, cfg.embed_tag))} node(s) need embedding")
-    _log(f"today     : {_usage(cfg, args).summary()}")
+    _log(f"today     : {_usage(conn, cfg).summary()}")
     _log(
         f"limits    : Google {cfg.requests_per_minute} req/min, {cfg.tokens_per_minute} tokens/min, "
         f"{cfg.requests_per_day} req/day (each input in a batch = 1 request); we stay at "
@@ -150,7 +150,7 @@ def _cmd_consistency(conn, cfg, args) -> int:
     from hiredra.graph.consistency import check_batch_consistency
     from hiredra.graph.embedder import build_embedder
 
-    usage = _usage(cfg, args)
+    usage = _usage(conn, cfg)
     if _refuse_if_exhausted(usage):
         return 2
     need = 3 * args.sample
@@ -185,7 +185,7 @@ def _cmd_sync(conn, cfg, args) -> int:
     from hiredra.graph.embedder import build_embedder
     from hiredra.graph.sync import ensure_index_current
 
-    usage = _usage(cfg, args)
+    usage = _usage(conn, cfg)
     if _refuse_if_exhausted(usage):
         return 2
     weights = load_df(args.df_path)
@@ -339,7 +339,7 @@ def _cmd_overlay(conn, cfg, args) -> int:
         _log(f"state written: {args.overlay_path}. Next: `python -m hiredra.graph sync` embeds the new profile nodes.")
         return 0
 
-    usage = _usage(cfg, args)
+    usage = _usage(conn, cfg)
 
     def embedder():
         from hiredra.graph.embedder import build_embedder
@@ -401,7 +401,7 @@ def _cmd_calibrate(conn, cfg, args) -> int:
         _log(f"NOT RUN: {exc}")
         return 1
 
-    usage = _usage(cfg, args)
+    usage = _usage(conn, cfg)
 
     def embedder():
         from hiredra.graph.embedder import build_embedder
@@ -458,8 +458,6 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
     ap.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
     ap.add_argument("--df-path", default=str(DEFAULT_DF_PATH), help="market document-frequency sidecar")
-    ap.add_argument("--usage-path", default=str(DEFAULT_USAGE_PATH), help="local daily request counter")
-    ap.add_argument("--lock-path", default=str(DEFAULT_LOCK_PATH), help="run lock shared by every writing command")
     sub = ap.add_subparsers(dest="command", required=True)
     sub.add_parser("status")
     h = sub.add_parser("harvest")
@@ -545,7 +543,7 @@ def main(argv: list[str] | None = None) -> int:
     if label is None:
         return run()
     try:
-        with RunLock(args.lock_path, what=label):
+        with RunLock(what=label, url=args.db):
             return run()
     except LockHeld as exc:
         _log(f"NOT RUN: {exc}")

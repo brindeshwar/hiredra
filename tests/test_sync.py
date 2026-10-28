@@ -395,7 +395,7 @@ def test_the_gate_reads_the_budget_after_the_canary_has_spent_its_share(conn, tm
     _seed(conn, *[f"new{i}" for i in range(10)])
 
     moment = datetime(2026, 9, 21, 14, 0, tzinfo=timezone.utc)
-    usage = DailyUsage(8, tmp_path / "u.json", now=lambda: moment)
+    usage = DailyUsage(8, conn, "gemini", "gemini-embedding-2", now=lambda: moment)
     client = Client()
     embed = build_embedder(cfg, client=client, usage=usage, sleep=lambda s: None, clock=lambda: 0.0)
     gate = ensure_index_current(conn, cfg, embed, daily_remaining=usage.remaining)

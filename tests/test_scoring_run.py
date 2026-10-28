@@ -419,7 +419,7 @@ def _cli_world(tmp_path, pg_url):
     _, weights_path = _weights(tmp_path, cfg, cover_bar=None, apply_line=1.0)
     return [
         "--db", str(path), "--weights", str(weights_path), "--profile", str(profile),
-        "--overlay-path", str(overlay), "--usage-path", str(tmp_path / "u.json"), "--lock-path", str(tmp_path / "graph.lock"),
+        "--overlay-path", str(overlay),
     ]  # fmt: skip
 
 
@@ -456,7 +456,7 @@ def test_cli_run_and_views(tmp_path, capsys, pg_url):
 
 def test_cli_run_refuses_while_the_graph_lock_is_held(tmp_path, capsys, pg_url):
     base = _cli_world(tmp_path, pg_url)
-    with RunLock(tmp_path / "graph.lock", what="sync"):
+    with RunLock(what="sync", url=pg_url):
         assert scoring_main([*base, "run"]) == 4
     assert "another graph maintenance run is in progress" in capsys.readouterr().out
 

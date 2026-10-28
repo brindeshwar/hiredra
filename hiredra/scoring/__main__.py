@@ -21,9 +21,9 @@ import sys
 from datetime import datetime, timezone
 
 from hiredra.graph.config import DEFAULT_CONFIG_PATH, load_graph_config
-from hiredra.graph.lock import DEFAULT_LOCK_PATH, LockHeld, RunLock
+from hiredra.graph.lock import LockHeld, RunLock
 from hiredra.graph.overlay import DEFAULT_OVERLAY_PATH
-from hiredra.graph.usage import DEFAULT_USAGE_PATH, DailyUsage, reset_text
+from hiredra.graph.usage import DailyUsage, reset_text
 from hiredra.profile import DEFAULT_PROFILE_PATH, ProfileError, parse_skills
 from hiredra.scoring import rate as srate
 from hiredra.scoring import run as sr
@@ -56,9 +56,9 @@ def _cmd_run(conn, args, graph_cfg, weights) -> int:
         _log(f"NOT RUN: {exc}")
         return 1
     try:
-        with RunLock(args.lock_path, what="scoring run"):
+        with RunLock(what="scoring run", url=args.db):
             sr.check_preconditions(conn, graph_cfg, profile, args.overlay_path)
-            usage = DailyUsage(graph_cfg.rpd_budget, path=args.usage_path)
+            usage = DailyUsage(graph_cfg.rpd_budget, conn, "gemini", graph_cfg.model)
 
             def embedder():
                 from hiredra.graph.embedder import build_embedder
@@ -208,8 +208,6 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--weights", default=str(DEFAULT_WEIGHTS_PATH))
     ap.add_argument("--profile", default=str(DEFAULT_PROFILE_PATH))
     ap.add_argument("--overlay-path", default=str(DEFAULT_OVERLAY_PATH))
-    ap.add_argument("--usage-path", default=str(DEFAULT_USAGE_PATH))
-    ap.add_argument("--lock-path", default=str(DEFAULT_LOCK_PATH), help="the graph lock (the freeze rule)")
     sub = ap.add_subparsers(dest="command", required=True)
     run_p = sub.add_parser("run")
     run_p.add_argument("--force", action="store_true", help="re-score every scored job (after graph merges; 0 API)")

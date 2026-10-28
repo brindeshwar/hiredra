@@ -416,7 +416,6 @@ def _cli_env(tmp_path, pg_url, cfg_cosines=None):
     c.close()
     args = [
         "--db", str(db), "--config", str(config),
-        "--usage-path", str(tmp_path / "u.json"), "--lock-path", str(tmp_path / "g.lock"),
         "calibrate", "--pairs", str(pairs_path),
         "--cosines-path", str(tmp_path / "cos.csv"), "--reports-dir", str(tmp_path / "reports"),
     ]  # fmt: skip

@@ -69,8 +69,6 @@ def env(tmp_path, pg_url):
         "cfg": cfg,
         "df": tmp_path / "df.json",
         "review": tmp_path / "review.json",
-        "usage": tmp_path / "usage.json",
-        "lock": tmp_path / "graph.lock",
         "alias": tmp_path / "aliases.yml",
         "never": tmp_path / "never.yml",
     }
@@ -88,10 +86,6 @@ def run(env, *args):
             str(env["cfg"]),
             "--df-path",
             str(env["df"]),
-            "--usage-path",
-            str(env["usage"]),
-            "--lock-path",
-            str(env["lock"]),
             *args,
             *extra,
         ]
@@ -290,7 +284,7 @@ def test_reviewer_edits_are_honoured_through_the_cli(env, capsys):
 def _usage_obj(env):
     from hiredra.graph.usage import DailyUsage
 
-    return DailyUsage(900, path=env["usage"])  # same budget as the test config (1000 x 0.9)
+    return DailyUsage(900, _conn(env), "gemini", "gemini-embedding-2")  # same budget as the test config (1000 x 0.9)
 
 
 def _exploding_embedder(monkeypatch):
@@ -644,7 +638,7 @@ def test_an_unknown_exception_escapes_the_cli_but_finished_chunks_and_the_lock_a
     with pytest.raises(KeyError, match="bug in the embed path"):
         run(env, "sync")
     assert skill_index_status(_conn(env), "gemini-embedding-2|d128|prefix=none")["current"] == 2  # chunk 1 kept
-    with RunLock(env["lock"]):  # lock was released
+    with RunLock(url=env["db"]):  # lock was released
         pass
 
 
@@ -652,7 +646,7 @@ def test_an_unknown_exception_escapes_the_cli_but_finished_chunks_and_the_lock_a
 def _held(env):
     from hiredra.graph.lock import RunLock
 
-    return RunLock(env["lock"], what="sync (another terminal)")
+    return RunLock(what="sync (another terminal)", url=env["db"])
 
 
 def test_sync_refuses_while_another_run_holds_the_lock_and_makes_no_call(env, monkeypatch, capsys):
@@ -727,5 +721,5 @@ def test_a_second_sync_started_while_the_first_runs_cannot_double_spend_the_budg
     assert run(env, "sync") == 0
     assert seen["during-run-a"] == 4  # B was locked out
     assert [n for call in emb.calls for n in call].count("a") == 1  # nothing was embedded twice
-    with RunLock(env["lock"]):
+    with RunLock(url=env["db"]):
         pass

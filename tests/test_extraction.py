@@ -320,8 +320,8 @@ def db(pg_url):
     c.close()
 
 
-def _usage(tmp_path, budget=450):
-    return DailyUsage(budget, tmp_path / "usage.json")
+def _usage(conn, budget=450):
+    return DailyUsage(budget, conn, "gemini", extraction.MODEL_NAME)
 
 
 def _run(conn, chain, **kw):
@@ -355,7 +355,7 @@ def test_finished_jobs_stay_saved_when_a_bug_is_raised(db):
 def test_googles_daily_quota_stops_the_run_marks_the_counter_and_is_not_retried(db, tmp_path):
     a = _filtered_job(db, job_id="greenhouse:a", url="u://a")
     b = _filtered_job(db, job_id="greenhouse:b", url="u://b")
-    usage = _usage(tmp_path)
+    usage = _usage(db)
     chain = _ScriptChain(_quota_429(_PER_DAY, retry_delay="41000s"))
 
     stats = _run(db, chain, usage=usage)
@@ -368,7 +368,7 @@ def test_googles_daily_quota_stops_the_run_marks_the_counter_and_is_not_retried(
 def test_our_own_budget_stops_before_the_call(db, tmp_path):
     a = _filtered_job(db, job_id="greenhouse:a", url="u://a")
     b = _filtered_job(db, job_id="greenhouse:b", url="u://b")
-    usage = _usage(tmp_path, budget=1)
+    usage = _usage(db, budget=1)
     chain = _ScriptChain()
 
     stats = _run(db, chain, usage=usage)
@@ -381,7 +381,7 @@ def test_our_own_budget_stops_before_the_call(db, tmp_path):
 
 def test_a_spent_budget_means_zero_calls(db, tmp_path):
     _filtered_job(db)
-    usage = _usage(tmp_path)
+    usage = _usage(db)
     usage.mark_exhausted("earlier today")
     chain = _ScriptChain()
 
@@ -392,7 +392,7 @@ def test_a_spent_budget_means_zero_calls(db, tmp_path):
 
 def test_a_per_minute_429_is_retried_then_succeeds(db, tmp_path):
     job_id = _filtered_job(db)
-    usage = _usage(tmp_path)
+    usage = _usage(db)
     slept: list[float] = []
     chain = _ScriptChain(_quota_429(_PER_MINUTE))
 
@@ -449,7 +449,7 @@ def test_a_schema_error_is_noted_and_the_run_goes_on(db, tmp_path, bad):
             bad = err
     a = _filtered_job(db, job_id="greenhouse:a", url="u://a")
     b = _filtered_job(db, job_id="greenhouse:b", url="u://b")
-    usage = _usage(tmp_path)
+    usage = _usage(db)
 
     stats = _run(db, _ScriptChain(bad), usage=usage)
 
@@ -532,10 +532,6 @@ def _cli_paths(tmp_path, pg_url):
     return [
         "--db",
         str(path),
-        "--usage-path",
-        str(tmp_path / "usage.json"),
-        "--lock-path",
-        str(tmp_path / "llm.lock"),
     ]
 
 
@@ -557,7 +553,9 @@ def test_cli_stop_exits_2_with_the_reason(tmp_path, monkeypatch, capsys, pg_url)
 
 def test_cli_a_spent_budget_exits_2_without_building_a_chain(tmp_path, monkeypatch, capsys, pg_url):
     args = _cli_paths(tmp_path, pg_url)
-    DailyUsage(450, tmp_path / "usage.json").mark_exhausted("earlier")
+    c = connect(pg_url)
+    DailyUsage(450, c, "gemini", extraction.MODEL_NAME).mark_exhausted("earlier")
+    c.close()
 
     def no_chain(**kw):
         raise AssertionError("a chain was built")
@@ -570,7 +568,7 @@ def test_cli_a_spent_budget_exits_2_without_building_a_chain(tmp_path, monkeypat
 def test_cli_second_process_gets_exit_4(tmp_path, monkeypatch, capsys, pg_url):
     args = _cli_paths(tmp_path, pg_url)
     monkeypatch.setattr(extraction, "build_extraction_chain", lambda **kw: _ScriptChain())
-    with RunLock(tmp_path / "llm.lock", what="tailoring"):
+    with RunLock("llm", what="tailoring", url=pg_url):
         assert extraction.main(args) == 4
     out = capsys.readouterr().out
     assert "NOT RUN: another flash-lite run is in progress" in out and "tailoring" in out

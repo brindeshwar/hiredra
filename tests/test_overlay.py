@@ -269,7 +269,7 @@ def test_a_failed_apply_changes_nothing(conn, tmp_path, monkeypatch):
 # ── CLI ─────────────────────────────────────────────────────────────────────
 def _cli(tmp_path, pg_url, *extra):
     return [
-        "--db", pg_url, "--usage-path", str(tmp_path / "u.json"), "--lock-path", str(tmp_path / "g.lock"),
+        "--db", pg_url,
         "overlay", "--profile", str(tmp_path / "p.md"),
         "--links-path", str(tmp_path / "links.json"), "--overlay-path", str(tmp_path / "overlay.json"), *extra,
     ]  # fmt: skip

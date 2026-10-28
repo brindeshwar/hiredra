@@ -16,7 +16,6 @@ counter's path and re-exports the names.
 
 from __future__ import annotations
 
-from pathlib import Path
 
 from hiredra.quota import (  # noqa: F401 -- moved to hiredra/quota.py (M0.1); re-exported unchanged
     IST,
@@ -27,6 +26,3 @@ from hiredra.quota import (  # noqa: F401 -- moved to hiredra/quota.py (M0.1); r
     pacific_day,
     reset_text,
 )
-
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_USAGE_PATH = _REPO_ROOT / "data" / "embed_usage.json"

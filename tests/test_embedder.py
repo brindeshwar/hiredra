@@ -327,11 +327,12 @@ from datetime import datetime, timezone  # noqa: E402
 
 from hiredra.graph.embedder import estimate_tokens  # noqa: E402
 from hiredra.graph.usage import DailyBudgetReached, DailyUsage  # noqa: E402
+from hiredra.storage import connect  # noqa: E402
 
 
-def _usage(tmp_path, budget=900):
+def _usage(pg_url, budget=900):
     moment = datetime(2026, 9, 21, 14, 0, tzinfo=timezone.utc)
-    return DailyUsage(budget, tmp_path / "usage.json", now=lambda: moment)
+    return DailyUsage(budget, connect(pg_url), "gemini", "gemini-embedding-2", now=lambda: moment)
 
 
 def test_estimate_tokens_is_pessimistic_and_never_zero():
@@ -368,16 +369,16 @@ def test_a_chunk_bigger_than_the_whole_token_budget_is_refused_before_any_call()
     assert client.calls == []
 
 
-def test_usage_counts_each_input_as_one_request_after_google_accepts(tmp_path):
-    usage = _usage(tmp_path)
+def test_usage_counts_each_input_as_one_request_after_google_accepts(tmp_path, pg_url):
+    usage = _usage(pg_url)
     embed, client, _ = _embedder()
     embed = build_embedder(_cfg(), client=client, usage=usage, sleep=lambda s: None, clock=lambda: 0.0)
     embed([f"s{i}" for i in range(7)])  # chunks of 3, 3, 1
     assert usage.used() == 7 and len(client.calls) == 3
 
 
-def test_the_budget_stops_the_run_before_the_call_that_would_pass_it(tmp_path):
-    usage = _usage(tmp_path, budget=5)
+def test_the_budget_stops_the_run_before_the_call_that_would_pass_it(tmp_path, pg_url):
+    usage = _usage(pg_url, budget=5)
     client = FakeClient()
     embed = build_embedder(_cfg(), client=client, usage=usage, sleep=lambda s: None, clock=lambda: 0.0)
     with pytest.raises(DailyBudgetReached):
@@ -386,8 +387,8 @@ def test_the_budget_stops_the_run_before_the_call_that_would_pass_it(tmp_path):
     assert usage.used() == 3
 
 
-def test_every_attempt_of_a_retried_chunk_is_counted(tmp_path):
-    usage = _usage(tmp_path)
+def test_every_attempt_of_a_retried_chunk_is_counted(tmp_path, pg_url):
+    usage = _usage(pg_url)
     err = _wrapped(ClientError(429, {"error": {"message": "per-minute"}}))
     client = FakeClient(fail_with=[err])
     embed = build_embedder(_cfg(), client=client, usage=usage, sleep=lambda s: None, clock=lambda: 0.0)
@@ -396,8 +397,8 @@ def test_every_attempt_of_a_retried_chunk_is_counted(tmp_path):
     assert len(client.calls) == 2 and usage.used() == 4
 
 
-def test_a_failed_request_is_still_counted(tmp_path):
-    usage = _usage(tmp_path)
+def test_a_failed_request_is_still_counted(tmp_path, pg_url):
+    usage = _usage(pg_url)
     err = _wrapped(ClientError(400, {"error": {"message": "bad request"}}))
     client = FakeClient(fail_with=[err])
     embed = build_embedder(_cfg(), client=client, usage=usage, sleep=lambda s: None, clock=lambda: 0.0)
@@ -406,10 +407,10 @@ def test_a_failed_request_is_still_counted(tmp_path):
     assert usage.used() == 1
 
 
-def test_a_server_side_daily_quota_marks_the_day_exhausted_and_later_calls_make_no_request(tmp_path):
+def test_a_server_side_daily_quota_marks_the_day_exhausted_and_later_calls_make_no_request(tmp_path, pg_url):
     from hiredra.graph.embedder import DailyQuotaExceeded
 
-    usage = _usage(tmp_path)
+    usage = _usage(pg_url)
     err = _wrapped(ClientError(429, _quota_error(_PER_DAY, retry_delay="41000s")))
     client = FakeClient(fail_with=[err])
     embed = build_embedder(_cfg(), client=client, usage=usage, sleep=lambda s: None, clock=lambda: 0.0)
@@ -494,8 +495,8 @@ def test_a_per_day_label_needs_a_long_or_missing_retry_delay(retry_delay, daily)
     assert _is_daily_quota(err) is daily
 
 
-def test_a_mislabelled_short_throttle_is_retried_not_treated_as_the_day_gone(tmp_path):
-    usage = _usage(tmp_path)
+def test_a_mislabelled_short_throttle_is_retried_not_treated_as_the_day_gone(tmp_path, pg_url):
+    usage = _usage(pg_url)
     err = _wrapped(ClientError(429, _quota_error(_PER_DAY, retry_delay="20s")))
     client = FakeClient(fail_with=[err])
     embed = build_embedder(_cfg(), client=client, usage=usage, sleep=lambda s: None, clock=lambda: 0.0)

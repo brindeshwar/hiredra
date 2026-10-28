@@ -167,10 +167,6 @@ def _args(tmp_path, path, *extra):
     return [
         "--db",
         str(path),
-        "--usage-path",
-        str(tmp_path / "gem.json"),
-        "--lock-path",
-        str(tmp_path / "llm.lock"),
         *extra,
     ]
 
@@ -197,7 +193,7 @@ def test_fallback_takes_over_when_gemini_budget_is_spent(tmp_path, monkeypatch, 
     path = _db(tmp_path, pg_url, n=3)
     from hiredra.quota import DailyUsage
 
-    gemini = DailyUsage(1, tmp_path / "gem.json")  # budget of ONE call
+    gemini = DailyUsage(1, connect(path), "gemini", extraction.MODEL_NAME)  # budget of ONE call
     monkeypatch.setattr(extraction, "build_extraction_chain", lambda **kw: _GeminiThenSpent())
     monkeypatch.setattr(extraction.ExtractionConfig, "daily_budget", property(lambda self: 1))
 
@@ -218,7 +214,11 @@ def test_provider_nvidia_skips_gemini(tmp_path, monkeypatch, fakes, capsys, pg_u
     monkeypatch.setattr(extraction, "build_extraction_chain", lambda **kw: pytest.fail("gemini used"))
     assert extraction.main(_args(tmp_path, path, "--provider", "nvidia")) == 0
     assert "nvidia: seen=2 extracted=2" in capsys.readouterr().out
-    assert (tmp_path / "nvidia_nemotron-3.5-super-vl-120b-a12b.json").exists()  # its own visible counter
+    c = connect(path)
+    assert c.execute("SELECT provider, model, calls FROM api_usage").fetchall() == [
+        ("nvidia", "nemotron-3.5-super-vl-120b-a12b", 2)
+    ]  # its own meter, apart from Gemini's
+    c.close()
 
 
 def test_a_non_quota_stop_does_not_hand_over(tmp_path, monkeypatch, fakes, capsys, pg_url):
