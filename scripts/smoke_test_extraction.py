@@ -14,7 +14,7 @@ once, to confirm the two real unknowns from the build plan:
    thinking + forced-schema-decoding coexistence the build plan flagged as
    genuinely unknown).
 
-Feeds two REAL JDs pulled straight from data/hiredra.db (not synthetic
+Feeds two REAL JDs pulled straight from the database (not synthetic
 text): one with an explicit required/nice-to-have split (WebSenor), one
 requiring inference from framing rather than a labeled section (an OpenAI
 "you might thrive in this role if you" posting) -- see the characterization
@@ -26,7 +26,6 @@ pass, sec 2.
 from __future__ import annotations
 
 import json
-import sqlite3
 
 from hiredra.extraction import (
     build_extraction_chain,
@@ -34,7 +33,7 @@ from hiredra.extraction import (
     load_extraction_config,
     preprocess,
 )
-from hiredra.storage import DEFAULT_DB_PATH
+from hiredra.storage import connect, get_job
 
 JOB_IDS = (
     "jobspy-indeed:in-af3ed2fa83dcc5d5",  # WebSenor -- explicit Required/Preferred split
@@ -44,8 +43,7 @@ JOB_IDS = (
 
 def main() -> int:
     config = load_extraction_config()
-    conn = sqlite3.connect(str(DEFAULT_DB_PATH))
-    conn.row_factory = sqlite3.Row
+    conn = connect()
 
     print("Building extraction chain (gemini-3.5-flash-lite, reasoning_effort='minimal')...")
     chain = build_extraction_chain()
@@ -53,12 +51,9 @@ def main() -> int:
     print("Chain + graph built OK.\n")
 
     for job_id in JOB_IDS:
-        row = conn.execute(
-            "SELECT job_id, title, company, description FROM jobs WHERE job_id = ?",
-            (job_id,),
-        ).fetchone()
+        row = get_job(conn, job_id)
         if row is None:
-            print(f"!! job_id {job_id!r} not found in {DEFAULT_DB_PATH} -- skipping")
+            print(f"!! job_id {job_id!r} not found in the database -- skipping")
             continue
 
         clean_text, strip_log = preprocess(row["description"] or "", row["company"], config)

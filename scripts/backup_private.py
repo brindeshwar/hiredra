@@ -7,9 +7,16 @@ Copies the owner's hand-made, git-ignored files into a private folder outside th
                                          + MANIFEST.sha256 (one "<sha256>  <path>" line per file)
 
 A re-run on the same day replaces that day's folder only. The newest 8 dated folders are kept.
-The DB is NOT copied by default (big, and rebuildable by re-running stages); --with-db adds a
-consistent copy through SQLite's online backup. .env is never copied: keys can be re-issued, and
-a secret has no place in a synced folder.
+The DB is NOT copied by default (big, and rebuildable by re-running stages). --with-db adds a
+`pg_dump` of the Postgres database (decision D1.13) as data/hiredra.dump, then checks it: the dump
+is restored into a scratch database and every table's row count must match the live one. The
+counts are saved beside it as data/hiredra.counts.json. .env is never copied: keys can be
+re-issued, and a secret has no place in a synced folder.
+
+pg_dump and pg_restore run inside the docker compose service `db` (D1.1), so nothing is installed
+on the host and the tools always match the server version. Restore a dump with:
+
+    docker compose exec -T db pg_restore -U hiredra -d <empty database> --no-owner < hiredra.dump
 
     uv run python scripts/backup_private.py
     uv run python scripts/backup_private.py --with-db
@@ -21,14 +28,18 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import hashlib
+import json
 import os
 import re
 import shutil
-import sqlite3
+import subprocess
 import sys
 from pathlib import Path
 
+import psycopg
 from dotenv import load_dotenv
+from psycopg import sql
+from psycopg.conninfo import conninfo_to_dict, make_conninfo
 
 REPO = Path(__file__).resolve().parents[1]
 
@@ -46,7 +57,10 @@ ITEMS = (
     "data/profile_overlay.json",
     "data/merge_proposals.applied-*.json",  # the owner's reviewed skill-merge decisions
 )
-DB = "data/hiredra.db"
+DUMP = "data/hiredra.dump"  # pg_dump custom format
+COUNTS = "data/hiredra.counts.json"
+RESTORE_CHECK_DB = "hiredra_restore_check"
+PG_TOOLS = ("docker", "compose", "exec", "-T", "db")  # the compose service HIREDRA_DATABASE_URL points at
 MANIFEST = "MANIFEST.sha256"
 KEEP = 8
 FOLDER_RE = re.compile(r"^hiredra-backup-\d{4}-\d{2}-\d{2}$")
@@ -83,8 +97,56 @@ def _check_target(repo: Path, backup_dir: Path) -> None:
         raise SystemExit(f"refusing: HIREDRA_BACKUP_DIR ({backup_dir}) is inside the repo. Pick a folder outside it.")
 
 
-def backup(repo: Path, backup_dir: Path, today: dt.date, with_db: bool = False) -> Path:
+def _pg_tool(args: list[str], *, stdin=None, stdout=None) -> None:
+    subprocess.run([*PG_TOOLS, *args], stdin=stdin, stdout=stdout, cwd=REPO, check=True)
+
+
+def table_counts(url: str) -> dict[str, int]:
+    """Rows per table in the public schema."""
+    with psycopg.connect(url) as conn:
+        tables = [r[0] for r in conn.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1")]
+        count = sql.SQL("SELECT count(*) FROM {}")
+        return {t: conn.execute(count.format(sql.Identifier(t))).fetchone()[0] for t in tables}
+
+
+def dump_db(url: str, dest: Path) -> dict[str, int]:
+    """pg_dump the database to ``dest`` and prove the dump restores. Returns the row counts it holds."""
+    info = conninfo_to_dict(url)
+    before = table_counts(url)
+    with dest.open("wb") as f:
+        _pg_tool(["pg_dump", "-U", info["user"], "-d", info["dbname"], "-Fc"], stdout=f)
+    if table_counts(url) != before:  # the dump's snapshot is then of unknown counts: nothing to check it against
+        raise SystemExit("refusing: the database changed during the dump. Run the backup when no stage is running.")
+    restore_check(url, dest, before)
+    return before
+
+
+def restore_check(url: str, dump: Path, expected: dict[str, int]) -> None:
+    """Restore ``dump`` into a scratch database on the same server and compare row counts; the scratch database
+    is dropped either way."""
+    admin = make_conninfo(url, dbname="postgres")
+    drop = sql.SQL("DROP DATABASE IF EXISTS {} WITH (FORCE)").format(sql.Identifier(RESTORE_CHECK_DB))
+    with psycopg.connect(admin, autocommit=True) as conn:
+        conn.execute(drop)
+        conn.execute(sql.SQL("CREATE DATABASE {}").format(sql.Identifier(RESTORE_CHECK_DB)))
+    try:
+        with dump.open("rb") as f:
+            user = conninfo_to_dict(url)["user"]
+            _pg_tool(["pg_restore", "-U", user, "-d", RESTORE_CHECK_DB, "--no-owner", "--exit-on-error"], stdin=f)
+        got = table_counts(make_conninfo(url, dbname=RESTORE_CHECK_DB))
+    finally:
+        with psycopg.connect(admin, autocommit=True) as conn:
+            conn.execute(drop)
+    if got != expected:
+        diff = {
+            t: (expected.get(t), got.get(t)) for t in sorted(set(expected) | set(got)) if expected.get(t) != got.get(t)
+        }
+        raise SystemExit(f"restore check failed (table: live rows, restored rows): {diff}")
+
+
+def backup(repo: Path, backup_dir: Path, today: dt.date, db_url: str | None = None) -> Path:
     """Write today's backup folder, prune to the newest KEEP, return the folder."""
+    """``db_url`` given: the database is dumped too (``--with-db``)."""
     _check_target(repo, backup_dir)
     backup_dir.mkdir(parents=True, exist_ok=True)
     final = backup_dir / f"hiredra-backup-{today.isoformat()}"
@@ -98,18 +160,12 @@ def backup(repo: Path, backup_dir: Path, today: dt.date, with_db: bool = False) 
         dest = work / rel
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(repo / rel, dest)
-    if with_db:
-        if (repo / DB).exists():
-            (work / DB).parent.mkdir(parents=True, exist_ok=True)
-            src, dst = sqlite3.connect(repo / DB), sqlite3.connect(work / DB)
-            try:
-                src.backup(dst)
-            finally:
-                dst.close()
-                src.close()
-            files.append(Path(DB))
-        else:
-            missing.append(DB)
+    counts = None
+    if db_url:
+        (work / DUMP).parent.mkdir(parents=True, exist_ok=True)
+        counts = dump_db(db_url, work / DUMP)
+        (work / COUNTS).write_text(json.dumps(counts, indent=2) + "\n", encoding="utf-8")
+        files += [Path(DUMP), Path(COUNTS)]
 
     lines = [f"{_sha256(work / rel)}  {rel.as_posix()}" for rel in sorted(files)]
     (work / MANIFEST).write_text("\n".join(lines) + "\n", encoding="utf-8")
@@ -120,6 +176,8 @@ def backup(repo: Path, backup_dir: Path, today: dt.date, with_db: bool = False) 
     pruned = _prune(backup_dir)
 
     print(f"backup: {len(files)} file(s) -> {final}")
+    if counts is not None:
+        print(f"  database: {len(counts)} tables, {sum(counts.values()):,} rows; restore check OK")
     for item in missing:
         print(f"  skipped (not present yet): {item}")
     for p in pruned:
@@ -157,7 +215,7 @@ def verify(folder: Path) -> list[str]:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--with-db", action="store_true", help="also copy data/hiredra.db (SQLite online backup)")
+    parser.add_argument("--with-db", action="store_true", help="also pg_dump the database, with a restore check")
     parser.add_argument("--verify", type=Path, metavar="FOLDER", help="check a backup folder against its manifest")
     args = parser.parse_args(argv)
 
@@ -173,7 +231,11 @@ def main(argv: list[str] | None = None) -> int:
     if not target:
         print("HIREDRA_BACKUP_DIR is not set. Add it to .env (a private folder outside the repo).", file=sys.stderr)
         return 2
-    backup(REPO, Path(target).expanduser(), dt.date.today(), with_db=args.with_db)
+    db_url = os.environ.get("HIREDRA_DATABASE_URL") if args.with_db else None
+    if args.with_db and not db_url:
+        print("HIREDRA_DATABASE_URL is not set (see .env.example).", file=sys.stderr)
+        return 2
+    backup(REPO, Path(target).expanduser(), dt.date.today(), db_url=db_url)
     return 0
 
 

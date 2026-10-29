@@ -5,6 +5,8 @@ tests/test_liveness.py -- each gate's tests sit beside the module they cover."""
 
 from __future__ import annotations
 
+import pytest
+
 from hiredra import filter as funnel
 from hiredra.storage import connect, get_job, init_db, upsert_job
 
@@ -301,6 +303,34 @@ def test_run_funnel_is_idempotent_on_a_rerun(pg_url):
     funnel.run_funnel(conn, CONFIG)
     stats2 = funnel.run_funnel(conn, CONFIG)
     assert stats2.seen == 0  # nothing left at status='fetched'
+    conn.close()
+
+
+def test_a_crash_keeps_the_committed_chunks_and_leaves_the_rest_fetched(pg_url, monkeypatch):
+    """Writes commit per chunk: a failure mid-chunk keeps the earlier chunks and rolls back only its own, whose jobs
+    stay 'fetched' for the next run."""
+    conn = connect(pg_url)
+    for n in range(5):
+        upsert_job(conn, _job(job_id=f"greenhouse:j{n}", url=f"u{n}"))
+    monkeypatch.setattr(funnel, "COMMIT_EVERY", 2)
+    real = funnel.set_status
+
+    def flaky(conn, job_id, *a, **kw):
+        if job_id == "greenhouse:j3":
+            raise RuntimeError("crash")
+        real(conn, job_id, *a, **kw)
+
+    monkeypatch.setattr(funnel, "set_status", flaky)
+    with pytest.raises(RuntimeError):
+        funnel.run_funnel(conn, CONFIG)
+    status = {f"greenhouse:j{n}": get_job(conn, f"greenhouse:j{n}")["status"] for n in range(5)}
+    assert status == {
+        "greenhouse:j0": "filtered",
+        "greenhouse:j1": "filtered",
+        "greenhouse:j2": "fetched",  # same chunk as j3: rolled back
+        "greenhouse:j3": "fetched",
+        "greenhouse:j4": "fetched",
+    }
     conn.close()
 
 

@@ -14,7 +14,7 @@ board before fetching (one fetch per company, not one per job). It's also the
 only 2b stage with a network cost, hence last and separate: ``run_funnel``
 itself stays pure CPU with no sourcing/http imports.
 
-    python -m hiredra.filter [--db data/hiredra.db] [--config config/filters.yml]
+    python -m hiredra.filter [--db <database URL>] [--config config/filters.yml]
 """
 
 from __future__ import annotations
@@ -340,39 +340,50 @@ def run_funnel(conn, config: FilterConfig) -> FunnelStats:
     # cursor while mutating the table it's reading from is asking for trouble.
     # Fine at this scale (hundreds-to-thousands of rows per CLAUDE.md sec 3.5).
     jobs = list(iter_jobs(conn, status="fetched"))
-    for job in jobs:
-        stats.seen += 1
-        job_id = job["job_id"]
-
-        location = passes_location(job["title"], job["location"], job["description"], config)
-        if location.reason == "unknown":
-            stats.unknown_location += 1
-        if location.note:
-            add_note(conn, job_id, location.note)
-            if location.note.endswith("place unknown"):  # the onsite/hybrid sub-case specifically,
-                stats.onsite_unknown_place += 1  # not every "location: unknown" note
-        if not location.keep:
-            set_status(conn, job_id, "dropped", detail=f"location: {location.reason}")
-            stats.dropped_location += 1
-            continue
-
-        seniority = passes_seniority_gate(job["title"], job["description"], config)
-        set_years_required(conn, job_id, seniority.years)
-        if not seniority.keep:
-            set_status(conn, job_id, "dropped", detail=f"seniority: {seniority.reason}")
-            stats.dropped_seniority += 1
-            continue
-
-        role = passes_role_type(job["title"], config)
-        if not role.keep:
-            set_status(conn, job_id, "dropped", detail=f"role_type: {role.reason}")
-            stats.dropped_role_type += 1
-            continue
-
-        set_status(conn, job_id, "filtered")
-        stats.kept += 1
-
+    for start in range(0, len(jobs), COMMIT_EVERY):
+        # One transaction per chunk: every commit waits for a disk flush, and a commit per write made the funnel
+        # 1.5x slower than SQLite (measured in DB5). A crash loses at most this chunk, which stays 'fetched'.
+        with conn.transaction():
+            for job in jobs[start : start + COMMIT_EVERY]:
+                _judge(conn, job, config, stats)
     return stats
+
+
+COMMIT_EVERY = 500
+
+
+def _judge(conn, job, config: FilterConfig, stats: FunnelStats) -> None:
+    """The three text stages for one job: advance it to 'filtered' or drop it, counting into ``stats``."""
+    stats.seen += 1
+    job_id = job["job_id"]
+
+    location = passes_location(job["title"], job["location"], job["description"], config)
+    if location.reason == "unknown":
+        stats.unknown_location += 1
+    if location.note:
+        add_note(conn, job_id, location.note)
+        if location.note.endswith("place unknown"):  # the onsite/hybrid sub-case specifically,
+            stats.onsite_unknown_place += 1  # not every "location: unknown" note
+    if not location.keep:
+        set_status(conn, job_id, "dropped", detail=f"location: {location.reason}")
+        stats.dropped_location += 1
+        return
+
+    seniority = passes_seniority_gate(job["title"], job["description"], config)
+    set_years_required(conn, job_id, seniority.years)
+    if not seniority.keep:
+        set_status(conn, job_id, "dropped", detail=f"seniority: {seniority.reason}")
+        stats.dropped_seniority += 1
+        return
+
+    role = passes_role_type(job["title"], config)
+    if not role.keep:
+        set_status(conn, job_id, "dropped", detail=f"role_type: {role.reason}")
+        stats.dropped_role_type += 1
+        return
+
+    set_status(conn, job_id, "filtered")
+    stats.kept += 1
 
 
 def main(argv: list[str] | None = None) -> int:

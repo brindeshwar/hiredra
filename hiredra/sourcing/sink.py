@@ -4,7 +4,7 @@ The orchestrator core is sink-agnostic: it calls ``sink.consume(jobs)`` per
 company (and once for the JobSpy batch) and ``sink.stats()`` at the end. A
 company batch also carries its provenance: the board slug and the list tag.
 
-* ``ScoringSink`` -- holds the SQLite connection: dedup against the store, persist
+* ``ScoringSink`` -- holds the database connection: dedup against the store, persist
   the new jobs (stamped with ``run_id``), ``touch`` the re-sighted ones, and fill
   ``company_slug`` / ``list_tag`` on both where still NULL (v5).
 * ``BackfillSink`` -- holds nothing DB-ish; intra-run ``collapse`` only, then

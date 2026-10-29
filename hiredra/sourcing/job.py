@@ -50,7 +50,7 @@ class Job:
 
     ``years_required`` is ``None`` when unknown and ``0`` only for an explicitly
     zero-experience role; the two are never conflated. ``is_remote`` is a real
-    ``bool`` here (``to_dict`` maps it to ``0/1/None`` for SQLite).
+    ``bool`` (or ``None``), stored as a Postgres boolean.
     """
 
     # required

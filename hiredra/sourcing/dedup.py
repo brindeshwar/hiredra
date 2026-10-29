@@ -1,4 +1,4 @@
-"""Dedup -- collapse the combined sourcing pile, reconcile it against SQLite.
+"""Dedup -- collapse the combined sourcing pile, reconcile it against the store.
 
 Runs on the in-memory pile from one sourcing run (registry providers + JobSpy),
 BEFORE persist (docs/sourcing.md sec. 8-9). Two stages:

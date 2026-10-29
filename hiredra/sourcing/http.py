@@ -171,7 +171,7 @@ class CooldownRegistry:
 
     ``on_trip`` (default ``None``) is a ``(key, until, reason) -> None`` callback
     fired after each ``trip`` (outside the lock) — the orchestrator wires it to
-    write the cooldown through to SQLite so a crash doesn't lose it.
+    write the cooldown through to the database so a crash doesn't lose it.
     """
 
     def __init__(self, now: Callable[[], float] | None = None) -> None:

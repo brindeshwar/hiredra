@@ -1,10 +1,13 @@
 """Tests for scripts/backup_private.py: what gets copied, the manifest, same-day overwrite, pruning, the guards."""
 
 import datetime as dt
-import sqlite3
+import json
+import subprocess
 from pathlib import Path
 
+import psycopg
 import pytest
+from psycopg.conninfo import make_conninfo
 
 from scripts import backup_private as bp
 
@@ -109,19 +112,53 @@ def test_refuses_a_target_inside_the_repo(repo: Path, inside: str):
     assert not (repo / "hiredra-backup-2026-10-17").exists()
 
 
-def test_with_db_copies_a_readable_database(repo: Path, tmp_path: Path):
-    con = sqlite3.connect(repo / bp.DB)
-    con.execute("CREATE TABLE jobs (id TEXT)")
-    con.execute("INSERT INTO jobs VALUES ('a')")
-    con.commit()
-    con.close()
+def _compose_db_up() -> bool:
+    try:
+        return subprocess.run([*bp.PG_TOOLS, "true"], cwd=bp.REPO, capture_output=True, timeout=30).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
 
-    assert bp.DB not in _copied(bp.backup(repo, tmp_path / "plain", DAY))
-    out = bp.backup(repo, tmp_path / "bk", DAY, with_db=True)
-    copy = sqlite3.connect(out / bp.DB)
-    assert copy.execute("SELECT id FROM jobs").fetchall() == [("a",)]
-    copy.close()
+
+def _seed(url: str, rows: int) -> None:
+    with psycopg.connect(url, autocommit=True) as conn:
+        conn.execute("CREATE TABLE jobs (id text)")
+        conn.execute("INSERT INTO jobs SELECT 'j' || n FROM generate_series(1, %s) n", (rows,))
+        conn.execute("CREATE TABLE runs (id text)")
+
+
+def test_with_db_dumps_and_proves_the_dump_restores(repo: Path, tmp_path: Path, db_url: str):
+    """Real pg_dump/pg_restore in the compose service: the dump restores to the same row counts."""
+    if not _compose_db_up():
+        pytest.skip("the docker compose service `db` is not running")
+    _seed(db_url, 3)
+
+    assert bp.DUMP not in _copied(bp.backup(repo, tmp_path / "plain", DAY))
+    out = bp.backup(repo, tmp_path / "bk", DAY, db_url=db_url)
+    assert {bp.DUMP, bp.COUNTS} <= _copied(out)
+    assert json.loads((out / bp.COUNTS).read_text(encoding="utf-8")) == {"jobs": 3, "runs": 0}
     assert bp.verify(out) == []
+    with psycopg.connect(make_conninfo(db_url, dbname="postgres")) as conn:  # the scratch database is gone
+        assert conn.execute("SELECT 1 FROM pg_database WHERE datname = %s", (bp.RESTORE_CHECK_DB,)).fetchone() is None
+
+
+def test_a_dump_that_restores_short_fails_and_leaves_no_folder(repo: Path, tmp_path: Path, db_url: str, monkeypatch):
+    """pg_restore is faked to restore nothing: the counts differ, the run stops, today's folder is not written."""
+    _seed(db_url, 2)
+    monkeypatch.setattr(bp, "_pg_tool", lambda args, **kw: None)
+    with pytest.raises(SystemExit, match=r"restore check failed .*'jobs': \(2, None\)"):
+        bp.backup(repo, tmp_path / "bk", DAY, db_url=db_url)
+    assert not (tmp_path / "bk" / "hiredra-backup-2026-10-17").exists()
+
+
+def test_a_database_written_during_the_dump_is_refused(tmp_path: Path, monkeypatch):
+    counts = iter([{"jobs": 5}, {"jobs": 6}])
+    monkeypatch.setattr(bp, "table_counts", lambda url: next(counts))
+    monkeypatch.setattr(bp, "_pg_tool", lambda args, **kw: None)
+    restored = []
+    monkeypatch.setattr(bp, "restore_check", lambda *a: restored.append(a))
+    with pytest.raises(SystemExit, match="changed during the dump"):
+        bp.dump_db("postgresql://hiredra@localhost/hiredra", tmp_path / "x.dump")
+    assert restored == []
 
 
 def test_missing_items_are_skipped_not_fatal(tmp_path: Path, capsys):
