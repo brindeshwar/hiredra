@@ -99,7 +99,9 @@ def test_extract_max_years_ignores_time_spans():
 
 def test_extract_max_years_ignores_business_age_but_not_business_fields():
     assert funnel.extract_max_years("Proudly 20 years in business, and growing.") is None
-    assert funnel.extract_max_years("3–7 years in business operations, accounting or payroll") == 7
+    # a field, not the company's age, so it counts; as a range it counts by its lower end (was 7: the en dash
+    # was not read as a range before 2026-10-29)
+    assert funnel.extract_max_years("3–7 years in business operations, accounting or payroll") == 3
     assert funnel.extract_max_years("12+ years in business intelligence, analytics engineering") == 12
 
 
@@ -136,6 +138,27 @@ def test_extract_max_years_reads_a_figure_right_after_a_full_stop():
 
 def test_extract_max_years_range_counts_its_lower_end():
     assert funnel.extract_max_years("2-5 years of experience in working with AI models") == 2
+
+
+@pytest.mark.parametrize(
+    "text,years",
+    [
+        ("**Experience:** 0–3 years", 0),  # en dash: a junior posting was dropped as needing 3
+        ("2—3 years of experience in AI/ML development", 2),  # em dash
+        ("Have 2 to 5 years of hands-on experience building ML models", 2),
+        ("Minimum requirements 2-12+ years of experience in backend software development", 2),
+        ("2 - 4 years experience", 2),
+        ("up to 5 years of experience", 5),  # no lower number: not a range
+    ],
+)
+def test_extract_max_years_reads_every_way_of_writing_a_range(text, years):
+    assert funnel.extract_max_years(text) == years
+
+
+def test_a_range_still_loses_to_a_higher_requirement_elsewhere():
+    # the max over the posting stays: freehire's minimum would keep this 6-year role
+    text = "* 6-8 years of experience in Software Engineering\n* Minimum 2 years of hands-on experience with LLMs"
+    assert funnel.extract_max_years(text) == 6
 
 
 def test_extract_max_years_does_not_read_yearly_as_years():

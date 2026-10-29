@@ -163,8 +163,12 @@ class SeniorityResult:
 # "N years" / "N+ yrs" / "N-M years" -- takes the max of every match, per job. A range counts by its lower
 # end ("2-5 years" is open to 2). Decimals are read whole and rounded up: "1.5+ years" -> 2 (it was read as
 # "5+ years"), "2.5 years" -> 3, and "5.1-7 years" -> 6 (it was read as "1-7").
+# A range may be written with a hyphen, an en dash, an em dash or "to", and its upper end may carry a "+"
+# ("0–3 years", "2 to 5 years", "2-12+ years"). Only the hyphen was read before 2026-10-29: the others fell
+# back to the upper number alone, so a "Junior ... 0–3 years" posting was dropped as needing 3 (freehire
+# comparison, step 7: 414 of the 20,772 location-eligible jobs were dropped this way).
 _YEARS_RE = re.compile(
-    r"(\d+(?:\.\d+)?)\s*\+?\s*(?:-\s*\d+(?:\.\d+)?\s*)?(?:years?|yrs?)\b",  # \b: not "yearly"
+    r"(\d+(?:\.\d+)?)\s*\+?\s*(?:(?:-|–|—|to)\s*\d+(?:\.\d+)?\s*\+?\s*)?(?:years?|yrs?)\b",  # \b: not "yearly"
     re.IGNORECASE,
 )
 
