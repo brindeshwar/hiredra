@@ -46,6 +46,8 @@ DEFAULT_CONFIG_PATH = Path(__file__).resolve().parents[1] / "config" / "filters.
 class FilterConfig:
     allow: tuple[str, ...]
     block: tuple[str, ...]
+    off_bucket: tuple[str, ...]  # dropped like block, unless an off_bucket_exempt term is also in the title
+    off_bucket_exempt: tuple[str, ...]
     senior_title_terms: tuple[str, ...]
     anti_signal_phrases: tuple[str, ...]
     max_years: int
@@ -58,6 +60,8 @@ def load_filter_config(path: Path | str = DEFAULT_CONFIG_PATH) -> FilterConfig:
     return FilterConfig(
         allow=tuple(data.get("allow") or ()),
         block=tuple(data.get("block") or ()),
+        off_bucket=tuple(data.get("off_bucket") or ()),
+        off_bucket_exempt=tuple(data.get("off_bucket_exempt") or ()),
         senior_title_terms=tuple(data.get("senior_title_terms") or ()),
         anti_signal_phrases=tuple(data.get("anti_signal_phrases") or ()),
         max_years=int(data.get("max_years", 2)),
@@ -311,10 +315,14 @@ class RoleTypeResult:
 
 
 def passes_role_type(title: str | None, config: FilterConfig) -> RoleTypeResult:
-    """Title only, no JD-body fallback. BLOCK wins if a title hits both."""
+    """Title only, no JD-body fallback. BLOCK wins if a title hits both. An OFF-BUCKET term (frontend, QA, ...)
+    drops the title too, unless it also names backend or full stack (``off_bucket_exempt``)."""
     block_term = title_hits(title, config.block)
     if block_term:
         return RoleTypeResult(False, f"block term '{block_term}'")
+    off_term = title_hits(title, config.off_bucket)
+    if off_term and not title_hits(title, config.off_bucket_exempt):
+        return RoleTypeResult(False, f"off-bucket term '{off_term}'")
     allow_term = title_hits(title, config.allow)
     if allow_term:
         return RoleTypeResult(True, None)
