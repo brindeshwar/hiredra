@@ -113,3 +113,12 @@ def test_the_local_model_is_unmetered_and_gemini_keeps_its_daily_counter():
     local.record(10_000)
     assert local.used() == 0
     assert isinstance(usage_for(None, dataclasses.replace(CFG, provider="gemini")), DailyUsage)
+
+
+def test_the_descriptions_tag_ignores_line_endings(tmp_path):
+    from hiredra.graph.descriptions import source_tag
+
+    lf, crlf = tmp_path / "lf.tsv", tmp_path / "crlf.tsv"
+    lf.write_bytes(b"python\tPython\tA language.\n")
+    crlf.write_bytes(b"python\tPython\tA language.\r\n")
+    assert source_tag(lf) == source_tag(crlf)

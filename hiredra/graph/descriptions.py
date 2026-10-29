@@ -33,8 +33,10 @@ def load_descriptions(path: Path = DESCRIPTIONS_PATH) -> dict[str, str]:
 
 
 def source_tag(path: Path = DESCRIPTIONS_PATH) -> str:
-    """8 hex characters of the file's sha256."""
-    return hashlib.sha256(path.read_bytes()).hexdigest()[:8]
+    """8 hex characters of the sha256 of the file's text, line endings normalised: a checkout that writes CRLF
+    (git's autocrlf on Windows) must not make every stored vector look stale."""
+    text = path.read_text(encoding="utf-8").replace("\r\n", "\n")
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()[:8]
 
 
 def described(name: str, descriptions: dict[str, str]) -> str:
