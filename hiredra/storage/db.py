@@ -102,7 +102,7 @@ _JOB_COLUMNS: tuple[str, ...] = (
 
 _REQUIRED_JOB_FIELDS = ("url", "title", "company", "source")
 
-# Every job column a caller reads (not ``search``, the generated tsvector), plus the board's slug and tag and the
+# Every job column a caller reads, plus the board's slug and tag and the
 # skills list, in the shapes the SQLite rows had them: ``job_id`` is the key, ``skills`` is None until extraction
 # ran and then a list of {name, requirement} in extraction order.
 _JOB_SELECT = """

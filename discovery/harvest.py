@@ -322,7 +322,7 @@ def cmd_export(_args: argparse.Namespace) -> int:
         }
         columns = [r[0] for r in conn.execute(
             "select column_name from information_schema.columns where table_name = 'jobs' "
-            "and column_name not in ('id', 'search') order by ordinal_position"
+            "and column_name <> 'id' order by ordinal_position"
         )]  # fmt: skip
         raw = pandas.DataFrame(
             conn.execute(f"select {', '.join(columns)} from jobs order by id").fetchall(), columns=columns
