@@ -47,12 +47,42 @@ def _load(tmp_path, text: str = _BASE) -> GraphConfig:
 
 
 def test_real_config_file_loads_and_matches_the_approved_design():
+    """D1.15 (decided 2026-10-26, switched in DB4): Qwen3-Embedding-0.6B on the CPU, the skill instruction,
+    "name: description" inputs, 1024 dimensions."""
     cfg = load_graph_config(DEFAULT_CONFIG_PATH)
-    assert cfg.model == "gemini-embedding-2"
-    assert cfg.dimensions == 768
-    assert cfg.prefix == ""
+    assert (cfg.provider, cfg.model, cfg.dimensions, cfg.inputs) == (
+        "local", "Qwen/Qwen3-Embedding-0.6B", 1024, "described"
+    )  # fmt: skip
+    assert cfg.prefix == "Instruct: Given a job skill, retrieve the same or a closely related job skill\nQuery: "
     assert cfg.dedup_threshold == 0.90
     assert cfg.adj < cfg.have
+
+
+def _with(extra: str) -> str:
+    """The base config with extra embedding keys."""
+    return _BASE.replace('prefix: ""', 'prefix: ""' + "".join(f"\n  {line}" for line in extra.split(";")))
+
+
+def test_provider_and_inputs_default_to_the_old_behaviour_and_are_checked(tmp_path):
+    cfg = _load(tmp_path)
+    assert (cfg.provider, cfg.inputs) == ("gemini", "bare")
+    local = _load(tmp_path, _with("provider: local;inputs: described"))
+    assert (local.provider, local.inputs) == ("local", "described")
+    for bad in ("provider: openai", "inputs: everything"):
+        with pytest.raises(ValueError, match=bad.split(":")[0]):
+            _load(tmp_path, _with(bad))
+
+
+def test_described_inputs_put_the_descriptions_file_in_the_tag(tmp_path, monkeypatch):
+    from hiredra.graph import descriptions
+
+    text = _with("inputs: described")
+    tag = _load(tmp_path, text).embed_tag
+    assert tag.startswith("gemini-embedding-2|d768|prefix=none|desc=")
+    other = tmp_path / "other.tsv"
+    other.write_text("python\tPython\tA language.\n", encoding="utf-8")
+    monkeypatch.setattr(descriptions.source_tag, "__defaults__", (other,))
+    assert _load(tmp_path, text).embed_tag != tag  # edited descriptions -> every vector is stale
 
 
 def test_tag_for_bare_prefix_is_readable(tmp_path):

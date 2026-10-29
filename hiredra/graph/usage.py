@@ -22,7 +22,15 @@ from hiredra.quota import (  # noqa: F401 -- moved to hiredra/quota.py (M0.1); r
     PACIFIC,
     DailyBudgetReached,
     DailyUsage,
+    Unmetered,
     next_reset,
     pacific_day,
     reset_text,
 )
+
+
+def usage_for(conn, cfg):
+    """The embedding meter for ``cfg``: Google's daily counter, or ``Unmetered`` for the local model."""
+    if cfg.provider == "local":
+        return Unmetered()
+    return DailyUsage(cfg.rpd_budget, conn, "gemini", cfg.model)

@@ -31,6 +31,7 @@ import psycopg
 import yaml
 
 from hiredra import pg
+from hiredra.graph.descriptions import load_descriptions
 from hiredra.location import parse
 from hiredra.sourcing.config import load_companies
 from hiredra.sourcing.identity import company_slug, content_hash, role_fingerprint
@@ -45,7 +46,6 @@ COMPANY_LISTS = (("openjobs", REPO / "config" / "companies.wide.yml"), ("curated
 USAGE_DIR = DATA / "usage"
 EMBED_USAGE = DATA / "embed_usage.json"
 GRAPH_CONFIG = REPO / "config" / "graph.yml"
-DESCRIPTIONS = REPO / "hiredra" / "graph" / "skill_descriptions.tsv"
 SAMPLE_SEED = 20261028
 # Child tables first; schema_migrations is never touched.
 TABLES = ("api_usage", "skill_alias", "skill_vocab", "job_events", "job_skills", "jobs", "board_crawls", "runs",
@@ -106,23 +106,6 @@ def _company_key(name: str) -> str:
 def _top(counts: Counter) -> str:
     """The most frequent value; ties go to the alphabetically first, so the choice is reproducible."""
     return min(counts.items(), key=lambda kv: (-kv[1], kv[0]))[0]
-
-
-def skill_descriptions(path: Path = DESCRIPTIONS) -> dict[str, str]:
-    """Lowercased skill name -> description, keyed by freehire's slug, the slug with spaces, and its label.
-
-    Only exact names: freehire's alias table would hand "entity framework" the .NET description, which would
-    pull two different skills together once embedded.
-    """
-    out: dict[str, str] = {}
-    for line in path.read_text(encoding="utf-8").splitlines():
-        if not line or line.startswith("#"):
-            continue
-        slug, label, text = line.split("\t")
-        for form in (slug, slug.replace("-", " "), label.lower()):
-            if form:
-                out.setdefault(form, text)
-    return out
 
 
 _TAG_RANK = {"confirmed": 2, "unknown": 1}  # confirmed = India/remote eligibility was seen; unknown = not yet
@@ -304,7 +287,7 @@ def import_all(lite: sqlite3.Connection, conn: psycopg.Connection, listed: dict,
             copy.write_row((ids[job_id], kind, a, b, detail, at))
     _step("job_events", t)
 
-    described = skill_descriptions()
+    described = load_descriptions()
     with conn.transaction():
         conn.cursor().executemany(
             "INSERT INTO skill_vocab (name, description, first_seen_at, seen_count, mine, level, source, edges) "

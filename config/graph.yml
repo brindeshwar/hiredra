@@ -5,30 +5,23 @@
 # and the version gate re-embeds the whole index before the next scoring run.
 
 embedding:
-  # Stable model id, confirmed against the live models.list on 2026-09-21.
-  # There is no "gemini-embedding-002"; the ids are gemini-embedding-2,
-  # gemini-embedding-2-preview and gemini-embedding-001.
-  model: gemini-embedding-2
+  # local = Qwen3 on the CPU inside Hiredra (needs `uv sync --group embed`; no network, no quota);
+  # gemini = the Google API (the limits below apply only to it). Switched 2026-10-29 (plan unit DB4,
+  # decision D1.15; the model comparison is docs/model-selection-embedding.md).
+  provider: local
+  model: Qwen/Qwen3-Embedding-0.6B
+  dimensions: 1024
 
-  # Output dimensionality (MRL, 128-3072). Cosines were identical to ~2 dp at
-  # 768 / 1536 / 3072 on the probe set, so 768 (3 KB/vector) is enough.
-  dimensions: 768
+  # The model's task instruction, sent as its prompt. Written once, before any result, in the model
+  # evaluation and not tuned on the labels.
+  prefix: "Instruct: Given a job skill, retrieve the same or a closely related job skill\nQuery: "
 
-  # Text prepended to every skill string before embedding. gemini-embedding-2
-  # has no task_type parameter -- the task is a text prefix (e.g.
-  # "task: sentence similarity | query: "). Bare (empty) spreads related vs
-  # unrelated skills further apart than the similarity prefix, which matters
-  # because fit = s in the adjacent band (docs/scoring.md sec 4). Step 5 may
-  # revisit; the version gate makes changing it safe.
-  prefix: ""
+  # described: each skill is embedded as "name: description" where hiredra/graph/skill_descriptions.tsv
+  # has one (exact name), else as the bare name. The file's hash is part of the version tag.
+  inputs: described
 
-  # How many skills go in ONE HTTP request. One request is one batchEmbedContents
-  # call: many inputs in, many SEPARATE vectors out (proven offline against the
-  # real SDK -- 120 skills = 3 requests of 50/50/20). 100 is the ceiling: the
-  # LangChain wrapper documents it and a 100-input request worked live; the
-  # Google docs do not state a maximum, so nothing above 100 has been tried.
-  # Smaller chunks save to the DB more often, so an interrupted build loses less.
-  inputs_per_request: 50
+  # Local: how many skills go through the model at once (vectors do not depend on it in float32).
+  inputs_per_request: 32
 
 limits:
   # Google's real numbers for this model on the free tier (AI Studio dashboard).
@@ -74,10 +67,10 @@ fit:
   # NOT calibrated -- Step 5's F1 sweep sets the real values for this model:
   # `python -m hiredra.graph calibrate --write` rewrites have/adj and adds
   # a calibration_id key, step5-<date> (the regression test then guards them).
-  have: 0.90
-  adj: 0.68
+  have: 0.81
+  adj: 0.55
 
-  calibration_id: step5-2026-10-25
+  calibration_id: step5-2026-10-29
 harvest:
   # Market vocabulary comes from open-jobs' OWN skill fields (CC0), not from
   # Gemini calls: each enriched posting carries enrichment_json.data.

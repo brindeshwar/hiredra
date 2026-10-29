@@ -37,12 +37,14 @@ from __future__ import annotations
 import os
 import time
 from collections.abc import Callable, Sequence
+from pathlib import Path
 
 import numpy as np
 from dotenv import load_dotenv
 from tenacity import Retrying, retry_if_exception, stop_after_attempt
 
 from hiredra.graph.config import GraphConfig
+from hiredra.graph.descriptions import described, load_descriptions
 from hiredra.quota import (  # noqa: F401 -- re-exported: graph code and tests import them from here
     DailyQuotaExceeded,
     ProviderError,
@@ -88,6 +90,69 @@ def _default_client(cfg: GraphConfig, api_key: str | None):
     )
 
 
+# ── the local model (plan unit DB4, decision D1.15) ─────────────────────────────────────────
+#: Where the local model's weights live (git-ignored). HF_HOME, when set, wins.
+MODEL_CACHE = Path(__file__).resolve().parents[2] / "data" / "models" / "hf"
+
+
+def load_local_model(cfg: GraphConfig):
+    """``cfg.model`` as a sentence-transformers model on the CPU, in float32.
+
+    float32, not the bfloat16 the library defaults to: measured 2026-10-29, float32 vectors are identical across
+    library versions (max cosine difference 7e-7 between transformers 5.3 and 5.20) and do not depend on which
+    other skills share a batch; bfloat16 moved cosines by up to 0.014. Loads from the local cache; downloads only
+    if the weights are missing. Needs the optional dependency group: ``uv sync --group embed``.
+    """
+    os.environ.setdefault("HF_HOME", str(MODEL_CACHE))
+    hub = Path(os.environ["HF_HOME"]) / "hub" / ("models--" + cfg.model.replace("/", "--"))
+    if any(hub.glob("snapshots/*/config.json")):
+        os.environ.setdefault("HF_HUB_OFFLINE", "1")  # cached: no network call at all (the hub probes otherwise)
+    try:
+        import torch
+        from sentence_transformers import SentenceTransformer
+    except ImportError as exc:
+        raise RuntimeError(
+            "the local embedding model needs the optional libraries: run `uv sync --group embed`"
+        ) from exc
+    torch.set_num_threads(max(1, (os.cpu_count() or 4) - 2))  # leave the machine usable
+    kwargs = {"device": "cpu", "model_kwargs": {"dtype": torch.float32}}
+    try:
+        return SentenceTransformer(cfg.model, local_files_only=True, **kwargs)
+    except OSError:
+        return SentenceTransformer(cfg.model, **kwargs)  # first use: fetch the weights into the cache
+
+
+def build_local_embedder(cfg: GraphConfig, *, model=None, descriptions: dict[str, str] | None = None) -> Embedder:
+    """``embed(texts)`` on a local model: no network, no quota, so no pacing and no ``DailyUsage``.
+
+    ``cfg.prefix`` is the model's instruction (the ``prompt``); with ``inputs: described`` each name becomes
+    "name: description" where hiredra.graph.descriptions has one. ``model`` is anything with
+    ``encode(texts, prompt=..., batch_size=..., convert_to_numpy=True, show_progress_bar=False)``.
+    """
+    if model is None:
+        model = load_local_model(cfg)
+    if descriptions is None:
+        descriptions = load_descriptions() if cfg.inputs == "described" else {}
+
+    def embed(texts: Sequence[str]) -> np.ndarray:
+        if not texts:
+            return np.zeros((0, cfg.dimensions), dtype=np.float32)
+        inputs = [described(t, descriptions) for t in texts]
+        vectors = model.encode(
+            inputs,
+            prompt=cfg.prefix or None,
+            batch_size=cfg.inputs_per_request,
+            convert_to_numpy=True,
+            show_progress_bar=False,
+        )
+        matrix = np.asarray(vectors, dtype=np.float32)
+        if matrix.shape != (len(texts), cfg.dimensions):
+            raise EmbeddingError(f"expected {(len(texts), cfg.dimensions)} vectors, got {matrix.shape}")
+        return l2_normalize(matrix)
+
+    return embed
+
+
 def estimate_tokens(text: str) -> int:
     """A deliberately pessimistic token estimate (~3 characters per token; English
     skill names are nearer 4). Only used for pacing against tokens/minute, where a
@@ -104,7 +169,7 @@ def build_embedder(
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
 ) -> Embedder:
-    """Build the ``embed(texts)`` callable for ``cfg``.
+    """Build the ``embed(texts)`` callable for ``cfg`` (a local model when ``cfg.provider`` is "local").
 
     ``client`` is anything with ``embed_documents(texts, batch_size=...)``;
     default is the LangChain wrapper. ``usage`` is an optional ``DailyUsage``: if
@@ -113,6 +178,8 @@ def build_embedder(
     the day exhausted. ``sleep``/``clock`` are injectable so pacing and retry
     backoff are testable without real waiting.
     """
+    if cfg.provider == "local":
+        return build_local_embedder(cfg)  # no quota to count: ``usage`` does not apply
     client = client if client is not None else _default_client(cfg, api_key)
     next_allowed = [None]  # closure-held: earliest clock() the next request may start
 

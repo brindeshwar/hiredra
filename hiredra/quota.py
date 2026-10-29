@@ -290,6 +290,34 @@ class DailyUsage:
         )
 
 
+class Unmetered:
+    """``DailyUsage``'s interface for a model with no daily quota (the local embedder): it never refuses and
+    counts nothing, so a local re-embed of the whole index is never cut at Google's 900."""
+
+    budget = 10**9
+
+    def used(self) -> int:
+        return 0
+
+    def exhausted(self) -> bool:
+        return False
+
+    def remaining(self) -> int:
+        return self.budget
+
+    def summary(self) -> str:
+        return "local model: no daily quota"
+
+    def reserve(self, n: int) -> None:
+        return None
+
+    def record(self, n: int) -> None:
+        return None
+
+    def mark_exhausted(self, note: str | None = None) -> None:
+        return None
+
+
 def jittered_wait(retry_state, rng: Callable[[], float] = random.random) -> float:
     """The owner's retry rule, for every provider: wait 1, 2, 4, 8 s (doubling per attempt) plus a
     random jitter of up to the same amount, so two of our processes never retry in lockstep. When

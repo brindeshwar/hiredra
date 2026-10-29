@@ -43,10 +43,26 @@ dev = [
     "pytest>=8.0",
     "ruff>=0.15",
 ]
+# The local embedding model, Qwen3-Embedding-0.6B on the CPU (plan unit DB4, decision D1.15): the exact versions the
+# model evaluation ran. Optional (owner, 2026-10-29): `uv sync --group embed` on the machine that embeds; CI and the
+# default install stay light, and tests use fake embedders. torch comes from PyTorch's CPU-only index on every
+# platform, so Linux never pulls the multi-GB CUDA build.
+embed = [
+    "sentence-transformers==6.2.0",
+    "torch==2.14.1",
+]
 
 [tool.uv]
 # Hiredra runs from the repo root (python -m hiredra.<stage>); it is not built or installed as a package.
 package = false
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true  # used only for the packages that name it (torch), never searched for anything else
 
 [tool.pytest.ini_options]
 testpaths = ["tests", "discovery"]

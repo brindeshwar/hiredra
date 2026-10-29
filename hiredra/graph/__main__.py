@@ -40,7 +40,7 @@ from hiredra.graph.curation import (
 from hiredra.graph.harvest import DEFAULT_DF_PATH, harvest, load_df
 from hiredra.graph.lock import LockHeld, RunLock
 from hiredra.graph.merge import DEFAULT_REVIEW_PATH, apply_review, propose_merges, write_review
-from hiredra.graph.usage import DailyUsage, reset_text
+from hiredra.graph.usage import DailyUsage, reset_text, usage_for
 from hiredra.storage import (
     connect,
     init_db,
@@ -55,7 +55,7 @@ def _log(msg: str) -> None:
 
 
 def _usage(conn, cfg) -> DailyUsage:
-    return DailyUsage(cfg.rpd_budget, conn, "gemini", cfg.model)
+    return usage_for(conn, cfg)
 
 
 def _warn_if_no_df(conn, weights, args) -> None:
@@ -194,10 +194,13 @@ def _cmd_sync(conn, cfg, args) -> int:
         cleared = invalidate_skill_vectors(conn)
         _log(f"--reembed-all: cleared {cleared} stored vectors; the whole index will be re-embedded")
     embed = build_embedder(cfg, usage=usage)
-    _log(
-        f"embed tag {cfg.embed_tag}; {cfg.inputs_per_request} skills per request, pacing "
-        f"{cfg.rpm_budget} req/min and {cfg.tpm_budget} tokens/min (each skill = 1 request)"
-    )
+    if cfg.provider == "local":
+        _log(f"embed tag {cfg.embed_tag}; local model, {cfg.inputs_per_request} skills per batch, no quota")
+    else:
+        _log(
+            f"embed tag {cfg.embed_tag}; {cfg.inputs_per_request} skills per request, pacing "
+            f"{cfg.rpm_budget} req/min and {cfg.tpm_budget} tokens/min (each skill = 1 request)"
+        )
     _log(f"today: {usage.summary()}")
     gate = ensure_index_current(
         conn, cfg, embed, limit=args.limit, weights=weights, daily_remaining=usage.remaining, log=_log

@@ -23,7 +23,7 @@ from datetime import datetime, timezone
 from hiredra.graph.config import DEFAULT_CONFIG_PATH, load_graph_config
 from hiredra.graph.lock import LockHeld, RunLock
 from hiredra.graph.overlay import DEFAULT_OVERLAY_PATH
-from hiredra.graph.usage import DailyUsage, reset_text
+from hiredra.graph.usage import reset_text, usage_for
 from hiredra.profile import DEFAULT_PROFILE_PATH, ProfileError, parse_skills
 from hiredra.scoring import rate as srate
 from hiredra.scoring import run as sr
@@ -58,7 +58,7 @@ def _cmd_run(conn, args, graph_cfg, weights) -> int:
     try:
         with RunLock(what="scoring run", url=args.db):
             sr.check_preconditions(conn, graph_cfg, profile, args.overlay_path)
-            usage = DailyUsage(graph_cfg.rpd_budget, conn, "gemini", graph_cfg.model)
+            usage = usage_for(conn, graph_cfg)
 
             def embedder():
                 from hiredra.graph.embedder import build_embedder

@@ -1,175 +1,175 @@
 a,b,cosine,embed_tag
-agent frameworks,llm agents,0.909106,gemini-embedding-2|d768|prefix=none
-agent orchestration,multi-agent architectures,0.816226,gemini-embedding-2|d768|prefix=none
-agentic ai,ai agents,0.933140,gemini-embedding-2|d768|prefix=none
-agentic workflows,ai agents,0.875895,gemini-embedding-2|d768|prefix=none
-agentic workflows,llm agents,0.900258,gemini-embedding-2|d768|prefix=none
-ai agents,ai systems,0.813703,gemini-embedding-2|d768|prefix=none
-ai agents,multi-agent systems,0.826434,gemini-embedding-2|d768|prefix=none
-ai agents,workers ai,0.758647,gemini-embedding-2|d768|prefix=none
-ai alignment,ai safety,0.928722,gemini-embedding-2|d768|prefix=none
-android,linux,0.747299,gemini-embedding-2|d768|prefix=none
-apache spark,pandas,0.596988,gemini-embedding-2|d768|prefix=none
-apache spark,pyarrow,0.735878,gemini-embedding-2|d768|prefix=none
-api design,api development,0.903975,gemini-embedding-2|d768|prefix=none
-api design,rest api design,0.945723,gemini-embedding-2|d768|prefix=none
-application security,sans gcih,0.641835,gemini-embedding-2|d768|prefix=none
-argocd,ci/cd,0.800406,gemini-embedding-2|d768|prefix=none
-async python,asyncio,0.926798,gemini-embedding-2|d768|prefix=none
-attention mechanisms,reinforcement learning,0.759156,gemini-embedding-2|d768|prefix=none
-auth0,oauth2,0.742577,gemini-embedding-2|d768|prefix=none
-aws,azure,0.717436,gemini-embedding-2|d768|prefix=none
-aws,ovs,0.534687,gemini-embedding-2|d768|prefix=none
-aws genai services,generative ai,0.802318,gemini-embedding-2|d768|prefix=none
-aws lambda,serverless functions,0.850701,gemini-embedding-2|d768|prefix=none
-azure,azure ai,0.842491,gemini-embedding-2|d768|prefix=none
-azure,elysia,0.486676,gemini-embedding-2|d768|prefix=none
-azure,vantage,0.563161,gemini-embedding-2|d768|prefix=none
-bdd,mongodb,0.553215,gemini-embedding-2|d768|prefix=none
-blender,machine learning,0.663342,gemini-embedding-2|d768|prefix=none
-bm25,hybrid retrieval,0.458027,gemini-embedding-2|d768|prefix=none
-bootloaders,linux,0.652358,gemini-embedding-2|d768|prefix=none
-c,python,0.707516,gemini-embedding-2|d768|prefix=none
-c++,python,0.766651,gemini-embedding-2|d768|prefix=none
-caching,redis,0.672113,gemini-embedding-2|d768|prefix=none
-chatbots,conversational ai,0.840857,gemini-embedding-2|d768|prefix=none
-chatgpt,prompt engineering,0.809541,gemini-embedding-2|d768|prefix=none
-ci pipelines,ci/cd,0.899760,gemini-embedding-2|d768|prefix=none
-ci systems,ci/cd,0.563144,gemini-embedding-2|d768|prefix=none
-ci/cd,ci/cd platforms,0.889256,gemini-embedding-2|d768|prefix=none
-ci/cd,continuous integration,0.909150,gemini-embedding-2|d768|prefix=none
-ci/cd,github actions,0.830799,gemini-embedding-2|d768|prefix=none
-ci/cd,servicenow,0.706025,gemini-embedding-2|d768|prefix=none
-computer vision,natural language processing,0.755132,gemini-embedding-2|d768|prefix=none
-confluence,jira,0.688314,gemini-embedding-2|d768|prefix=none
-containerization,docker,0.728869,gemini-embedding-2|d768|prefix=none
-css,css3,0.904392,gemini-embedding-2|d768|prefix=none
-dagster,data pipelines,0.663817,gemini-embedding-2|d768|prefix=none
-data analysis,statistics,0.823863,gemini-embedding-2|d768|prefix=none
-data cleaning,data wrangling,0.844697,gemini-embedding-2|d768|prefix=none
-data engineering,data science,0.880693,gemini-embedding-2|d768|prefix=none
-data pipelines,dataops,0.813419,gemini-embedding-2|d768|prefix=none
-data science,machine learning,0.831208,gemini-embedding-2|d768|prefix=none
-datadog llm observability,llm integration,0.775194,gemini-embedding-2|d768|prefix=none
-dbt,sqlite,0.624434,gemini-embedding-2|d768|prefix=none
-deck.gl,streamlit,0.656187,gemini-embedding-2|d768|prefix=none
-deep learning,dl,0.604199,gemini-embedding-2|d768|prefix=none
-deep learning,machine learning,0.893572,gemini-embedding-2|d768|prefix=none
-design systems,system design,0.867896,gemini-embedding-2|d768|prefix=none
-dexie,sqlite,0.534699,gemini-embedding-2|d768|prefix=none
-django,fastapi,0.624356,gemini-embedding-2|d768|prefix=none
-docker,kubernetes,0.755152,gemini-embedding-2|d768|prefix=none
-dvc,mcp,0.483124,gemini-embedding-2|d768|prefix=none
-dynamodb,mongodb,0.769732,gemini-embedding-2|d768|prefix=none
-ecdsa,oauth2,0.665024,gemini-embedding-2|d768|prefix=none
-elt,jest,0.539621,gemini-embedding-2|d768|prefix=none
-embeddings,text embeddings,0.936086,gemini-embedding-2|d768|prefix=none
-emr,named entity recognition (ner),0.518458,gemini-embedding-2|d768|prefix=none
-espresso,java,0.677666,gemini-embedding-2|d768|prefix=none
-evm,machine learning,0.588174,gemini-embedding-2|d768|prefix=none
-excel,python,0.695636,gemini-embedding-2|d768|prefix=none
-express,node.js,0.608911,gemini-embedding-2|d768|prefix=none
-fastapi,flask,0.627220,gemini-embedding-2|d768|prefix=none
-fastapi,kafka,0.615571,gemini-embedding-2|d768|prefix=none
-fastapi,ray serve,0.493049,gemini-embedding-2|d768|prefix=none
-fde,http,0.481109,gemini-embedding-2|d768|prefix=none
-fine-tuning,prompt engineering,0.755110,gemini-embedding-2|d768|prefix=none
-fips,http,0.555820,gemini-embedding-2|d768|prefix=none
-firebase,mongodb,0.692242,gemini-embedding-2|d768|prefix=none
-firewalls,security,0.725048,gemini-embedding-2|d768|prefix=none
-fly.io,nginx,0.606250,gemini-embedding-2|d768|prefix=none
-fsdp,pytorch,0.597441,gemini-embedding-2|d768|prefix=none
-function calling,tool calling,0.738641,gemini-embedding-2|d768|prefix=none
-gemini,ruby,0.659142,gemini-embedding-2|d768|prefix=none
-generative ai,generative ai applications,0.912541,gemini-embedding-2|d768|prefix=none
-generative ai,microsoft copilot,0.755275,gemini-embedding-2|d768|prefix=none
-generative ai,microsoft foundry,0.624545,gemini-embedding-2|d768|prefix=none
-git,github,0.798153,gemini-embedding-2|d768|prefix=none
-git,pick,0.638354,gemini-embedding-2|d768|prefix=none
-git,version control,0.726293,gemini-embedding-2|d768|prefix=none
-git/github,github,0.908406,gemini-embedding-2|d768|prefix=none
-github actions,github ci/cd,0.917646,gemini-embedding-2|d768|prefix=none
-google analytics,machine learning,0.722132,gemini-embedding-2|d768|prefix=none
-google cloud computing,machine learning,0.712607,gemini-embedding-2|d768|prefix=none
-graphql,rest api,0.756258,gemini-embedding-2|d768|prefix=none
-grpc,rest api,0.708154,gemini-embedding-2|d768|prefix=none
-halide,sqlite,0.493143,gemini-embedding-2|d768|prefix=none
-helm,linux,0.618548,gemini-embedding-2|d768|prefix=none
-hls,http,0.630353,gemini-embedding-2|d768|prefix=none
-hsm,http,0.536915,gemini-embedding-2|d768|prefix=none
-hsms,http,0.524196,gemini-embedding-2|d768|prefix=none
-html,html5,0.919030,gemini-embedding-2|d768|prefix=none
-html,selenium,0.645150,gemini-embedding-2|d768|prefix=none
-html,wordpress,0.755036,gemini-embedding-2|d768|prefix=none
-http apis,rest api,0.878980,gemini-embedding-2|d768|prefix=none
-hugging face transformers,transformers,0.775457,gemini-embedding-2|d768|prefix=none
-information retrieval,search,0.719298,gemini-embedding-2|d768|prefix=none
-initrd,linux,0.715662,gemini-embedding-2|d768|prefix=none
-integration testing,unit testing,0.856610,gemini-embedding-2|d768|prefix=none
-java,javascript,0.816639,gemini-embedding-2|d768|prefix=none
-javascript,typescript,0.810611,gemini-embedding-2|d768|prefix=none
-javascript,webassembly,0.723465,gemini-embedding-2|d768|prefix=none
-junit,unit testing,0.789706,gemini-embedding-2|d768|prefix=none
-langchain,langfuse,0.779445,gemini-embedding-2|d768|prefix=none
-langchain,langsmith,0.835736,gemini-embedding-2|d768|prefix=none
-langchain,llamaindex,0.817463,gemini-embedding-2|d768|prefix=none
-langchain,tilelang,0.543560,gemini-embedding-2|d768|prefix=none
-laravel,node.js,0.742939,gemini-embedding-2|d768|prefix=none
-large-scale financial tracking systems,system design,0.728891,gemini-embedding-2|d768|prefix=none
-lever ats,slack,0.589800,gemini-embedding-2|d768|prefix=none
-linux,minio,0.608080,gemini-embedding-2|d768|prefix=none
-linux,ubuntu,0.830946,gemini-embedding-2|d768|prefix=none
-linux,virtualization,0.738168,gemini-embedding-2|d768|prefix=none
-linux,vxlan,0.690298,gemini-embedding-2|d768|prefix=none
-linux,windows,0.731385,gemini-embedding-2|d768|prefix=none
-llm,lnd,0.533876,gemini-embedding-2|d768|prefix=none
-llm applications,llm apps,0.965788,gemini-embedding-2|d768|prefix=none
-llm evals,llm evaluation,0.951248,gemini-embedding-2|d768|prefix=none
-long-context models,vision language models,0.756588,gemini-embedding-2|d768|prefix=none
-machine learning,mlops,0.829547,gemini-embedding-2|d768|prefix=none
-machine learning,neural networks,0.814466,gemini-embedding-2|d768|prefix=none
-mayastor,mypy,0.454867,gemini-embedding-2|d768|prefix=none
-mcp,mcps,0.750000,gemini-embedding-2|d768|prefix=none
-micronaut,transformers,0.490417,gemini-embedding-2|d768|prefix=none
-model deployment,model serving,0.917454,gemini-embedding-2|d768|prefix=none
-model evaluation,model optimization,0.801049,gemini-embedding-2|d768|prefix=none
-mysql,postgresql,0.806428,gemini-embedding-2|d768|prefix=none
-named entity recognition (ner),qa,0.663380,gemini-embedding-2|d768|prefix=none
-nginx,service workers,0.644180,gemini-embedding-2|d768|prefix=none
-nosql,nosql databases,0.925542,gemini-embedding-2|d768|prefix=none
-nosql,sql,0.810208,gemini-embedding-2|d768|prefix=none
-object-oriented design,system design,0.802918,gemini-embedding-2|d768|prefix=none
-object-oriented programming,oop,0.849203,gemini-embedding-2|d768|prefix=none
-ocr,opencv,0.675087,gemini-embedding-2|d768|prefix=none
-ollama,openobserve,0.683306,gemini-embedding-2|d768|prefix=none
-onnx,onnx runtime,0.874571,gemini-embedding-2|d768|prefix=none
-onnx,visx,0.513601,gemini-embedding-2|d768|prefix=none
-phlex,python,0.541389,gemini-embedding-2|d768|prefix=none
-pinecone,python,0.585943,gemini-embedding-2|d768|prefix=none
-power bi,sql,0.747374,gemini-embedding-2|d768|prefix=none
-prompt design,prompt engineering,0.842880,gemini-embedding-2|d768|prefix=none
-px4,pyarrow,0.516690,gemini-embedding-2|d768|prefix=none
-pydantic,pydantic models,0.924008,gemini-embedding-2|d768|prefix=none
-python,rabbit,0.636968,gemini-embedding-2|d768|prefix=none
-pytorch,tensorflow,0.797738,gemini-embedding-2|d768|prefix=none
-radius,statistics,0.580727,gemini-embedding-2|d768|prefix=none
-rag,vector databases,0.545659,gemini-embedding-2|d768|prefix=none
-react,react native,0.764936,gemini-embedding-2|d768|prefix=none
-rest api,rest services,0.850215,gemini-embedding-2|d768|prefix=none
-rest api,restful api integration,0.905627,gemini-embedding-2|d768|prefix=none
-rest api,restful services,0.895626,gemini-embedding-2|d768|prefix=none
-rest api,web api,0.895719,gemini-embedding-2|d768|prefix=none
-sales,salesforce,0.778648,gemini-embedding-2|d768|prefix=none
-semantic retrieval,semantic search,0.929774,gemini-embedding-2|d768|prefix=none
-semantic search,thoughtspot,0.614621,gemini-embedding-2|d768|prefix=none
-sendgrid,slack,0.654556,gemini-embedding-2|d768|prefix=none
-slack,unsloth,0.597685,gemini-embedding-2|d768|prefix=none
-speech recognition,speech-to-text,0.887193,gemini-embedding-2|d768|prefix=none
-sql,sql server,0.924972,gemini-embedding-2|d768|prefix=none
-sql,temporal,0.575713,gemini-embedding-2|d768|prefix=none
-tensorflow,tpu,0.568344,gemini-embedding-2|d768|prefix=none
-testing,trl,0.518267,gemini-embedding-2|d768|prefix=none
-ui tests,unit testing,0.805640,gemini-embedding-2|d768|prefix=none
-vector databases,vector store,0.841617,gemini-embedding-2|d768|prefix=none
-web crawling,web scraping,0.883681,gemini-embedding-2|d768|prefix=none
-web scraping,web3,0.725528,gemini-embedding-2|d768|prefix=none
+agent frameworks,llm agents,0.665350,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+agent orchestration,multi-agent architectures,0.641300,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+agentic ai,ai agents,0.782501,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+agentic workflows,ai agents,0.734997,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+agentic workflows,llm agents,0.670700,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+ai agents,ai systems,0.826439,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+ai agents,multi-agent systems,0.778657,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+ai agents,workers ai,0.754475,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+ai alignment,ai safety,0.740983,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+android,linux,0.790324,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+apache spark,pandas,0.618321,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+apache spark,pyarrow,0.699358,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+api design,api development,0.744335,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+api design,rest api design,0.805616,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+application security,sans gcih,0.399226,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+argocd,ci/cd,0.695266,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+async python,asyncio,0.815996,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+attention mechanisms,reinforcement learning,0.544152,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+auth0,oauth2,0.768882,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+aws,azure,0.769940,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+aws,ovs,0.499248,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+aws genai services,generative ai,0.651589,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+aws lambda,serverless functions,0.863989,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+azure,azure ai,0.719077,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+azure,elysia,0.407936,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+azure,vantage,0.489405,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+bdd,mongodb,0.463254,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+blender,machine learning,0.482741,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+bm25,hybrid retrieval,0.487150,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+bootloaders,linux,0.545385,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+c,python,0.549636,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+c++,python,0.482454,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+caching,redis,0.679230,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+chatbots,conversational ai,0.759900,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+chatgpt,prompt engineering,0.706236,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+ci pipelines,ci/cd,0.732011,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+ci systems,ci/cd,0.582177,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+ci/cd,ci/cd platforms,0.654334,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+ci/cd,continuous integration,0.787536,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+ci/cd,github actions,0.735891,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+ci/cd,servicenow,0.590347,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+computer vision,natural language processing,0.573697,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+confluence,jira,0.698121,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+containerization,docker,0.801530,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+css,css3,0.697332,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+dagster,data pipelines,0.785872,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+data analysis,statistics,0.809015,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+data cleaning,data wrangling,0.800540,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+data engineering,data science,0.628571,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+data pipelines,dataops,0.775562,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+data science,machine learning,0.785771,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+datadog llm observability,llm integration,0.664223,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+dbt,sqlite,0.537083,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+deck.gl,streamlit,0.540360,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+deep learning,dl,0.553747,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+deep learning,machine learning,0.799287,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+design systems,system design,0.802836,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+dexie,sqlite,0.564560,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+django,fastapi,0.735733,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+docker,kubernetes,0.655673,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+dvc,mcp,0.368813,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+dynamodb,mongodb,0.783363,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+ecdsa,oauth2,0.427828,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+elt,jest,0.381373,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+embeddings,text embeddings,0.757709,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+emr,named entity recognition (ner),0.432441,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+espresso,java,0.449080,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+evm,machine learning,0.398885,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+excel,python,0.551988,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+express,node.js,0.808989,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+fastapi,flask,0.835486,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+fastapi,kafka,0.467498,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+fastapi,ray serve,0.412698,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+fde,http,0.418641,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+fine-tuning,prompt engineering,0.615336,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+fips,http,0.419676,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+firebase,mongodb,0.655398,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+firewalls,security,0.695657,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+fly.io,nginx,0.525190,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+fsdp,pytorch,0.400569,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+function calling,tool calling,0.832944,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+gemini,ruby,0.549083,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+generative ai,generative ai applications,0.759166,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+generative ai,microsoft copilot,0.659490,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+generative ai,microsoft foundry,0.419533,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+git,github,0.789257,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+git,pick,0.386396,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+git,version control,0.858695,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+git/github,github,0.872005,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+github actions,github ci/cd,0.828412,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+google analytics,machine learning,0.516577,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+google cloud computing,machine learning,0.482863,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+graphql,rest api,0.669807,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+grpc,rest api,0.577750,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+halide,sqlite,0.379261,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+helm,linux,0.516583,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+hls,http,0.555116,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+hsm,http,0.466366,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+hsms,http,0.536873,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+html,html5,0.705138,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+html,selenium,0.596038,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+html,wordpress,0.626014,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+http apis,rest api,0.840157,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+hugging face transformers,transformers,1.000000,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+information retrieval,search,0.764013,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+initrd,linux,0.492519,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+integration testing,unit testing,0.779089,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+java,javascript,0.650755,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+javascript,typescript,0.564595,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+javascript,webassembly,0.654714,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+junit,unit testing,0.784955,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+langchain,langfuse,0.733709,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+langchain,langsmith,0.682953,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+langchain,llamaindex,0.824382,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+langchain,tilelang,0.464848,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+laravel,node.js,0.698540,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+large-scale financial tracking systems,system design,0.570305,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+lever ats,slack,0.483809,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+linux,minio,0.447487,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+linux,ubuntu,0.885616,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+linux,virtualization,0.635856,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+linux,vxlan,0.517585,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+linux,windows,0.592069,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+llm,lnd,0.526700,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+llm applications,llm apps,0.933532,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+llm evals,llm evaluation,0.973983,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+long-context models,vision language models,0.666706,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+machine learning,mlops,0.642460,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+machine learning,neural networks,0.778141,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+mayastor,mypy,0.495941,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+mcp,mcps,1.000000,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+micronaut,transformers,0.459262,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+model deployment,model serving,0.750040,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+model evaluation,model optimization,0.621431,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+mysql,postgresql,0.830590,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+named entity recognition (ner),qa,0.510078,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+nginx,service workers,0.474776,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+nosql,nosql databases,0.866736,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+nosql,sql,0.640637,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+object-oriented design,system design,0.801644,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+object-oriented programming,oop,0.780645,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+ocr,opencv,0.671898,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+ollama,openobserve,0.420994,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+onnx,onnx runtime,0.770396,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+onnx,visx,0.442937,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+phlex,python,0.447743,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+pinecone,python,0.480607,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+power bi,sql,0.580812,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+prompt design,prompt engineering,0.714710,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+px4,pyarrow,0.452673,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+pydantic,pydantic models,0.801494,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+python,rabbit,0.449237,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+pytorch,tensorflow,0.852836,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+radius,statistics,0.412581,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+rag,vector databases,0.568233,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+react,react native,0.782807,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+rest api,rest services,0.848095,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+rest api,restful api integration,0.892042,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+rest api,restful services,0.866114,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+rest api,web api,0.880790,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+sales,salesforce,0.620281,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+semantic retrieval,semantic search,0.772266,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+semantic search,thoughtspot,0.429844,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+sendgrid,slack,0.517982,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+slack,unsloth,0.508478,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+speech recognition,speech-to-text,0.897965,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+sql,sql server,0.774493,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+sql,temporal,0.469046,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+tensorflow,tpu,0.430125,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+testing,trl,0.541167,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+ui tests,unit testing,0.656676,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+vector databases,vector store,0.841208,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+web crawling,web scraping,0.899615,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
+web scraping,web3,0.508498,Qwen/Qwen3-Embedding-0.6B|d1024|prefix=90a6c85c|desc=1ef3d97c
