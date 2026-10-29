@@ -7,6 +7,8 @@ Copies the owner's hand-made, git-ignored files into a private folder outside th
                                          + MANIFEST.sha256 (one "<sha256>  <path>" line per file)
 
 A re-run on the same day replaces that day's folder only. The newest 8 dated folders are kept.
+Only files a backup wrote (the ones its manifest lists) are ever deleted: a dated folder that also holds
+someone else's files is refused on a re-run and skipped by the pruning, never emptied.
 The DB is NOT copied by default (big, and rebuildable by re-running stages). --with-db adds a
 `pg_dump` of the Postgres database (decision D1.13) as data/hiredra.dump, then checks it: the dump
 is restored into a scratch database and every table's row count must match the live one. The
@@ -155,6 +157,12 @@ def backup(repo: Path, backup_dir: Path, today: dt.date, db_url: str | None = No
     _check_target(repo, backup_dir)
     backup_dir.mkdir(parents=True, exist_ok=True)
     final = backup_dir / f"hiredra-backup-{today.isoformat()}"
+    extra = _foreign(final) if final.exists() else []
+    if extra:
+        raise SystemExit(
+            f"refusing: {final} holds {len(extra)} file(s) this script did not write (e.g. {extra[0]}). "
+            "Move them out of the dated folder (for example into a sibling folder), then re-run."
+        )
     work = backup_dir / (final.name + ".partial")  # built aside, so a failed run never eats a good copy
     if work.exists():
         shutil.rmtree(work)
@@ -178,7 +186,7 @@ def backup(repo: Path, backup_dir: Path, today: dt.date, db_url: str | None = No
     if final.exists():
         shutil.rmtree(final)
     work.rename(final)
-    pruned = _prune(backup_dir)
+    pruned, kept = _prune(backup_dir)
 
     print(f"backup: {len(files)} file(s) -> {final}")
     if counts is not None:
@@ -187,16 +195,33 @@ def backup(repo: Path, backup_dir: Path, today: dt.date, db_url: str | None = No
         print(f"  skipped (not present yet): {item}")
     for p in pruned:
         print(f"  pruned old copy: {p.name}")
+    for p in kept:
+        print(f"  NOT pruned (holds files this script did not write): {p.name}")
     return final
 
 
-def _prune(backup_dir: Path) -> list[Path]:
-    """Delete dated backup folders beyond the newest KEEP. Touches only folders named by this script."""
+def _foreign(folder: Path) -> list[str]:
+    """Files in a backup folder that its manifest does not list: someone else put them there. With no
+    manifest, every file counts as foreign."""
+    manifest = folder / MANIFEST
+    lines = manifest.read_text(encoding="utf-8").splitlines() if manifest.is_file() else []
+    listed = {line.split("  ", 1)[1] for line in lines if "  " in line}
+    rels = (p.relative_to(folder).as_posix() for p in folder.rglob("*") if p.is_file())
+    return sorted(rel for rel in rels if rel != MANIFEST and rel not in listed)
+
+
+def _prune(backup_dir: Path) -> tuple[list[Path], list[Path]]:
+    """Delete dated backup folders beyond the newest KEEP. Touches only folders named by this script, and
+    never one holding files it did not write. Returns (pruned, kept because of such files)."""
     dated = sorted(p for p in backup_dir.iterdir() if p.is_dir() and FOLDER_RE.match(p.name))
-    old = dated[:-KEEP]
-    for p in old:
-        shutil.rmtree(p)
-    return old
+    pruned, kept = [], []
+    for p in dated[:-KEEP]:
+        if _foreign(p):
+            kept.append(p)
+        else:
+            shutil.rmtree(p)
+            pruned.append(p)
+    return pruned, kept
 
 
 def verify(folder: Path) -> list[str]:

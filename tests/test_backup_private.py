@@ -83,13 +83,13 @@ def test_same_day_rerun_replaces_only_that_day(repo: Path, tmp_path: Path):
     yesterday = bp.backup(repo, bk, DAY - dt.timedelta(days=1))
     _write(repo, "data/master_profile.md", "profile v2")
     first = bp.backup(repo, bk, DAY)
-    _write(first, "leftover.txt")  # anything from the first run must not survive the re-run
+    (repo / "data/calibration/ratings.csv").unlink()  # backed up by the first run, gone from the repo since
     _write(repo, "data/master_profile.md", "profile v3")
     second = bp.backup(repo, bk, DAY)
 
     assert second == first
     assert (second / "data/master_profile.md").read_text(encoding="utf-8") == "profile v3"
-    assert not (second / "leftover.txt").exists()
+    assert not (second / "data/calibration/ratings.csv").exists()  # the first run's own files do not survive
     assert (yesterday / "data/master_profile.md").read_text(encoding="utf-8") == "profile"
     assert sorted(p.name for p in bk.iterdir()) == ["hiredra-backup-2026-10-16", "hiredra-backup-2026-10-17"]
 
@@ -103,6 +103,27 @@ def test_keeps_newest_eight_and_leaves_other_folders_alone(repo: Path, tmp_path:
     assert len(dated) == bp.KEEP
     assert dated[0] == "hiredra-backup-2026-10-19"  # the two oldest went
     assert (bk / "my-photos").is_dir()
+
+
+def test_a_same_day_rerun_refuses_to_delete_files_it_did_not_write(repo: Path, tmp_path: Path):
+    """2026-10-29: the owner moved the archived databases into today's folder; a re-run must not eat them."""
+    bk = tmp_path / "bk"
+    first = bp.backup(repo, bk, DAY)
+    _write(first, "archive/old.db", "precious")
+    with pytest.raises(SystemExit, match="did not write"):
+        bp.backup(repo, bk, DAY)
+    assert (first / "archive/old.db").read_text(encoding="utf-8") == "precious"
+    assert not (bk / (first.name + ".partial")).exists()  # refused before any work
+
+
+def test_pruning_skips_a_dated_folder_holding_someone_elses_files(repo: Path, tmp_path: Path, capsys):
+    bk = tmp_path / "bk"
+    oldest = bp.backup(repo, bk, DAY)
+    _write(oldest, "notes.txt", "mine")
+    for i in range(1, bp.KEEP + 1):
+        bp.backup(repo, bk, DAY + dt.timedelta(days=i))
+    assert (oldest / "notes.txt").exists()
+    assert "NOT pruned (holds files this script did not write): hiredra-backup-2026-10-17" in capsys.readouterr().out
 
 
 @pytest.mark.parametrize("inside", [".", "data/backups"])
