@@ -14,7 +14,7 @@ from hiredra import pg  # noqa: E402
 
 def test_migrate_applies_each_migration_once(db_url):
     with pg.connect(db_url) as conn:
-        assert pg.migrate(conn) == ["0001_init", "0002_cooldowns", "0003_api_usage_exhausted"]
+        assert pg.migrate(conn) == ["0001_init", "0002_cooldowns", "0003_api_usage_exhausted", "0004_search_on_demand"]
         assert pg.migrate(conn) == []  # idempotent: nothing pending the second time
         tables = {r[0] for r in conn.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")}
     assert tables >= {
@@ -38,7 +38,7 @@ def test_job_key_keeps_the_old_id_format(db_url):
             )
 
 
-def test_vectors_take_any_width_and_search_is_generated(db_url):
+def test_vectors_take_any_width_and_full_text_search_works_without_a_stored_column(db_url):
     """No fixed width (owner's call 2026-10-29, measured: exact matching beats an HNSW index here); embed_tag pins
     the model and width. Text sorts by code point, as SQLite and Python do (docker-compose initdb args)."""
     with pg.connect(db_url) as conn:
@@ -55,10 +55,17 @@ def test_vectors_take_any_width_and_search_is_generated(db_url):
             "INSERT INTO jobs (source, external_id, url, title, company, description) "
             "VALUES ('lever', 'abc', 'https://x/3', 'LLM Engineer', 'Acme', 'Build retrieval pipelines')"
         )
-        hit = conn.execute(
-            "SELECT job_key FROM jobs WHERE search @@ plainto_tsquery('english', 'retrieval')"
-        ).fetchone()
-        assert hit == ("lever:abc",)
+        # 0004: nothing is stored for search; job_tsvector() is the one definition, and an index on it works
+        assert conn.execute(
+            "SELECT count(*) FROM information_schema.columns WHERE table_name = 'jobs' AND column_name = 'search'"
+        ).fetchone() == (0,)
+        match = "job_tsvector(title, company, description) @@ plainto_tsquery('english', %s)"
+        assert conn.execute(f"SELECT job_key FROM jobs WHERE {match}", ("retrieval",)).fetchone() == ("lever:abc",)
+        assert conn.execute(f"SELECT job_key FROM jobs WHERE {match}", ("acme",)).fetchone() == ("lever:abc",)
+        conn.execute("CREATE INDEX jobs_search ON jobs USING gin (job_tsvector(title, company, description))")
+        conn.execute("SET enable_seqscan = off")  # one row: force the planner to show the index is usable
+        plan = " ".join(r[0] for r in conn.execute(f"EXPLAIN SELECT id FROM jobs WHERE {match}", ("retrieval",)))
+        assert "jobs_search" in plan
 
 
 def test_a_failed_migration_leaves_nothing_applied(db_url, tmp_path):
