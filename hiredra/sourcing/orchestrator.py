@@ -1,6 +1,5 @@
-"""The orchestrator -- the shared entry point for a scoring run and the graph
-backfill (docs/sourcing.md sec. 9). Same code, differs only by ``RunConfig`` +
-``Sink`` + ``RunStore``.
+"""The orchestrator -- the entry point for a sourcing run (docs/sourcing.md sec. 9), configured by a
+``RunConfig`` and given a ``Sink`` and a ``RunStore``.
 
 ``run()`` imports no database driver -- both DB-touching concerns (job persistence,
 run/cooldown metadata) are injected as a ``Sink`` and a ``RunStore``. Unit tests

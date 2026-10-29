@@ -3,9 +3,8 @@
 Source: data/discovery/exports/companies.csv (ats, slug, company, tag), the
 real deliverable of discovery/harvest.py -- a separate, one-time program (see
 discovery/README.md). This script does no fetching and no discovery of its
-own; it is pure config generation from an already-produced CSV, same spirit
-as the max-scale generator it replaces (scripts/generate_company_list.py),
-but reading the full discovery output instead of sampling a raw slug roster.
+own; it is pure config generation from an already-produced CSV. It replaced an
+earlier generator that sampled open-jobs' raw slug roster (removed 2026-10-29).
 
 Includes BOTH tags (confirmed and unknown-only): the runtime location stage
 does the final per-job India check, so an unknown-only company can't leak a
@@ -41,8 +40,7 @@ companies:
 def _q(value: str) -> str:
     """A YAML-safe double-quoted scalar (JSON string syntax is valid YAML) --
     some slugs/names are purely numeric or YAML-boolean-like and would
-    otherwise parse as int/bool, not str. Same fix as
-    scripts/generate_company_list.py's _q()."""
+    otherwise parse as int/bool, not str."""
     return json.dumps(str(value))
 
 

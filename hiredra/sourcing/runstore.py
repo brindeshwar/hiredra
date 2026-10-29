@@ -1,7 +1,6 @@
 """``RunStore`` -- the orchestrator's bookkeeping side of the operational DB.
 
-Distinct from the ``Sink`` (which owns *job* persistence, and for a backfill
-points at the graph store, not the jobs DB). The ``RunStore`` owns:
+Distinct from the ``Sink`` (which owns *job* persistence). The ``RunStore`` owns:
 
 * the ``runs`` row lifecycle (``begin`` / ``checkpoint`` / ``finish``), and the
   fresh-start stale sweep;

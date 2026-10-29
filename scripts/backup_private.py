@@ -52,6 +52,11 @@ ITEMS = (
     "calibration",
     "data/calibration",
     "data/master_profile.md",
+    "data/profile",  # the raw profile export, the fact check and the project dossiers
+    "data/resume",
+    "data/logs",  # run logs and the DB2/DB4/DB5 reports
+    "data/scoring",  # investigation reports (years parser, location unknowns, first run)
+    "data/merge-review-*.md",  # the owner's tick lists for skill merges
     "data/autofill_facts.yml",
     "data/profile_links.json",
     "data/profile_overlay.json",

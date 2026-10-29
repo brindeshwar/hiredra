@@ -1,24 +1,23 @@
 """Real-data smoke test for hiredra.graph.fit -- NOT a pytest test (kept outside
 tests/ because it reads the real database, not a hermetic fixture).
 
-Makes ZERO API calls. It reuses the already-stored vectors for the nine
+Makes no model call. It reuses the already-stored vectors for the nine
 skill names in docs/scoring.md sec 4's worked example -- they are real
-market nodes, already embedded by the reset-day sync -- as a "cache" that
+market nodes, already embedded by `graph sync` -- as a "cache" that
 `fit_skills` reads from, so its embedder callable is never actually invoked.
 
 Run it manually:
 
     python scripts/smoke_test_fit.py
 
-Owner skills (the `reference` stand-in for `mine`, since the master-profile
-overlay is deferred past Step 4): python, fastapi, postgresql, langchain,
-mcp, docker, aws.
+Owner skills (a fixed stand-in for `mine`): python, fastapi, postgresql, langchain, mcp, docker, aws.
 JD skills: python, fastapi, postgresql, kubernetes, kafka.
 
-docs/scoring.md's table is illustrative (kubernetes~docker = 0.82); the real
-embedding model gives its own number here. Either way the SHAPE must hold:
-exact matches at 1.0, kubernetes lands adjacent (an ADJ..HAVE fit, not 0 or
-1), kafka floors to 0.
+What it checks holds for any embedding model: exact matches fit 1.0, and every other fit follows the band rule
+(s >= HAVE -> 1.0, ADJ <= s < HAVE -> s, s < ADJ -> 0.0). Which owner skill is nearest, and whether kubernetes or
+kafka earns adjacent credit, depends on the model: it is printed for a human to judge, not asserted. (Under Gemini,
+kubernetes~docker was adjacent and kafka floored to 0; under Qwen, kubernetes~aws 0.66 and kafka~aws 0.58 are both
+adjacent -- a watch item for weight calibration.)
 """
 
 from __future__ import annotations
@@ -56,7 +55,7 @@ def main() -> int:
     missing = [n for n in OWNER_SKILLS + JD_SKILLS if n not in skills or skills[n].vector is None]
     if missing:
         print(f"SKIPPED: these names are not currently-embedded nodes in the database: {missing}")
-        print("Run the reset-day runbook (status/consistency/sync) first.")
+        print("Run `python -m hiredra.graph sync` first.")
         return 1
 
     reference = [skills[n] for n in OWNER_SKILLS]
@@ -64,7 +63,7 @@ def main() -> int:
 
     results = fit_skills(JD_SKILLS, reference, cfg, _unavailable_embedder, cache=cache)
 
-    print(f"HAVE={cfg.have}  ADJ={cfg.adj}  (PLACEHOLDER thresholds, not yet calibrated -- Step 5)\n")
+    print(f"HAVE={cfg.have}  ADJ={cfg.adj}  (calibration {cfg.calibration_id or 'none'})\n")
     print(f"{'skill':<12} {'nearest':<12} {'s':>7} {'fit':>7}")
     for r in results:
         print(f"{r.skill:<12} {r.nearest or '-':<12} {r.similarity:>7.4f} {r.fit:>7.4f}")
@@ -81,15 +80,12 @@ def main() -> int:
     for exact in ("python", "fastapi", "postgresql"):
         r = by_skill[exact]
         check(r.nearest == exact and r.fit == 1.0, f"{exact}: exact match, fit = 1.0")
-    k8s = by_skill["kubernetes"]
-    check(k8s.nearest == "docker", "kubernetes: nearest owner skill is docker")
-    check(
-        cfg.adj <= k8s.similarity < cfg.have, f"kubernetes: similarity {k8s.similarity:.4f} lands in the adjacent band"
-    )
-    check(k8s.fit == k8s.similarity, "kubernetes: adjacent fit equals the similarity itself (no flattening)")
-    kafka = by_skill["kafka"]
-    check(kafka.fit == 0.0, f"kafka: fit floors to 0.0 (similarity {kafka.similarity:.4f} was below ADJ)")
-
+    for r in results:
+        if r.skill in ("python", "fastapi", "postgresql"):
+            continue
+        want = 1.0 if r.similarity >= cfg.have else r.similarity if r.similarity >= cfg.adj else 0.0
+        band = "have" if r.similarity >= cfg.have else "adjacent" if r.similarity >= cfg.adj else "missing"
+        check(r.fit == want, f"{r.skill}: nearest {r.nearest} at {r.similarity:.4f} -> {band}, fit {r.fit:.4f}")
     print("\nFIT SMOKE", "PASSED" if ok else "FAILED")
     return 0 if ok else 1
 

@@ -24,6 +24,9 @@ graphify-out/
 data/*
 !data/.gitkeep
 
+# Staging folder for the off-machine copy (backups + archives); moved off this PC by hand
+offsite/
+
 # OS / editor cruft
 .DS_Store
 .idea/

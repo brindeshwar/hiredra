@@ -3,8 +3,8 @@
 NOT part of the live apply pipeline. See discovery/README.md. Writes to its own
 database, never Hiredra's: a separate Postgres database on the same server
 (``HIREDRA_DISCOVERY_DATABASE_URL``, default ``hiredra_discovery``, created on first
-use). The 2026-09 corpus is frozen in data/discovery/ (discovery.db, the SQLite file of
-the original harvest, and exports/).
+use). The 2026-09 corpus is frozen: data/archive/discovery-2026-09.db (the SQLite file of
+the original harvest) and data/discovery/exports/.
 
 Reuses the existing sourcing/filter machinery unchanged: the ATS providers,
 the http layer (pacing + cooldowns), the orchestrator (runs table + --resume)
@@ -373,7 +373,7 @@ def cmd_export(_args: argparse.Namespace) -> int:
     db.register("raw", raw)
     db.execute(f"COPY (SELECT * FROM raw) TO '{raw_parquet.as_posix()}' (FORMAT PARQUET)")
     print(f"wrote {raw_parquet}")
-    print("back the database up with pg_dump (the frozen 2026-09 corpus stays in data/discovery/discovery.db)")
+    print("back the database up with pg_dump (the frozen 2026-09 corpus stays in data/archive/discovery-2026-09.db)")
     return 0
 
 

@@ -1,7 +1,7 @@
 """YAML config loading for the sourcing orchestrator (docs/sourcing.md §7.5, §9.5).
 
 * ``config/companies.yml`` -> ``list[CompanyEntry]``
-* ``config/scoring.yml`` / ``config/backfill.yml`` -> ``RunConfig``
+* ``config/scoring.yml`` / ``config/scoring.wide.yml`` -> ``RunConfig``
 
 **Strict**: an unknown key -- at the top level OR inside any nested section
 (``jobspy``, ``jobspy.default_query``, ``pacing``, ``http`` ...) -- is a
@@ -36,7 +36,7 @@ class Pacing:
 
 @dataclass(frozen=True, slots=True)
 class RunConfig:
-    kind: str  # "scoring" | "backfill"
+    kind: str  # "scoring" (the backfill kind was removed, R1a)
     config_name: str  # basename, recorded on the runs row
     companies_path: str | None
     jobspy: JobSpyConfig
@@ -132,7 +132,7 @@ def load_companies(path: str | Path) -> list[CompanyEntry]:
     return entries
 
 
-# ── scoring.yml / backfill.yml ─────────────────────────────────────────────
+# ── scoring.yml / scoring.wide.yml ─────────────────────────────────────────────
 _RUN_KEYS = {"kind", "companies_path", "jobspy", "http", "pacing", "path2"}
 
 
@@ -146,8 +146,8 @@ def load_run_config(path: str | Path) -> RunConfig:
         raise ConfigError(f"{path}: unknown top-level key(s) {sorted(unknown)}")
 
     kind = doc.get("kind")
-    if kind not in ("scoring", "backfill"):
-        raise ConfigError(f"{path}: 'kind' must be 'scoring' or 'backfill', got {kind!r}")
+    if kind != "scoring":
+        raise ConfigError(f"{path}: 'kind' must be 'scoring', got {kind!r}")
 
     path2 = doc.get("path2") or {}
     if not isinstance(path2, dict) or set(path2) - {"enabled"}:

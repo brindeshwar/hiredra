@@ -16,7 +16,7 @@ min_description_chars: 200
 requests_per_minute: 15
 
 # Gemini free-tier daily cap for this model, and the share of it we allow ourselves.
-# The local counter (data/usage/gemini-3.5-flash-lite.json) stops a run at
+# The daily counter (the api_usage table) stops a run at
 # requests_per_day x headroom = 450, before Google's own cap. Every flash-lite
 # agent shares that counter, because Google meters the model, not the stage.
 requests_per_day: 500
@@ -67,7 +67,7 @@ skill_synonyms:
 # NVIDIA's API trial terms for this use (docs/decisions.md). Key: NVIDIA_API_KEY in .env.
 # One call at a time, paced under requests_per_minute x headroom, each with a timeout; retries use
 # the owner's rule (1, 2, 4, 8 s + jitter). NVIDIA states no daily cap: requests_per_day is our own
-# guard rail and a visible count (data/usage/<model>.json).
+# guard rail and a visible count (the api_usage table).
 fallback:
   provider: nvidia
   model: nvidia/nemotron-3.5-super-vl-120b-a12b
