@@ -25,7 +25,6 @@ def _cfg() -> GraphConfig:
         dimensions=DIM,
         prefix="",
         inputs_per_request=50,
-        requests_per_minute=100,
         dedup_threshold=0.9,
         have=0.9,
         adj=0.7,
@@ -324,9 +323,9 @@ def test_cli_bad_profile_shows_the_line(tmp_path, capsys, pg_url):
     assert "line 3: rule 4" in capsys.readouterr().out
 
 
-def test_cli_budget_stop_writes_nothing(tmp_path, monkeypatch, capsys, pg_url):
-    from hiredra.graph.embedder import DailyQuotaExceeded
+def test_cli_model_stop_writes_nothing(tmp_path, monkeypatch, capsys, pg_url):
     from hiredra.graph.config import load_graph_config
+    from hiredra.graph.embedder import EmbeddingError
 
     cfg = load_graph_config()
     c = connect(pg_url)
@@ -341,13 +340,13 @@ def test_cli_budget_stop_writes_nothing(tmp_path, monkeypatch, capsys, pg_url):
     c.close()
     _profile(tmp_path, strong="python", working="llms", familiar="rust")
 
-    def no_budget(cfg_, **kw):
+    def broken(cfg_, **kw):
         def embed(names):
-            raise DailyQuotaExceeded("PerDay")
+            raise EmbeddingError("embedding has a zero or non-finite norm")
 
         return embed
 
-    monkeypatch.setattr("hiredra.graph.embedder.build_embedder", no_budget)
+    monkeypatch.setattr("hiredra.graph.embedder.build_embedder", broken)
     assert graph_main(_cli(tmp_path, pg_url)) == 2
-    assert "STOPPED (daily_quota)" in capsys.readouterr().out
+    assert "STOPPED (bad_response)" in capsys.readouterr().out
     assert not (tmp_path / "links.json").exists()

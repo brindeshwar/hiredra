@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from hiredra.sourcing.job import Job
-from hiredra.sourcing.sink import BackfillSink, ScoringSink, SinkStats
+from hiredra.sourcing.sink import ScoringSink
 from hiredra.storage import db
 
 
@@ -62,16 +62,3 @@ def test_scoring_sink_persists_new_and_touches_seen(conn):
 def test_scoring_sink_does_not_close_the_connection(conn):
     ScoringSink(conn, "R1").consume([_job(job_id="greenhouse:1")])
     conn.execute("SELECT 1")  # still usable
-
-
-def test_backfill_sink_collapses_and_holds_no_conn():
-    sink = BackfillSink()
-    sink.consume(
-        [
-            _job(job_id="jobspy-indeed:1"),
-            _job(job_id="jobspy-indeed:1"),  # exact dup -> collapsed
-            _job(job_id="jobspy-indeed:2", url="u://2", title="Data Engineer"),
-        ]
-    )
-    assert len(sink.jobs) == 2
-    assert sink.stats() == SinkStats(fetched=3, collapsed_in_run=1)

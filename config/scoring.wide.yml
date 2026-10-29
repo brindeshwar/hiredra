@@ -2,7 +2,7 @@
 # Identical to config/scoring.yml except companies_path -- this is the
 # "full-power" switch: point --config at this file instead to run the large
 # generated company list (config/companies.wide.yml) instead of the curated
-# small one. Regenerate that list with scripts/generate_company_list.py.
+# small one. Regenerate that list with scripts/wide_list_from_discovery.py.
 # Loading is STRICT: an unknown key anywhere (including nested sections) is an error.
 
 kind: scoring

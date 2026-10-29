@@ -47,7 +47,7 @@ from hiredra.location import parse as parse_location
 from hiredra.sourcing.identity import company_slug as company_key
 from hiredra.sourcing.identity import content_hash, role_fingerprint
 
-# data/ at the repo root (this file lives at hiredra/storage/db.py): calibration files, logs, the old SQLite file.
+# data/ at the repo root (this file lives at hiredra/storage/db.py): calibration files, logs, the archived SQLite files.
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 DATA_DIR: Path = _REPO_ROOT / "data"
 
@@ -571,7 +571,7 @@ def status_counts(conn: psycopg.Connection) -> dict[str, int]:
 # ─────────────────────────────────────────────────────────────────────────────
 def open_run(conn: psycopg.Connection, run_id: str, *, kind: str, config_name: str | None) -> str:
     """Insert the ``running`` row. Returns ``started_at`` (the caller often wants it)."""
-    if kind not in ("scoring", "backfill"):
+    if kind != "scoring":  # the schema also allows 'backfill' (old rows) and 'crawl' (the sourcing unit)
         raise ValueError(f"unknown run kind {kind!r}")
     now = _now()
     conn.execute(
@@ -622,7 +622,7 @@ def sweep_stale_runs(conn: psycopg.Connection, kind: str, config_name: str | Non
     """Mark still-``running`` rows for this (kind, config_name) as ``failed``.
 
     Called ONLY on a fresh (non-``--resume``) start, before ``open_run``. Scoped
-    to the same operation so a scoring start never fails an unfinished backfill.
+    to the same operation so one config's start never fails another config's unfinished run.
     Assumes at most one live run per (kind, config_name) — true for the manual
     single-user CLI; add a lock/heartbeat if concurrent same-config runs appear.
     Returns the count swept.

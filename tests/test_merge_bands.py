@@ -43,7 +43,6 @@ def _cfg(**over) -> GraphConfig:
         dimensions=DIM,
         prefix="",
         inputs_per_request=50,
-        requests_per_minute=100,
         dedup_threshold=0.90,
         review_cosine=0.93,
         auto_cosine=0.96,

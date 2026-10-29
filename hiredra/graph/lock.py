@@ -1,8 +1,7 @@
 """A run lock so two graph maintenance commands can't overlap (build 4.3 hardening).
 
-Why: `sync` and `consistency` spend Google's daily request budget, so two runs started at once could both pass the
-"is there budget left?" check and double-spend it. `merges --apply` and `harvest` write the same tables `sync`
-writes vectors into, so they must not overlap it either; scoring holds it too (the freeze rule).
+Why: `merges --apply`, `harvest`, `overlay` and `sync` write the skill tables, so they must not overlap; scoring
+holds the lock too (the freeze rule: the graph must not change mid-run).
 
 The lock code lives in ``hiredra/lock.py`` (moved there in M0.1 so extraction shares it; a Postgres advisory lock
 since DB3b); this module keeps the graph lock's name and its "graph maintenance" wording.
@@ -11,7 +10,6 @@ since DB3b); this module keeps the graph lock's name and its "graph maintenance"
 from __future__ import annotations
 
 from hiredra import lock as _lock
-from hiredra.lock import LockHeld  # noqa: F401 -- re-exported: graph code and tests import it from here
 
 LOCK_NAME = "graph"
 

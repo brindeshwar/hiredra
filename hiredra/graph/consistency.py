@@ -14,8 +14,8 @@ the stored vector:
   reversed    the same batch in the opposite order (different neighbours)
 
 It passes only if every cosine is >= the canary threshold (0.999 in
-``config/graph.yml``). Cost: 3 x sample counted requests (24 at the default 8),
-and none at all in the tests, which use a fake embedder.
+``config/graph.yml``). Cost: 3 x sample embeddings on the local model (24 at the
+default 8), and none at all in the tests, which use a fake embedder.
 
 It never changes the database. If it fails, the CLI prints the fallback (re-embed
 everything under one method); it does not do it for you.
@@ -28,7 +28,8 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from hiredra.graph.config import GraphConfig
-from hiredra.graph.embedder import Embedder, classify_failure
+from hiredra.graph.embedder import Embedder
+from hiredra.quota import classify_failure
 from hiredra.graph.index import blob_to_vector
 from hiredra.storage import iter_skill_vocab
 
@@ -87,7 +88,7 @@ def check_batch_consistency(conn, cfg: GraphConfig, embed: Embedder, *, sample: 
     try:
         for label, run in runs:
             fresh = run()
-            report.requests_used += len(names)  # Google counts each input as one request
+            report.requests_used += len(names)
             cos = (fresh * reference).sum(axis=1)  # both sides are unit length
             worst = int(np.argmin(cos))
             report.conditions.append(ConditionResult(label, float(cos[worst]), names[worst]))

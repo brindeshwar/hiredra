@@ -1,7 +1,7 @@
 """Google free-tier quota handling, shared by every stage that calls Google (plan unit M0.1).
 
-Moved out of ``hiredra/graph/`` (embedder + usage) so extraction and the later agents use the
-same code; the graph modules re-export these names, so nothing that imports them changed.
+Moved out of ``hiredra/graph/`` (M0.1) so extraction, the skill-description writer and the later
+agents use the same code. (Embedding no longer calls Google: it runs a local model since DB4.)
 
 * Failure classes: ``classify_failure`` tells an expected stop (daily quota, transient trouble,
   an API refusal) from a bug. The helpers read Google's ``QuotaFailure`` / ``RetryInfo``
@@ -288,34 +288,6 @@ class DailyUsage:
             "note = COALESCE(excluded.note, api_usage.note)",
             (self.provider, self.model, pacific_day(self._now()), self._now(), note),
         )
-
-
-class Unmetered:
-    """``DailyUsage``'s interface for a model with no daily quota (the local embedder): it never refuses and
-    counts nothing, so a local re-embed of the whole index is never cut at Google's 900."""
-
-    budget = 10**9
-
-    def used(self) -> int:
-        return 0
-
-    def exhausted(self) -> bool:
-        return False
-
-    def remaining(self) -> int:
-        return self.budget
-
-    def summary(self) -> str:
-        return "local model: no daily quota"
-
-    def reserve(self, n: int) -> None:
-        return None
-
-    def record(self, n: int) -> None:
-        return None
-
-    def mark_exhausted(self, note: str | None = None) -> None:
-        return None
 
 
 def jittered_wait(retry_state, rng: Callable[[], float] = random.random) -> float:

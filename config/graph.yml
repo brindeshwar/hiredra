@@ -5,10 +5,9 @@
 # and the version gate re-embeds the whole index before the next scoring run.
 
 embedding:
-  # local = Qwen3 on the CPU inside Hiredra (needs `uv sync --group embed`; no network, no quota);
-  # gemini = the Google API (the limits below apply only to it). Switched 2026-10-29 (plan unit DB4,
-  # decision D1.15; the model comparison is docs/model-selection-embedding.md).
-  provider: local
+  # Qwen3 on the CPU inside Hiredra (needs `uv sync --group embed`; no network, no quota). Switched from
+  # Google's gemini-embedding-2 on 2026-10-29 (plan unit DB4, decision D1.15; the model comparison is
+  # docs/model-selection-embedding.md). The Gemini embedding code was removed afterwards.
   model: Qwen/Qwen3-Embedding-0.6B
   dimensions: 1024
 
@@ -20,23 +19,8 @@ embedding:
   # has one (exact name), else as the bare name. The file's hash is part of the version tag.
   inputs: described
 
-  # Local: how many skills go through the model at once (vectors do not depend on it in float32).
+  # How many skills go through the model at once (vectors do not depend on it in float32).
   inputs_per_request: 32
-
-limits:
-  # Google's real numbers for this model on the free tier (AI Studio dashboard).
-  # IMPORTANT: Google counts EVERY INPUT inside a batch as one "request". A
-  # batch of 50 skills is ONE HTTP call but spends 50 of the 100 requests/min
-  # and 50 of the 1,000 requests/day. So batching cannot lower these counts; it
-  # only saves HTTP round trips. (Evidence: ~959 counted requests for ~959
-  # skills sent, while our client made ~20 HTTP calls.)
-  requests_per_minute: 100
-  tokens_per_minute: 30000
-  requests_per_day: 1000       # resets at midnight Pacific (= 12:30 IST)
-  # Stay this fraction under every limit (0.90 -> 90/min, 27,000 tokens/min,
-  # 900/day). The daily counter is local and advisory (Google is the source of
-  # truth), so it needs room for requests made outside this tool.
-  headroom: 0.90
 
 dedup:
   # Near-duplicate merge in THREE BANDS (owner-approved; hiredra/graph/merge.py).
@@ -95,8 +79,9 @@ harvest:
 gate:
   # Version-consistency canary (docs/graph.md sec 4b): at run start, re-embed
   # these existing nodes and require cosine >= canary_min_cosine against their
-  # stored vectors. Embedding is deterministic (measured cosine 1.000000), so a
-  # drop means the provider changed weights under the same model id -> re-embed
-  # the whole index before scoring. Nodes that don't exist yet are skipped.
+  # stored vectors. Embedding is deterministic in float32 (measured: max cosine
+  # difference 7e-7 across library versions), so a drop means the weights or the
+  # library changed the numbers under the same model id -> re-embed the whole
+  # index before scoring. Nodes that don't exist yet are skipped.
   canary_skills: [python, kubernetes, postgresql]
   canary_min_cosine: 0.999

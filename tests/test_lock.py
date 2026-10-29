@@ -12,7 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from hiredra.graph.lock import LockHeld, RunLock
+from hiredra.graph.lock import RunLock
+from hiredra.lock import LockHeld
 from hiredra.lock import RunLock as SharedLock
 
 REPO = Path(__file__).resolve().parents[1]

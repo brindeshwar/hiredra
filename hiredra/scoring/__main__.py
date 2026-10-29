@@ -11,19 +11,18 @@
     python -m hiredra.scoring rate --sample        # Step 7: write the blind rating sheet (30 jobs)
     python -m hiredra.scoring rate --ingest        # Step 7: read the ticked sheet into job_ratings.csv
 
-Exit codes: 0 ok, 1 config or input error, 2 stopped (precondition or budget), 4 lock held.
+Exit codes: 0 ok, 1 config or input error, 2 stopped (a precondition, or the model failed), 4 lock held.
 """
 
 from __future__ import annotations
 
 import argparse
 import sys
-from datetime import datetime, timezone
 
 from hiredra.graph.config import DEFAULT_CONFIG_PATH, load_graph_config
-from hiredra.graph.lock import LockHeld, RunLock
+from hiredra.graph.lock import RunLock
 from hiredra.graph.overlay import DEFAULT_OVERLAY_PATH
-from hiredra.graph.usage import reset_text, usage_for
+from hiredra.lock import LockHeld
 from hiredra.profile import DEFAULT_PROFILE_PATH, ProfileError, parse_skills
 from hiredra.scoring import rate as srate
 from hiredra.scoring import run as sr
@@ -58,12 +57,11 @@ def _cmd_run(conn, args, graph_cfg, weights) -> int:
     try:
         with RunLock(what="scoring run", url=args.db):
             sr.check_preconditions(conn, graph_cfg, profile, args.overlay_path)
-            usage = usage_for(conn, graph_cfg)
 
             def embedder():
                 from hiredra.graph.embedder import build_embedder
 
-                return build_embedder(graph_cfg, usage=usage)
+                return build_embedder(graph_cfg)
 
             stats = sr.run_scoring(conn, graph_cfg, weights, profile, embedder, force=args.force)
     except LockHeld as exc:
@@ -79,8 +77,7 @@ def _cmd_run(conn, args, graph_cfg, weights) -> int:
     if stats.embedded:
         _log("  hint: run `python -m hiredra.graph sync` after each extraction day, so scoring needs no embeddings")
     if stats.stopped:
-        reset = f"; resets {reset_text(datetime.now(timezone.utc))}" if stats.stopped == "daily_quota" else ""
-        _log(f"STOPPED ({stats.stopped}): {stats.stop_detail} -- finished rows are kept{reset}")
+        _log(f"STOPPED ({stats.stopped}): {stats.stop_detail} -- finished rows are kept")
         return 2
     if weights.apply_line is None:
         _log("  note: apply_line is not set yet (Step 7) -- nothing is promoted until it is, except released jobs")

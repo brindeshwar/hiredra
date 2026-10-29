@@ -22,7 +22,6 @@ def _graph(have=0.90, adj=0.70) -> GraphConfig:
         dimensions=128,
         prefix="",
         inputs_per_request=50,
-        requests_per_minute=100,
         dedup_threshold=0.9,
         have=have,
         adj=adj,

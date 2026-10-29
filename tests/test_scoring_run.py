@@ -14,7 +14,7 @@ import pytest
 import yaml
 
 from hiredra.graph.config import GraphConfig
-from hiredra.graph.embedder import DailyQuotaExceeded
+from hiredra.quota import DailyQuotaExceeded
 from hiredra.graph.index import save_vectors
 from hiredra.graph.lock import RunLock
 from hiredra.profile import parse_skills
@@ -45,7 +45,6 @@ def _graph_cfg(prefix="") -> GraphConfig:
         dimensions=DIM,
         prefix=prefix,
         inputs_per_request=50,
-        requests_per_minute=100,
         dedup_threshold=0.9,
         have=0.90,
         adj=0.70,

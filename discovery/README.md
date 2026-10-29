@@ -1,7 +1,7 @@
 # discovery/ -- company discovery & one-time harvest
 
 **This is a separate, off-to-the-side program. It is NOT part of Hiredra's live apply pipeline**
-(`hiredra/sourcing`, `hiredra/filter.py`, `data/hiredra.db`) and nothing here is imported by it.
+(`hiredra/sourcing`, `hiredra/filter.py`, the `hiredra` database) and nothing here is imported by it.
 
 ## What it does
 
@@ -17,10 +17,13 @@ open-jobs ingest and the CSV/parquet export.
 
 ## Why a separate database
 
-The harvest corpus is large (100k+ jobs expected) and would pollute `data/hiredra.db`, which
-tracks jobs through the live apply stages. Everything here reads/writes only
-`data/discovery/discovery.db` — a completely separate file, same schema (reused via
-`hiredra.storage.db.init_db()`), never touching the canonical one.
+The harvest corpus is large (100k+ jobs expected) and would pollute the `hiredra` database, which
+tracks jobs through the live apply stages. Everything here reads/writes only a separate Postgres
+database on the same server (`HIREDRA_DISCOVERY_DATABASE_URL`, default `hiredra_discovery`), same
+schema (reused via `hiredra.storage.db.init_db()`), never touching the canonical one.
+
+The original 2026-09 harvest ran on SQLite. That corpus is frozen, read-only, at
+`data/archive/discovery-2026-09.db`, with `data/discovery/exports/` beside it.
 
 ## Running it (phases, in order)
 
@@ -38,15 +41,14 @@ Each phase is independent and safe to re-run:
 - `ingest` is idempotent (`upsert_job` dedups by `job_id`).
 - `self-fetch` is the orchestrator's own `--resume` (per-company persist, a `runs` row).
 - `funnel` only ever touches `status='fetched'` rows.
-- `export` refuses to overwrite `raw.parquet` or `discovery.db.bak` if they already exist —
-  those are the frozen corpus. `companies.csv` is the regenerable deliverable and does get
+- `export` refuses to overwrite `raw.parquet` if it already exists — that is the frozen corpus. `companies.csv` is the regenerable deliverable and does get
   overwritten on a fresh export.
 
 ## Outputs (`data/discovery/`, git-ignored, same as `data/`)
 
-- `discovery.db` — the working store during processing.
-- `discovery.db.bak` — the frozen corpus, written once by `export` and never overwritten again.
-  Run any later filter-tuning experiment against a **copy** of this file, never the original.
+- the `hiredra_discovery` database — the working store during processing.
+- `data/archive/discovery-2026-09.db` — the frozen 2026-09 corpus (SQLite, read-only). Run any later
+  filter-tuning experiment against a **copy** of this file, never the original.
 - `exports/raw.parquet` — the same corpus as one portable file (via DuckDB's sqlite scanner).
 - `exports/companies.csv` — the real deliverable: `ats,company,tag` where `tag` is `confirmed`
   (at least one job with a definite India/remote-eligible location match) or `unknown` (kept only

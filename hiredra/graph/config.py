@@ -19,13 +19,11 @@ DEFAULT_CONFIG_PATH = _REPO_ROOT / "config" / "graph.yml"
 
 #: Keys a section may leave out. ``fit.calibration_id`` is written by ``calibrate --write``
 #: (S5.1); until the first calibration there is none.
-_OPTIONAL: dict[str, set[str]] = {"fit": {"calibration_id"}, "embedding": {"provider", "inputs"}}
-PROVIDERS = ("gemini", "local")
+_OPTIONAL: dict[str, set[str]] = {"fit": {"calibration_id"}, "embedding": {"inputs"}}
 INPUTS = ("bare", "described")
 
 _SECTIONS: dict[str, set[str]] = {
-    "embedding": {"provider", "model", "dimensions", "prefix", "inputs", "inputs_per_request"},
-    "limits": {"requests_per_minute", "tokens_per_minute", "requests_per_day", "headroom"},
+    "embedding": {"model", "dimensions", "prefix", "inputs", "inputs_per_request"},
     "dedup": {"threshold", "review_cosine", "auto_cosine"},
     "fit": {"have", "adj", "calibration_id"},
     "harvest": {
@@ -61,44 +59,26 @@ class GraphConfig:
     model: str
     dimensions: int
     prefix: str
-    inputs_per_request: int
-    requests_per_minute: int
+    inputs_per_request: int  # skills per model batch (vectors do not depend on it in float32)
     dedup_threshold: float
     have: float
     adj: float
     harvest: HarvestConfig | None = None
     canary_skills: tuple[str, ...] = ()
     canary_min_cosine: float = 0.999
-    tokens_per_minute: int = 30_000
-    requests_per_day: int = 1_000
-    headroom: float = 0.90
     review_cosine: float = 0.93
     auto_cosine: float = 0.96
     calibration_id: str | None = None  # "step5-<date>" once Step 5 has set have/adj
-    provider: str = "gemini"  # gemini (the API) | local (Qwen3 on the CPU, DB4)
     inputs: str = "bare"  # bare names | described: "name: description" where a description exists (D1.15)
-
-    @property
-    def rpm_budget(self) -> int:
-        """Requests/minute we allow ourselves (Google's limit x headroom). Google
-        counts every input inside a batch as one request."""
-        return int(self.requests_per_minute * self.headroom)
-
-    @property
-    def tpm_budget(self) -> int:
-        return int(self.tokens_per_minute * self.headroom)
-
-    @property
-    def rpd_budget(self) -> int:
-        return int(self.requests_per_day * self.headroom)
 
     @property
     def embed_tag(self) -> str:
         """Version tag stored beside every vector. Covers everything in this
         config that changes what a vector *is*: model, dimensionality, prefix,
         and for described inputs the descriptions file itself, so editing it
-        re-embeds the index. (Provider-side weight drift under the same model id
-        is what the canary check catches -- a config tag can't see that.)"""
+        re-embeds the index. (Drift under the same model id -- new weights, or a
+        library change that alters the numbers -- is what the canary check catches;
+        a config tag can't see that.)"""
         prefix = hashlib.sha256(self.prefix.encode("utf-8")).hexdigest()[:8] if self.prefix else "none"
         tag = f"{self.model}|d{self.dimensions}|prefix={prefix}"
         if self.inputs == "described":
@@ -131,7 +111,7 @@ def load_graph_config(path: Path | str = DEFAULT_CONFIG_PATH) -> GraphConfig:
         if missing:
             raise ValueError(f"graph config: missing key(s) {sorted(missing)} in {section!r}")
 
-    emb, lim, dedup, fit = data["embedding"], data["limits"], data["dedup"], data["fit"]
+    emb, dedup, fit = data["embedding"], data["dedup"], data["fit"]
     hv, gate = data["harvest"], data["gate"]
     harvest = HarvestConfig(
         export_base_url=str(hv["export_base_url"]).rstrip("/"),
@@ -143,16 +123,11 @@ def load_graph_config(path: Path | str = DEFAULT_CONFIG_PATH) -> GraphConfig:
         max_chars=int(hv["max_chars"]),
     )
     cfg = GraphConfig(
-        provider=str(emb.get("provider", "gemini")),
         inputs=str(emb.get("inputs", "bare")),
         model=str(emb["model"]),
         dimensions=int(emb["dimensions"]),
         prefix=str(emb["prefix"] or ""),
         inputs_per_request=int(emb["inputs_per_request"]),
-        requests_per_minute=int(lim["requests_per_minute"]),
-        tokens_per_minute=int(lim["tokens_per_minute"]),
-        requests_per_day=int(lim["requests_per_day"]),
-        headroom=float(lim["headroom"]),
         dedup_threshold=float(dedup["threshold"]),
         review_cosine=float(dedup["review_cosine"]),
         auto_cosine=float(dedup["auto_cosine"]),
@@ -166,25 +141,12 @@ def load_graph_config(path: Path | str = DEFAULT_CONFIG_PATH) -> GraphConfig:
 
     if not cfg.model:
         raise ValueError("graph config: embedding.model must be non-empty")
-    if cfg.provider not in PROVIDERS:
-        raise ValueError(f"graph config: embedding.provider must be one of {PROVIDERS}, got {cfg.provider!r}")
     if cfg.inputs not in INPUTS:
         raise ValueError(f"graph config: embedding.inputs must be one of {INPUTS}, got {cfg.inputs!r}")
     if not 128 <= cfg.dimensions <= 3072:
         raise ValueError(f"graph config: embedding.dimensions must be 128-3072, got {cfg.dimensions}")
     if not 1 <= cfg.inputs_per_request <= 100:
         raise ValueError(f"graph config: embedding.inputs_per_request must be 1-100, got {cfg.inputs_per_request}")
-    if min(cfg.requests_per_minute, cfg.tokens_per_minute, cfg.requests_per_day) < 1:
-        raise ValueError("graph config: limits.requests_per_minute / tokens_per_minute / requests_per_day must be >= 1")
-    if not 0.0 < cfg.headroom <= 1.0:
-        raise ValueError(f"graph config: limits.headroom must be in (0, 1], got {cfg.headroom}")
-    if cfg.inputs_per_request > cfg.rpm_budget:
-        raise ValueError(
-            f"graph config: one request of {cfg.inputs_per_request} inputs can never fit the "
-            f"per-minute budget of {cfg.rpm_budget} (Google counts each input as a request)"
-        )
-    if cfg.rpm_budget > cfg.rpd_budget:
-        raise ValueError("graph config: the per-minute budget cannot exceed the per-day budget")
     if not 0.0 < cfg.dedup_threshold <= cfg.review_cosine <= cfg.auto_cosine <= 1.0:
         raise ValueError(
             "graph config: need 0 < dedup.threshold <= dedup.review_cosine <= dedup.auto_cosine <= 1, got "

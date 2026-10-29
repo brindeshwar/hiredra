@@ -1,4 +1,4 @@
-"""Tests for hiredra.graph.usage: the local daily request counter (build 4.3 fix).
+"""Tests for hiredra.quota.DailyUsage: the local daily request counter (build 4.3 fix, moved in M0.1).
 No network, no key: time is a fake clock."""
 
 from __future__ import annotations
@@ -7,8 +7,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from hiredra.graph.embedder import DailyQuotaExceeded
-from hiredra.graph.usage import DailyBudgetReached, DailyUsage, next_reset, pacific_day, reset_text
+from hiredra.quota import DailyBudgetReached, DailyQuotaExceeded, DailyUsage, next_reset, pacific_day, reset_text
 from hiredra.storage import connect
 
 

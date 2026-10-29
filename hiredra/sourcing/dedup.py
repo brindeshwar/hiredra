@@ -213,15 +213,6 @@ def _merge(current: Job, incoming: Job, on: str, trace: list[MergeTrace]) -> Job
     return winner
 
 
-def collapse(jobs: list[Job], trace: list[MergeTrace] | None = None) -> tuple[list[Job], int]:
-    """Intra-run dedup only (no DB): url pass, then (company, role) pass.
-
-    Public because the backfill sink wants it without a cross-run store. The
-    scoring path uses ``dedup(conn, jobs)`` which adds the cross-run reconcile.
-    """
-    return _collapse(jobs, trace if trace is not None else [])
-
-
 def _collapse(jobs: list[Job], trace: list[MergeTrace]) -> tuple[list[Job], int]:
     collapsed = 0
 

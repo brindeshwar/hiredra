@@ -27,14 +27,14 @@ def test_fresh_begin_opens_a_running_row(conn):
 
 
 def test_fresh_begin_sweeps_stale_same_config_only(conn):
-    # a stale scoring run + a stale backfill run
+    # a stale run of this config + a stale run of another config
     db.open_run(conn, "OLD-scoring", kind="scoring", config_name="scoring.yml")
-    db.open_run(conn, "OLD-backfill", kind="backfill", config_name="backfill.yml")
+    db.open_run(conn, "OLD-wide", kind="scoring", config_name="scoring.wide.yml")
 
     PgRunStore(conn).begin("scoring", "scoring.yml", resume=False)
 
     assert conn.execute("SELECT status FROM runs WHERE run_id='OLD-scoring'").fetchone()[0] == "failed"
-    assert conn.execute("SELECT status FROM runs WHERE run_id='OLD-backfill'").fetchone()[0] == "running"
+    assert conn.execute("SELECT status FROM runs WHERE run_id='OLD-wide'").fetchone()[0] == "running"
 
 
 def test_resume_reuses_unfinished_run_and_does_not_sweep(conn):
