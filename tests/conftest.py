@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import os
+import uuid
+
 import httpx
 import pytest
 
@@ -137,3 +140,53 @@ def _no_real_nvidia_key(monkeypatch):
     overrides a variable that is already set), so a real NvidiaChain can't be built by accident.
     Tests that need one pass a fake client."""
     monkeypatch.setenv("NVIDIA_API_KEY", "")
+
+
+@pytest.fixture()
+def db_url():
+    """A fresh, empty Postgres database for one test, dropped afterwards (D1.12). Skips unless
+    HIREDRA_TEST_DATABASE_URL points at a server the tests may create and drop databases on."""
+    admin_url = os.environ.get("HIREDRA_TEST_DATABASE_URL")
+    if not admin_url:
+        pytest.skip("HIREDRA_TEST_DATABASE_URL not set (needs a Postgres server)")
+    psycopg = pytest.importorskip("psycopg")
+    name = f"hiredra_test_{uuid.uuid4().hex[:12]}"
+    with psycopg.connect(admin_url, autocommit=True) as admin:
+        admin.execute(f'CREATE DATABASE "{name}"')
+    yield psycopg.conninfo.make_conninfo(admin_url, dbname=name)
+    with psycopg.connect(admin_url, autocommit=True) as admin:
+        admin.execute(f'DROP DATABASE "{name}" WITH (FORCE)')
+
+
+@pytest.fixture(scope="session")
+def _pg_session_url():
+    """One migrated scratch database for the whole test session, dropped at the end (D1.12)."""
+    admin_url = os.environ.get("HIREDRA_TEST_DATABASE_URL")
+    if not admin_url:
+        pytest.skip("HIREDRA_TEST_DATABASE_URL not set (needs a Postgres server)")
+    psycopg = pytest.importorskip("psycopg")
+    from hiredra import pg
+
+    name = f"hiredra_test_{uuid.uuid4().hex[:12]}"
+    with psycopg.connect(admin_url, autocommit=True) as admin:
+        admin.execute(f'CREATE DATABASE "{name}"')
+    url = psycopg.conninfo.make_conninfo(admin_url, dbname=name)
+    with pg.connect(url) as conn:
+        pg.migrate(conn)
+    yield url
+    with psycopg.connect(admin_url, autocommit=True) as admin:
+        admin.execute(f'DROP DATABASE "{name}" WITH (FORCE)')
+
+
+@pytest.fixture()
+def pg_url(_pg_session_url):
+    """The session database, emptied first: every table but schema_migrations truncated, identities restarted.
+    Use it wherever a test needs a store (``hiredra.storage.connect(pg_url)``, or ``--db pg_url`` for a CLI)."""
+    import psycopg
+
+    with psycopg.connect(_pg_session_url, autocommit=True) as conn:
+        tables = [r[0] for r in conn.execute(
+            "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> 'schema_migrations'"
+        )]  # fmt: skip
+        conn.execute(f"TRUNCATE {', '.join(tables)} RESTART IDENTITY CASCADE")
+    return _pg_session_url

@@ -1,16 +1,13 @@
-"""SL1: schema v5 (company_slug, list_tag, extraction_version), the public board_url,
-provenance written by the sink, liveness rebuilding a board from the stored slug, and the
-backfill for rows stored before v5."""
+"""SL1: the public board_url, provenance written by the sink (a job's board, which holds the slug and the
+list tag since the move to Postgres), and liveness rebuilding a board from the stored slug."""
 
 from __future__ import annotations
 
 import pytest
 
 from hiredra import liveness
-from hiredra.sourcing.__main__ import main as sourcing_main
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.orchestrator import run
-from hiredra.sourcing.persist import backfill_slugs
 from hiredra.sourcing.provider import CompanyEntry, company_slug
 from hiredra.sourcing.providers.ashby import AshbyProvider
 from hiredra.sourcing.providers.greenhouse import GreenhouseProvider
@@ -18,21 +15,16 @@ from hiredra.sourcing.providers.lever import LeverProvider
 from hiredra.sourcing.sink import ScoringSink
 from hiredra.storage import db
 from tests.test_liveness import _FakeLivenessProvider, _filtered_job
-from tests.test_migration_v4 import _make_v3_db
 from tests.test_orchestrator import FakeJobSpySource, FakeProvider, FakeRunStore, RecordingSink, _config
 
-_V5_COLS = {"company_slug", "list_tag", "extraction_version"}
 GH, LEVER, ASHBY = GreenhouseProvider(), LeverProvider(), AshbyProvider()
 
 
-def _cols(conn, table="jobs") -> set[str]:
-    return {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
-
-
 @pytest.fixture()
-def conn():
-    c = db.connect(":memory:")
+def conn(pg_url):
+    c = db.connect(pg_url)
     db.init_db(c)
+    db.open_run(c, "R1", kind="scoring", config_name=None)  # jobs.first_seen_run references runs
     yield c
     c.close()
 
@@ -48,46 +40,6 @@ def _store(conn, job_id, *, source="greenhouse", url=None, company="Acme"):
             "source": source,
         },
     )
-
-
-# ── migration v4 -> v5 ─────────────────────────────────────────────────────
-def _make_v4_db(path):
-    conn = _make_v3_db(path)
-    db._migrate_v4(conn)
-    conn.execute("PRAGMA user_version = 4")
-    conn.commit()
-    return conn
-
-
-def test_v4_to_v5_adds_columns_and_keeps_every_row(tmp_path):
-    path = tmp_path / "v4.db"
-    _make_v4_db(path).close()
-
-    conn = db.connect(path)
-    db.init_db(conn)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == db.SCHEMA_VERSION  # v4 -> v5 -> v6 in one init_db
-    assert _V5_COLS <= _cols(conn)
-    assert conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 2
-    assert conn.execute("SELECT COUNT(*) FROM job_events").fetchone()[0] == 3
-    row = db.get_job(conn, "j1")
-    assert row["status"] == "extracted" and row["company_slug"] is None and row["list_tag"] is None
-    assert conn.execute("PRAGMA foreign_key_check").fetchall() == []
-    assert conn.execute("PRAGMA integrity_check").fetchone()[0] == "ok"
-
-    db.init_db(conn)  # a re-run is a no-op
-    assert conn.execute("SELECT COUNT(*) FROM jobs").fetchone()[0] == 2
-    conn.close()
-
-
-def test_migrated_jobs_table_matches_a_fresh_one(tmp_path):
-    _make_v4_db(tmp_path / "v4.db").close()
-    migrated = db.connect(tmp_path / "v4.db")
-    db.init_db(migrated)
-    fresh = db.connect(tmp_path / "fresh.db")
-    db.init_db(fresh)
-    assert _cols(migrated) == _cols(fresh)
-    migrated.close()
-    fresh.close()
 
 
 # ── company_slug / board_url ───────────────────────────────────────────────
@@ -133,13 +85,24 @@ def test_eu_lever_host_survives_a_stored_slug():
 
 # ── fill_provenance + the sink ─────────────────────────────────────────────
 def test_fill_provenance_fills_nulls_and_never_overwrites(conn):
-    _store(conn, "a")
-    db.fill_provenance(conn, ["a"], company_slug="acme", list_tag=None)
-    db.fill_provenance(conn, ["a"], company_slug="other", list_tag="unknown")
-    row = db.get_job(conn, "a")
-    assert (row["company_slug"], row["list_tag"]) == ("acme", "unknown")
-    db.fill_provenance(conn, ["a"], company_slug=None, list_tag="confirmed")
-    assert db.get_job(conn, "a")["list_tag"] == "unknown"  # the first tag stays
+    _store(conn, "greenhouse:a")
+    db.fill_provenance(conn, ["greenhouse:a"], company_slug="acme", list_tag=None, provenance="curated")
+    db.fill_provenance(conn, ["greenhouse:a"], company_slug="other", list_tag="unknown")
+    row = db.get_job(conn, "greenhouse:a")
+    assert (row["company_slug"], row["list_tag"]) == ("acme", None)  # the job keeps its first board
+    db.fill_provenance(conn, ["greenhouse:a"], company_slug=None, list_tag="confirmed")  # no slug: nothing to file
+    assert db.get_job(conn, "greenhouse:a")["list_tag"] is None
+    db.fill_provenance(conn, ["greenhouse:a"], company_slug="ACME", list_tag="confirmed")  # same board, any case
+    db.fill_provenance(conn, ["greenhouse:a"], company_slug="acme", list_tag="unknown")
+    assert db.get_job(conn, "greenhouse:a")["list_tag"] == "confirmed"  # a board's first tag stays
+    assert conn.execute("SELECT provenance FROM boards WHERE board = 'acme'").fetchone()[0] == "curated"
+
+
+def test_fill_provenance_gives_jobspy_jobs_no_board(conn):
+    _store(conn, "jobspy-indeed:in-1", source="jobspy-indeed")
+    db.fill_provenance(conn, ["jobspy-indeed:in-1"], company_slug="acme", list_tag="confirmed")
+    assert db.get_job(conn, "jobspy-indeed:in-1")["company_slug"] is None
+    assert conn.execute("SELECT COUNT(*) FROM boards").fetchone()[0] == 0
 
 
 def test_scoring_sink_writes_provenance_on_new_and_reseen_rows(conn):
@@ -189,9 +152,9 @@ def test_orchestrator_passes_slug_and_tag_per_company(tmp_path):
 
 # ── liveness ───────────────────────────────────────────────────────────────
 def test_liveness_hands_the_stored_slug_to_board_url(conn):
-    with_slug = _filtered_job(conn, job_id="a", url="https://acme.com/careers?gh_jid=1")
+    with_slug = _filtered_job(conn, job_id="greenhouse:a", url="https://acme.com/careers?gh_jid=1")
     db.fill_provenance(conn, [with_slug], company_slug="acme", list_tag=None)
-    _filtered_job(conn, job_id="b", url="https://job-boards.greenhouse.io/beta/jobs/2", company="Beta")
+    _filtered_job(conn, job_id="greenhouse:b", url="https://job-boards.greenhouse.io/beta/jobs/2", company="Beta")
     provider = _FakeLivenessProvider("greenhouse")
 
     liveness.check_liveness(conn, ctx=object(), registry=[provider])  # type: ignore[arg-type]
@@ -208,71 +171,3 @@ def test_real_greenhouse_resolves_a_company_domain_job_only_with_the_slug():
 
 
 # ── backfill_slugs ─────────────────────────────────────────────────────────
-def test_backfill_uses_url_then_list_then_roster(conn):
-    _store(conn, "g1", url="https://job-boards.greenhouse.io/acme/jobs/1", company="Acme")
-    _store(conn, "g2", url="https://stripe.com/jobs/x?gh_jid=2", company="Stripe")
-    _store(conn, "g3", url="https://carvana.com/careers?gh_jid=3", company="carvana")
-    _store(conn, "g4", url="https://nowhere.example/job/4", company="Mystery")
-    _store(conn, "j1", source="jobspy-indeed", url="https://indeed.example/1", company="Acme")
-    _store(conn, "g5", url="https://job-boards.greenhouse.io/kept/jobs/5", company="Kept")
-    db.fill_provenance(conn, ["g5"], company_slug="kept", list_tag="unknown")
-    entries = [
-        CompanyEntry(name="Acme", provider="greenhouse", extra={"slug": "acme", "tag": "confirmed"}),
-        CompanyEntry(name="Stripe", provider="greenhouse", extra={"slug": "stripe"}),
-        CompanyEntry(name="Kept", provider="greenhouse", extra={"slug": "kept", "tag": "confirmed"}),
-    ]
-
-    stats = backfill_slugs(conn, entries, roster={("greenhouse", "carvana")})
-
-    def prov(job_id):
-        row = db.get_job(conn, job_id)
-        return row["company_slug"], row["list_tag"]
-
-    assert prov("g1") == ("acme", "confirmed")
-    assert prov("g2") == ("stripe", None)
-    assert prov("g3") == ("carvana", None)
-    assert prov("g4") == (None, None)
-    assert prov("j1") == (None, None)  # JobSpy rows are left alone
-    assert prov("g5") == ("kept", "unknown")  # a stored tag is never overwritten
-    assert (stats.rows, stats.from_url, stats.from_list, stats.from_roster, stats.unresolved, stats.tagged) == (
-        4,
-        1,
-        1,
-        1,
-        1,
-        1,
-    )
-    assert backfill_slugs(conn, entries, roster={("greenhouse", "carvana")}).rows == 3  # only the tagless ones
-
-
-def test_backfill_list_match_must_be_unambiguous(conn):
-    _store(conn, "g1", url="https://acme.com/careers?gh_jid=1", company="Acme")
-    entries = [
-        CompanyEntry(name="Acme", provider="greenhouse", extra={"slug": "acme"}),
-        CompanyEntry(name="Acme", provider="greenhouse", extra={"slug": "acme-eu"}),
-    ]
-    assert backfill_slugs(conn, entries).unresolved == 1
-    assert db.get_job(conn, "g1")["company_slug"] is None
-
-
-def test_backfill_cli_runs_without_lists_or_roster(tmp_path, capsys):
-    path = tmp_path / "h.db"
-    c = db.connect(path)
-    db.init_db(c)
-    _store(c, "g1", url="https://job-boards.greenhouse.io/acme/jobs/1")
-    c.close()
-
-    code = sourcing_main(
-        [
-            "backfill-slugs",
-            "--db",
-            str(path),
-            "--lists",
-            str(tmp_path / "none.yml"),
-            "--roster",
-            str(tmp_path / "none.json"),
-        ]
-    )
-    out = capsys.readouterr().out
-    assert code == 0
-    assert "url=1" in out and "ATS rows with a slug: 1/1 (100.0%)" in out

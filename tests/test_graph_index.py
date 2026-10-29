@@ -7,7 +7,15 @@ import pytest
 
 from hiredra.graph.config import GraphConfig
 from hiredra.graph.index import Skill, blob_to_vector, load_skills, save_vectors, vector_to_blob
-from hiredra.storage import add_alias, add_market_skill, connect, get_skill_vocab, init_db, merge_skill
+from hiredra.storage import (
+    add_alias,
+    add_market_skill,
+    connect,
+    get_skill_vocab,
+    init_db,
+    merge_skill,
+    set_skill_vectors,
+)
 
 DIM = 8
 
@@ -33,8 +41,8 @@ def _unit_rows(n: int, seed: int = 0) -> np.ndarray:
 
 
 @pytest.fixture()
-def conn():
-    c = connect(":memory:")
+def conn(pg_url):
+    c = connect(pg_url)
     init_db(c)
     yield c
     c.close()
@@ -107,9 +115,9 @@ def test_load_skills_attaches_aliases_mine_level_and_edges(conn):
         add_market_skill(conn, n)
     merge_skill(conn, "fast api", "fastapi")
     add_alias(conn, "fast-api", "fastapi")
-    conn.execute("UPDATE skill_vocab SET mine=1, level='production', source='profile' WHERE name='python'")
+    conn.execute("UPDATE skill_vocab SET mine=true, level='production', source='profile' WHERE name='python'")
     conn.execute(
-        "UPDATE skill_vocab SET edges = ? WHERE name = 'fastapi'",
+        "UPDATE skill_vocab SET edges = %s WHERE name = 'fastapi'",
         ('[{"type": "used-in", "target": "python"}]',),
     )
     conn.commit()
@@ -147,11 +155,7 @@ def test_changing_the_prefix_makes_every_vector_stale(conn):
 def test_a_corrupt_blob_under_a_matching_tag_raises_rather_than_being_guessed(conn):
     cfg = _cfg()
     add_market_skill(conn, "a")
-    conn.execute(
-        "UPDATE skill_vocab SET vector = ?, embed_tag = ? WHERE name = 'a'",
-        (b"\x00" * 5, cfg.embed_tag),
-    )
-    conn.commit()
+    set_skill_vectors(conn, [("a", b"\x00" * 20)], cfg.embed_tag)  # 5 floats under a tag that says 8
     with pytest.raises(ValueError, match="expected"):
         load_skills(conn, cfg)
 

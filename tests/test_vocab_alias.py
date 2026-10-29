@@ -14,14 +14,14 @@ from hiredra.storage import (
 )
 
 
-def _db():
-    conn = connect(":memory:")
+def _db(pg_url):
+    conn = connect(pg_url)
     init_db(conn)
     return conn
 
 
-def test_a_merged_spelling_resolves_to_its_canonical_node():
-    conn = _db()
+def test_a_merged_spelling_resolves_to_its_canonical_node(pg_url):
+    conn = _db(pg_url)
     touch_skill_vocab(conn, "fastapi")
     touch_skill_vocab(conn, "fast api")
     merge_skill(conn, "fast api", "fastapi")  # fastapi seen_count is now 2
@@ -32,8 +32,8 @@ def test_a_merged_spelling_resolves_to_its_canonical_node():
     conn.close()
 
 
-def test_a_market_node_seen_in_a_jd_is_bumped_not_duplicated():
-    conn = _db()
+def test_a_market_node_seen_in_a_jd_is_bumped_not_duplicated(pg_url):
+    conn = _db(pg_url)
     add_market_skill(conn, "kafka")
     assert vocab.resolve_skill(conn, "Kafka") == "kafka"
     row = get_skill_vocab(conn, "kafka")
@@ -41,19 +41,19 @@ def test_a_market_node_seen_in_a_jd_is_bumped_not_duplicated():
     conn.close()
 
 
-def test_a_new_unaliased_name_is_still_added_as_a_jd_node():
-    conn = _db()
+def test_a_new_unaliased_name_is_still_added_as_a_jd_node(pg_url):
+    conn = _db(pg_url)
     assert vocab.resolve_skill(conn, "Kubernetes") == "kubernetes"
     row = get_skill_vocab(conn, "kubernetes")
     assert row["seen_count"] == 1 and row["source"] == "jd"
     conn.close()
 
 
-def test_extraction_time_resolution_never_needs_an_embedder():
+def test_extraction_time_resolution_never_needs_an_embedder(pg_url):
     """resolve_skill takes no embedder and near-duplicate detection stays a
     deferred, between-runs step: two spellings are two nodes until a reviewed
     merge is applied."""
-    conn = _db()
+    conn = _db(pg_url)
     vocab.resolve_skill(conn, "fast api")
     assert vocab.resolve_skill(conn, "fastapi") == "fastapi"
     assert get_skill_vocab(conn, "fast api") is not None

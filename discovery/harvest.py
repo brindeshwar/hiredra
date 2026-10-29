@@ -1,7 +1,10 @@
 """Company discovery + one-time harvest -- a separate, off-to-the-side program.
 
 NOT part of the live apply pipeline. See discovery/README.md. Writes to its own
-database (data/discovery/discovery.db), never touches data/hiredra.db.
+database, never Hiredra's: a separate Postgres database on the same server
+(``HIREDRA_DISCOVERY_DATABASE_URL``, default ``hiredra_discovery``, created on first
+use). The 2026-09 corpus is frozen in data/discovery/ (discovery.db, the SQLite file of
+the original harvest, and exports/).
 
 Reuses the existing sourcing/filter machinery unchanged: the ATS providers,
 the http layer (pacing + cooldowns), the orchestrator (runs table + --resume)
@@ -14,20 +17,22 @@ parquet export -- no new provider, dedup, or funnel logic.
     python -m discovery.harvest ingest       # pull + ingest open-jobs' 3 ATS parquet
     python -m discovery.harvest self-fetch   # fetch the not-covered companies live
     python -m discovery.harvest funnel       # run the existing 3-stage funnel
-    python -m discovery.harvest export       # companies.csv + raw.parquet + db backup
+    python -m discovery.harvest export       # companies.csv + raw.parquet
 """
 
 from __future__ import annotations
 
 import argparse
 import json
-import shutil
+import os
 import sys
 import urllib.request
 from pathlib import Path
 from urllib.parse import urlsplit
 
 import duckdb
+import pandas
+import psycopg
 
 from hiredra.filter import load_filter_config, run_funnel
 from hiredra.sourcing._html import html_to_text
@@ -40,12 +45,12 @@ from hiredra.sourcing.providers._common import iso_date
 from hiredra.sourcing.providers.ashby import _CAREERS_RE as _ASHBY_RE
 from hiredra.sourcing.providers.greenhouse import _SLUG_RE as _GH_RE
 from hiredra.sourcing.providers.lever import _CAREERS_RE as _LEVER_HOST_RE
-from hiredra.sourcing.runstore import SqliteRunStore
+from hiredra.sourcing.runstore import PgRunStore
 from hiredra.sourcing.sink import ScoringSink
+from hiredra import pg
 from hiredra.storage import connect, init_db
 
 DATA_DIR = Path("data/discovery")
-DB_PATH = DATA_DIR / "discovery.db"
 NOT_COVERED_PATH = DATA_DIR / "not_covered.yml"
 POOL_SUMMARY_PATH = DATA_DIR / "pool_summary.json"
 EXPORT_DIR = DATA_DIR / "exports"
@@ -55,6 +60,20 @@ OPENJOBS_BASE = "https://backend.dehnbostele.workers.dev"
 OPENJOBS_SLUGS = Path("reference/open-jobs/slugs.json")
 OPENJOBS_V2 = Path("reference/OpenJobs/data/companies_v2.json")
 UA = {"User-Agent": "hiredra-discovery/0.1 (one-time company harvest, github.com/hiredra)"}
+
+
+def _discovery_url() -> str:
+    """Discovery's own database: ``HIREDRA_DISCOVERY_DATABASE_URL``, else ``hiredra_discovery`` on the server
+    ``HIREDRA_DATABASE_URL`` names. Created (empty) on first use; ``init_db`` then migrates it."""
+    url = os.environ.get("HIREDRA_DISCOVERY_DATABASE_URL")
+    if url:
+        return url
+    url = psycopg.conninfo.make_conninfo(pg.database_url(), dbname="hiredra_discovery")
+    admin = psycopg.conninfo.make_conninfo(url, dbname="postgres")
+    with psycopg.connect(admin, autocommit=True) as conn:
+        if not conn.execute("SELECT 1 FROM pg_database WHERE datname = 'hiredra_discovery'").fetchone():
+            conn.execute('CREATE DATABASE "hiredra_discovery"')
+    return url
 
 
 def _q(value: str) -> str:
@@ -212,7 +231,7 @@ def _ingest_parquet(conn, path: Path, ats: str) -> None:
 
 def cmd_ingest(args: argparse.Namespace) -> int:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = connect(str(DB_PATH))
+    conn = connect(_discovery_url())
     init_db(conn)
     date = args.date or _latest_export_date()
     print(f"open-jobs export date: {date}")
@@ -243,7 +262,7 @@ class _NoJobSpy:
 def cmd_self_fetch(_args: argparse.Namespace) -> int:
     if not NOT_COVERED_PATH.exists():
         sys.exit("run `pool` first")
-    conn = connect(str(DB_PATH))
+    conn = connect(_discovery_url())
     init_db(conn)
     try:
         config = RunConfig(
@@ -257,7 +276,7 @@ def cmd_self_fetch(_args: argparse.Namespace) -> int:
         report = run_orchestrator(
             config,
             sink_factory=lambda run_id: ScoringSink(conn, run_id),
-            run_store=SqliteRunStore(conn),
+            run_store=PgRunStore(conn),
             jobspy_source=_NoJobSpy(),
             resume=True,  # safe when nothing is unfinished; resumes cleanly if interrupted
         )
@@ -275,7 +294,7 @@ def cmd_self_fetch(_args: argparse.Namespace) -> int:
 
 # ── phase: funnel ────────────────────────────────────────────────────────────
 def cmd_funnel(_args: argparse.Namespace) -> int:
-    conn = connect(str(DB_PATH))
+    conn = connect(_discovery_url())
     init_db(conn)
     try:
         config = load_filter_config("config/filters.yml")
@@ -289,15 +308,25 @@ def cmd_funnel(_args: argparse.Namespace) -> int:
 # ── phase: export ────────────────────────────────────────────────────────────
 def cmd_export(_args: argparse.Namespace) -> int:
     EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-    conn = connect(str(DB_PATH))
+    conn = connect(_discovery_url())
     try:
-        jobs = conn.execute("select job_id, company, source, url, status, status_detail from jobs").fetchall()
+        jobs = conn.execute(
+            "select job_key, company, source, url, status, status_detail from jobs order by id"
+        ).fetchall()
         unknown_ids = {
-            row["job_id"]
+            row["job_key"]
             for row in conn.execute(
-                "select distinct job_id from job_events where kind='note' and detail like 'location:%'"
+                "select distinct j.job_key from job_events e join jobs j on j.id = e.job_id "
+                "where e.kind = 'note' and e.detail like 'location:%'"
             )
         }
+        columns = [r[0] for r in conn.execute(
+            "select column_name from information_schema.columns where table_name = 'jobs' "
+            "and column_name not in ('id', 'search') order by ordinal_position"
+        )]  # fmt: skip
+        raw = pandas.DataFrame(
+            conn.execute(f"select {', '.join(columns)} from jobs order by id").fetchall(), columns=columns
+        )
     finally:
         conn.close()
 
@@ -341,17 +370,10 @@ def cmd_export(_args: argparse.Namespace) -> int:
     if raw_parquet.exists():
         sys.exit(f"{raw_parquet} already exists -- refusing to overwrite the frozen export")
     db = duckdb.connect()
-    db.execute("INSTALL sqlite; LOAD sqlite;")
-    db.execute(f"ATTACH '{DB_PATH.as_posix()}' AS src (TYPE sqlite)")
-    db.execute(f"COPY (SELECT * FROM src.jobs) TO '{raw_parquet.as_posix()}' (FORMAT PARQUET)")
+    db.register("raw", raw)
+    db.execute(f"COPY (SELECT * FROM raw) TO '{raw_parquet.as_posix()}' (FORMAT PARQUET)")
     print(f"wrote {raw_parquet}")
-
-    backup = DATA_DIR / "discovery.db.bak"
-    if backup.exists():
-        print(f"{backup} already exists -- leaving it (the frozen backup is not overwritten)")
-    else:
-        shutil.copy(DB_PATH, backup)
-        print(f"backed up {DB_PATH} -> {backup}")
+    print("back the database up with pg_dump (the frozen 2026-09 corpus stays in data/discovery/discovery.db)")
     return 0
 
 
@@ -372,7 +394,7 @@ def main(argv: list[str] | None = None) -> int:
     p_funnel = sub.add_parser("funnel", help="run the existing 3-stage funnel")
     p_funnel.set_defaults(func=cmd_funnel)
 
-    p_export = sub.add_parser("export", help="companies.csv + raw.parquet + db backup")
+    p_export = sub.add_parser("export", help="companies.csv + raw.parquet")
     p_export.set_defaults(func=cmd_export)
 
     args = parser.parse_args(argv)

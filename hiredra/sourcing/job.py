@@ -50,7 +50,7 @@ class Job:
 
     ``years_required`` is ``None`` when unknown and ``0`` only for an explicitly
     zero-experience role; the two are never conflated. ``is_remote`` is a real
-    ``bool`` here (``to_dict`` maps it to ``0/1/None`` for SQLite).
+    ``bool`` (or ``None``), stored as a Postgres boolean.
     """
 
     # required
@@ -96,24 +96,17 @@ class Job:
 
     # ─────────────────────────────────────────────────────────────────────
     def to_dict(self) -> dict[str, Any]:
-        """Plain dict for ``hiredra.storage.upsert_job``.
-
-        ``is_remote`` is converted from ``bool | None`` to ``1 / 0 / None``
-        (SQLite has no boolean type).
-        """
-        row = dataclasses.asdict(self)
-        if row["is_remote"] is not None:
-            row["is_remote"] = int(row["is_remote"])
-        return row
+        """Plain dict for ``hiredra.storage.upsert_job``."""
+        return dataclasses.asdict(self)
 
     @classmethod
     def from_row(cls, row: Mapping[str, Any]) -> Job:
         """Rebuild a ``Job`` from a storage row (e.g. ``storage.get_job``).
 
         Extra columns (``status``, timestamps, ``score`` ...) are ignored.
-        ``is_remote`` is coerced back from ``0/1`` to ``bool``.
+        ``date_posted`` (a ``date`` in the store) comes back as its ISO string.
         """
         data = {k: row[k] for k in FIELDS if k in row}
-        if data.get("is_remote") is not None:
-            data["is_remote"] = bool(data["is_remote"])
+        if data.get("date_posted") is not None and not isinstance(data["date_posted"], str):
+            data["date_posted"] = data["date_posted"].isoformat()
         return cls(**data)

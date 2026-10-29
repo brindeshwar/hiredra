@@ -11,7 +11,6 @@ nearest-skill query is a plain dot product.
 
 from __future__ import annotations
 
-import json
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
@@ -85,7 +84,7 @@ def load_skills(conn, cfg: GraphConfig) -> list[Skill]:
                 mine=bool(row["mine"]),
                 level=row["level"],
                 vector=blob_to_vector(blob, cfg.dimensions) if current else None,
-                edges=tuple(json.loads(row["edges"] or "[]")),
+                edges=tuple(row["edges"] or ()),
             )
         )
     return skills

@@ -23,9 +23,9 @@ import re
 from datetime import datetime, timezone
 from pathlib import Path
 
-from hiredra.storage import DEFAULT_DB_PATH
+from hiredra.storage import DATA_DIR, get_job
 
-CALIBRATION_DIR = Path(DEFAULT_DB_PATH).parent / "calibration"
+CALIBRATION_DIR = DATA_DIR / "calibration"
 SHEET_PATH = CALIBRATION_DIR / "job_ratings_sheet.md"
 KEY_PATH = CALIBRATION_DIR / "job_ratings_key.json"
 RATINGS_PATH = CALIBRATION_DIR / "job_ratings.csv"
@@ -56,7 +56,7 @@ class SheetError(ValueError):
 def sample(conn, *, seed: int = SEED) -> list[dict]:
     """30 jobs across the full score range: ``{job_id, split, sitting, score_at_sampling}`` in sheet order."""
     pool = conn.execute(
-        "SELECT job_id, score FROM jobs WHERE status = 'scored' AND review_reason IS NULL ORDER BY score, job_id"
+        "SELECT job_key, score FROM jobs WHERE status = 'scored' AND review_reason IS NULL ORDER BY score, job_key"
     ).fetchall()
     if len(pool) < STRATA * PER_STRATUM:
         raise SheetError(f"only {len(pool)} jobs in the rating pool; need at least {STRATA * PER_STRATUM}")
@@ -75,7 +75,7 @@ def sample(conn, *, seed: int = SEED) -> list[dict]:
 
 
 def _skills(job: dict) -> str:
-    names = sorted({s["name"] for s in json.loads(job["skills"] or "[]")})
+    names = sorted({s["name"] for s in job["skills"] or []})
     return ", ".join(names) or "(none extracted)"
 
 
@@ -99,7 +99,7 @@ def render_sheet(conn, picks: list[dict]) -> str:
     for n, p in enumerate(picks, 1):
         if n in (1, SITTING_SIZE + 1):
             out += [f"## Sitting {p['sitting']}", ""]
-        job = dict(conn.execute("SELECT * FROM jobs WHERE job_id = ?", (p["job_id"],)).fetchone())
+        job = get_job(conn, p["job_id"])
         desc = (job["description"] or "").strip()
         out += [
             f"### J{n:02d}. {job['title']}",

@@ -6,9 +6,9 @@ same code; the graph modules re-export these names, so nothing that imports them
 * Failure classes: ``classify_failure`` tells an expected stop (daily quota, transient trouble,
   an API refusal) from a bug. The helpers read Google's ``QuotaFailure`` / ``RetryInfo``
   details through LangChain's wrapper, which re-raises the SDK error as ``__cause__``.
-* ``DailyUsage``: a small local counter for a per-DAY request limit, so a run stops BEFORE
+* ``DailyUsage``: a small counter for a per-DAY request limit, so a run stops BEFORE
   Google's cap instead of after a rejected request. It is ADVISORY; Google is the source of
-  truth. One counter file per metered model (Google meters the model, not the stage). Every
+  truth. One ``api_usage`` row per metered model per day (Google meters the model, not the stage). Every
   ATTEMPT is counted before it is sent, failed ones too, so the count can only run ahead of
   Google's (it fell 50 behind on 2026-10-19 when only successes counted).
 * A "PerDay" 429 label is a claim, not a fact: only a long (>= 10 min) or missing retryDelay
@@ -22,12 +22,9 @@ parallel or async fan-out to a Google call.
 
 from __future__ import annotations
 
-import json
-import os
 import random
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import httpx
@@ -212,38 +209,36 @@ def reset_text(now: datetime) -> str:
 
 
 class DailyUsage:
-    """Requests sent today (Pacific day), against a budget. One file per metered model."""
+    """Requests sent today (Pacific day), against a budget: one ``api_usage`` row per metered model per day (Q5).
+
+    The count lives in Postgres since plan unit DB3b, so two processes add to it atomically. ``provider`` and
+    ``model`` name the meter (Google meters the model, not the stage)."""
 
     def __init__(
         self,
         budget: int,
-        path: Path | str,
+        conn,
+        provider: str,
+        model: str,
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ):
         self.budget = budget
-        self.path = Path(path)
+        self.conn = conn
+        self.provider = provider
+        self.model = model
         self._now = now
 
     # -- reading ---------------------------------------------------------------
     def _today(self) -> dict:
-        """Today's record. A missing, unreadable or other-day file means a fresh day."""
+        """Today's record. No row for today means a fresh day."""
         day = pacific_day(self._now())
-        try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return {"day": day, "requests": 0, "exhausted": False}
-        if not isinstance(data, dict) or data.get("day") != day:
-            return {"day": day, "requests": 0, "exhausted": False}
-        try:
-            requests = max(0, int(data.get("requests") or 0))
-        except (TypeError, ValueError):
-            requests = 0  # a garbled count is treated as none: the counter is advisory, Google enforces the cap
-        return {
-            "day": day,
-            "requests": requests,
-            "exhausted": bool(data.get("exhausted")),
-            "note": data.get("note"),
-        }
+        row = self.conn.execute(
+            "SELECT calls, exhausted_at, note FROM api_usage WHERE provider = %s AND model = %s AND day = %s",
+            (self.provider, self.model, day),
+        ).fetchone()
+        if row is None:
+            return {"day": day, "requests": 0, "exhausted": False, "note": None}
+        return {"day": day, "requests": row[0], "exhausted": row[1] is not None, "note": row[2]}
 
     def used(self) -> int:
         return self._today()["requests"]
@@ -263,12 +258,6 @@ class DailyUsage:
         return f"{rec['requests']} of {self.budget} requests used today ({rec['day']} Pacific); resets {reset_text(self._now())}"
 
     # -- writing ---------------------------------------------------------------
-    def _save(self, rec: dict) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(self.path.suffix + ".tmp")
-        tmp.write_text(json.dumps(rec, indent=1), encoding="utf-8")
-        os.replace(tmp, self.path)  # atomic: a crash never leaves a half-written counter
-
     def reserve(self, n: int) -> None:
         """Check that ``n`` more requests may be sent today. Sends nothing and
         counts nothing; raises before any API call if they may not."""
@@ -284,19 +273,49 @@ class DailyUsage:
             )
 
     def record(self, n: int) -> None:
-        """Count ``n`` requests that Google accepted."""
-        rec = self._today()
-        rec["requests"] += n
-        self._save(rec)
+        """Count ``n`` requests (added in one statement: two processes never lose each other's count)."""
+        self.conn.execute(
+            "INSERT INTO api_usage (provider, model, day, calls) VALUES (%s, %s, %s, %s) "
+            "ON CONFLICT (provider, model, day) DO UPDATE SET calls = api_usage.calls + excluded.calls",
+            (self.provider, self.model, pacific_day(self._now()), n),
+        )
 
     def mark_exhausted(self, note: str | None = None) -> None:
         """Google reported the daily quota is gone: refuse further calls today."""
-        rec = self._today()
-        rec["exhausted"] = True
-        rec["exhausted_at"] = self._now().isoformat(timespec="seconds")
-        if note:
-            rec["note"] = note
-        self._save(rec)
+        self.conn.execute(
+            "INSERT INTO api_usage (provider, model, day, exhausted_at, note) VALUES (%s, %s, %s, %s, %s) "
+            "ON CONFLICT (provider, model, day) DO UPDATE SET exhausted_at = excluded.exhausted_at, "
+            "note = COALESCE(excluded.note, api_usage.note)",
+            (self.provider, self.model, pacific_day(self._now()), self._now(), note),
+        )
+
+
+class Unmetered:
+    """``DailyUsage``'s interface for a model with no daily quota (the local embedder): it never refuses and
+    counts nothing, so a local re-embed of the whole index is never cut at Google's 900."""
+
+    budget = 10**9
+
+    def used(self) -> int:
+        return 0
+
+    def exhausted(self) -> bool:
+        return False
+
+    def remaining(self) -> int:
+        return self.budget
+
+    def summary(self) -> str:
+        return "local model: no daily quota"
+
+    def reserve(self, n: int) -> None:
+        return None
+
+    def record(self, n: int) -> None:
+        return None
+
+    def mark_exhausted(self, note: str | None = None) -> None:
+        return None
 
 
 def jittered_wait(retry_state, rng: Callable[[], float] = random.random) -> float:

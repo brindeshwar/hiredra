@@ -1,6 +1,6 @@
-"""``python -m hiredra.storage <init|status> [--db PATH]``
+"""``python -m hiredra.storage <init|status> [--db URL]``
 
-init    create (or migrate) the SQLite DB file — idempotent
+init    apply every pending migration (the same as ``python -m hiredra.pg migrate``) — idempotent
 status  print the funnel snapshot (job count per status)
 """
 
@@ -15,18 +15,14 @@ from hiredra.storage import db
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m hiredra.storage")
     parser.add_argument("command", choices=["init", "status"])
-    parser.add_argument(
-        "--db",
-        default=str(db.DEFAULT_DB_PATH),
-        help=f"SQLite file path (default: {db.DEFAULT_DB_PATH})",
-    )
+    parser.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL from .env)")
     args = parser.parse_args(argv)
 
     conn = db.connect(args.db)
     try:
         if args.command == "init":
             db.init_db(conn)
-            print(f"initialized {args.db} (schema v{db.SCHEMA_VERSION})")
+            print("database is up to date (every migration applied)")
         elif args.command == "status":
             counts = db.status_counts(conn)
             width = max(len(s) for s in db.STATUSES)

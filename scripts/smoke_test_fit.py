@@ -1,5 +1,5 @@
 """Real-data smoke test for hiredra.graph.fit -- NOT a pytest test (kept outside
-tests/ because it reads the real `data/hiredra.db`, not a hermetic fixture).
+tests/ because it reads the real database, not a hermetic fixture).
 
 Makes ZERO API calls. It reuses the already-stored vectors for the nine
 skill names in docs/scoring.md sec 4's worked example -- they are real
@@ -47,7 +47,7 @@ def _unavailable_embedder(texts):
 
 def main() -> int:
     cfg = load_graph_config()
-    conn = connect("data/hiredra.db")
+    conn = connect()
     try:
         skills = {s.name: s for s in load_skills(conn, cfg)}
     finally:
@@ -55,7 +55,7 @@ def main() -> int:
 
     missing = [n for n in OWNER_SKILLS + JD_SKILLS if n not in skills or skills[n].vector is None]
     if missing:
-        print(f"SKIPPED: these names are not currently-embedded nodes in data/hiredra.db: {missing}")
+        print(f"SKIPPED: these names are not currently-embedded nodes in the database: {missing}")
         print("Run the reset-day runbook (status/consistency/sync) first.")
         return 1
 

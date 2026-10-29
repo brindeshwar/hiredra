@@ -61,12 +61,13 @@ from hiredra.lock import LockHeld, RunLock
 from hiredra.nvidia import NvidiaChain
 from hiredra.quota import DailyQuotaExceeded, DailyUsage, classify_failure, jittered_wait, reset_text
 from hiredra.storage import (
-    DEFAULT_DB_PATH,
     add_note,
     connect,
     init_db,
     iter_jobs,
+    select_jobs,
     set_extraction,
+    set_skills,
     set_status,
 )
 
@@ -76,10 +77,9 @@ DEFAULT_FOOTERS_PATH = _REPO_ROOT / "config" / "boilerplate_footers.json"
 
 MODEL_NAME = "gemini-3.5-flash-lite"
 
-#: One counter per metered model: every flash-lite agent shares it (Google meters the model).
-DEFAULT_USAGE_PATH = _REPO_ROOT / "data" / "usage" / f"{MODEL_NAME}.json"
-#: Held by every process that spends flash-lite quota (extraction now, tailoring later).
-DEFAULT_LOCK_PATH = _REPO_ROOT / "data" / "llm.lock"
+#: Held by every process that spends flash-lite quota (extraction now, tailoring later). The daily counter is one
+#: ``api_usage`` row per metered model, shared by every flash-lite agent (Google meters the model).
+LOCK_NAME = "llm"
 
 #: This many schema errors in a row means a systematic problem, not one odd JD: stop.
 SCHEMA_ERROR_STREAK = 3
@@ -547,7 +547,7 @@ def run_extraction(
             set_extraction(
                 conn,
                 job_id,
-                skills="[]",
+                skills=[],
                 domain_bucket=None,
                 legitimacy=None,
                 extraction_confidence="low",
@@ -596,7 +596,7 @@ def run_extraction(
         set_extraction(
             conn,
             job_id,
-            skills=json.dumps(skills),
+            skills=skills,
             domain_bucket=result.domain_bucket,
             legitimacy=result.legitimacy,
             extraction_confidence=confidence,
@@ -625,11 +625,11 @@ def stale_jobs(conn, config: ExtractionConfig | None = None) -> dict[str | None,
     groups: dict[str | None, list[dict]] = {}
     stamps = current_stamps(config)
     rows = conn.execute(
-        "SELECT job_id, company, title, extraction_version FROM jobs "
+        "SELECT job_key AS job_id, company, title, extraction_version FROM jobs "
         "WHERE status IN ('extracted', 'scored') "
-        f"AND (extraction_version IS NULL OR extraction_version NOT IN ({', '.join('?' for _ in stamps)})) "
-        "ORDER BY extraction_version, job_id",
-        stamps,
+        "AND (extraction_version IS NULL OR NOT extraction_version = ANY(%s)) "
+        "ORDER BY extraction_version, job_key",
+        (stamps,),
     )
     for row in rows:
         groups.setdefault(row["extraction_version"], []).append(dict(row))
@@ -643,14 +643,10 @@ def reguard_jobs(conn, config: ExtractionConfig) -> dict[str, int]:
     guarded stamp. Scored jobs are left alone (their scores would go stale silently)."""
     unguarded, guarded = extraction_version(), extraction_version(config)
     counts = {"jobs": 0, "skills_dropped": 0, "now_low_confidence": 0}
-    rows = conn.execute(
-        "SELECT job_id, company, description, skills, extraction_confidence FROM jobs "
-        "WHERE status = 'extracted' AND extraction_version = ?",
-        (unguarded,),
-    ).fetchall()
+    rows = select_jobs(conn, "j.status = 'extracted' AND j.extraction_version = %s", (unguarded,), "j.job_key")
     for row in rows:
         clean_text, _ = preprocess(row["description"] or "", row["company"], config)
-        items = [SkillItem(name=s["name"], requirement=s["requirement"]) for s in json.loads(row["skills"] or "[]")]
+        items = [SkillItem(name=s["name"], requirement=s["requirement"]) for s in row["skills"] or []]
         kept, dropped = apply_guards(items, clean_text, config)
         confidence = row["extraction_confidence"]
         if not kept and items and confidence == "high":
@@ -663,16 +659,13 @@ def reguard_jobs(conn, config: ExtractionConfig) -> dict[str, int]:
                 "extraction: guards dropped " + "; ".join(f"{k}: {', '.join(v)}" for k, v in dropped.items()),
             )
             counts["skills_dropped"] += sum(len(v) for v in dropped.values())
-        with conn:
-            conn.execute(
-                "UPDATE jobs SET skills = ?, extraction_confidence = ?, extraction_version = ? WHERE job_id = ?",
-                (
-                    json.dumps([{"name": i.name, "requirement": i.requirement} for i in kept]),
-                    confidence,
-                    guarded,
-                    row["job_id"],
-                ),
-            )
+        set_skills(
+            conn,
+            row["job_id"],
+            [{"name": i.name, "requirement": i.requirement} for i in kept],
+            extraction_confidence=confidence,
+            extraction_version=guarded,
+        )
         counts["jobs"] += 1
     return counts
 
@@ -688,21 +681,19 @@ _STOP_HINTS = {
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m hiredra.extraction")
-    parser.add_argument("--db", default=str(DEFAULT_DB_PATH))
+    parser.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
     parser.add_argument("--config", default=str(DEFAULT_CONFIG_PATH))
     parser.add_argument("--limit", type=int, default=None, help="process at most N filtered jobs")
     parser.add_argument("--stale", action="store_true", help="list jobs extracted with an older stamp (no API call)")
     parser.add_argument(
         "--reguard", action="store_true", help="apply the current guards to jobs extracted without them (no API call)"
     )
-    parser.add_argument("--usage-path", default=str(DEFAULT_USAGE_PATH))
     parser.add_argument(
         "--provider",
         choices=["auto", "gemini", "nvidia"],
         default="auto",
         help="auto: Gemini, then the configured fallback when Gemini's daily budget is spent",
     )
-    parser.add_argument("--lock-path", default=str(DEFAULT_LOCK_PATH))
     args = parser.parse_args(argv)
 
     try:
@@ -748,16 +739,16 @@ def main(argv: list[str] | None = None) -> int:
         print("config error: no fallback.model set in config/extraction.yml", file=sys.stderr)
         return 1
 
-    results: list[tuple[str, ExtractionStats, DailyUsage]] = []
+    results: list[tuple[str, ExtractionStats, str]] = []  # (stage, stats, today's usage, read while connected)
     try:
-        with RunLock(args.lock_path, what="extraction", kind="flash-lite"):
+        with RunLock(LOCK_NAME, what="extraction", kind="flash-lite", url=args.db):
             conn = connect(args.db)
             try:
                 init_db(conn)
                 remaining = args.limit
                 for stage in stages:
                     if stage == "gemini":
-                        usage = DailyUsage(config.daily_budget, args.usage_path)
+                        usage = DailyUsage(config.daily_budget, conn, "gemini", MODEL_NAME)
                         if usage.remaining() == 0:
                             print(f"gemini NOT RUN: {usage.summary()}")
                             if stages[-1] == "gemini":
@@ -770,9 +761,11 @@ def main(argv: list[str] | None = None) -> int:
                             return 1
                         stats = run_extraction(conn, config, chain, usage=usage, limit=remaining)
                     else:
-                        usage = DailyUsage(
+                        usage = DailyUsage(  # e.g. nvidia / nemotron-3.5-super-vl-120b-a12b
                             config.fallback_requests_per_day,
-                            Path(args.usage_path).with_name(config.fallback_model.replace("/", "_") + ".json"),
+                            conn,
+                            config.fallback_provider,
+                            config.fallback_model.split("/", 1)[-1],
                         )
                         try:
                             chain = NvidiaChain(
@@ -794,7 +787,7 @@ def main(argv: list[str] | None = None) -> int:
                         stats = run_extraction(
                             conn, paced, chain, usage=usage, limit=remaining, model=config.fallback_model
                         )
-                    results.append((stage, stats, usage))
+                    results.append((stage, stats, f"{usage.used()}/{usage.budget}"))
                     if remaining is not None:
                         remaining -= stats.seen
                     # Only a spent daily budget hands over to the fallback; any other stop ends the run.
@@ -806,7 +799,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"NOT RUN: {err}")
         return 4
 
-    for stage, stats, usage in results:
+    for stage, stats, used in results:
         if stats.stopped:
             hint = _STOP_HINTS.get(stats.stopped, "")
             reset = f"; resets {reset_text(datetime.now(timezone.utc))}" if stats.stopped == "daily_quota" else ""
@@ -814,7 +807,7 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"{stage}: seen={stats.seen} extracted={stats.extracted} skipped_thin={stats.skipped_thin} "
             f"schema_failed={stats.schema_failed} stopped={stats.stopped or 'none'} "
-            f"used_today={usage.used()}/{usage.budget}"
+            f"used_today={used}"
         )
     return 2 if results and results[-1][1].stopped else 0
 

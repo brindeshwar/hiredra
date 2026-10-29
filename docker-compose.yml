@@ -1,0 +1,27 @@
+# Postgres + pgvector for Hiredra (decision D1.1, docs/freehire-merge/01-storage.md).
+#
+#   docker compose up -d      # start (data persists in the named volume)
+#   docker compose down       # stop; the data stays
+#
+# Listens on localhost only. The password comes from .env (HIREDRA_PG_PASSWORD), never from this file.
+services:
+  db:
+    image: pgvector/pgvector:0.8.7-pg17 # exact tag: Postgres 17 + pgvector 0.8.7
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hiredra
+      POSTGRES_DB: hiredra
+      POSTGRES_PASSWORD: ${HIREDRA_PG_PASSWORD:?set HIREDRA_PG_PASSWORD in .env}
+      # Code-point text order, as SQLite and Python sort (en_US would reorder ties: "B" after "alpha").
+      POSTGRES_INITDB_ARGS: --locale-provider=builtin --builtin-locale=C.UTF-8 --encoding=UTF8
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - hiredra-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hiredra -d hiredra"]
+      interval: 5s
+      retries: 20
+
+volumes:
+  hiredra-pg:

@@ -7,14 +7,14 @@ points at the graph store, not the jobs DB). The ``RunStore`` owns:
   fresh-start stale sweep;
 * cross-run cooldown durability (``load_cooldowns`` / ``save_cooldown``).
 
-``run()`` imports no ``sqlite3`` -- it drives a ``RunStore`` and a ``Sink``,
+``run()`` imports no database driver -- it drives a ``RunStore`` and a ``Sink``,
 both injected. Tests use ``FakeRunStore``.
 """
 
 from __future__ import annotations
 
 import json
-import sqlite3
+import psycopg
 from dataclasses import dataclass, field
 from typing import Protocol
 
@@ -39,24 +39,26 @@ class RunStore(Protocol):
     def save_cooldown(self, key: str, until: float, reason: str | None) -> None: ...
 
 
-class SqliteRunStore:
-    """Backed by the operational DB (``data/hiredra.db``).
+class PgRunStore:
+    """Backed by the operational database (Postgres).
 
     Does NOT own the connection -- the CLI opens it once and closes it once in a
     ``finally``. ``ScoringSink`` shares this same connection.
     """
 
-    def __init__(self, conn: sqlite3.Connection) -> None:
+    def __init__(self, conn: psycopg.Connection) -> None:
         self._conn = conn
 
     def begin(self, kind: str, config_name: str | None, *, resume: bool) -> RunHandle:
         if resume:
             row = db.unfinished_run(self._conn, kind, config_name)
             if row is not None:
-                progress = json.loads(row["detail"] or "{}")
+                progress = row["detail"] or {}
                 return RunHandle(
                     run_id=row["run_id"],
-                    started_at=row["started_at"],
+                    started_at=row["started_at"].isoformat(
+                        timespec="seconds"
+                    ),  # timestamptz -> the ISO text runs carry
                     companies_done=set(progress.get("companies_done", [])),
                     jobspy_done=bool(progress.get("jobspy_done", False)),
                     resumed=True,

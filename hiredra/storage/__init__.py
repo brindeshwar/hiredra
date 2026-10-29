@@ -1,13 +1,13 @@
-"""Hiredra storage layer — SQLite persistence for jobs, status, and outcomes.
+"""Hiredra storage layer — Postgres persistence for jobs, status, and outcomes.
 
-See ``hiredra/storage/schema.sql`` for the schema and ``docs/sourcing.md`` §10.
+The schema is ``migrations/*.sql`` (docs/freehire-merge/05-schema.md); see also ``docs/sourcing.md`` §10.
 """
 
 from hiredra.storage.db import (
-    DEFAULT_DB_PATH,
+    DATA_DIR,
     OUTCOMES,
+    Row,
     RUN_STATUSES,
-    SCHEMA_VERSION,
     SKILL_LEVELS,
     SKILL_SOURCES,
     STATUSES,
@@ -37,9 +37,11 @@ from hiredra.storage.db import (
     record_outcome,
     resolve_alias,
     save_cooldown,
+    select_jobs,
     release_job,
     set_extraction,
     set_score,
+    set_skills,
     set_skill_vectors,
     set_status,
     set_years_required,
@@ -54,10 +56,10 @@ from hiredra.storage.db import (
 )
 
 __all__ = [
-    "DEFAULT_DB_PATH",
+    "DATA_DIR",
     "OUTCOMES",
+    "Row",
     "RUN_STATUSES",
-    "SCHEMA_VERSION",
     "SKILL_LEVELS",
     "SKILL_SOURCES",
     "STATUSES",
@@ -87,9 +89,11 @@ __all__ = [
     "record_outcome",
     "resolve_alias",
     "save_cooldown",
+    "select_jobs",
     "release_job",
     "set_extraction",
     "set_score",
+    "set_skills",
     "set_skill_vectors",
     "set_status",
     "set_years_required",

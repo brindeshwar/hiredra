@@ -3,12 +3,11 @@
 from __future__ import annotations
 
 import csv
-import json
 
 import pytest
 
 from hiredra.scoring import rate
-from hiredra.storage import connect, init_db, upsert_job
+from hiredra.storage import connect, init_db, set_extraction, set_score, set_status, upsert_job
 
 FEATURE_KEYS = (
     "score_features",
@@ -23,26 +22,20 @@ FEATURE_KEYS = (
 
 
 @pytest.fixture()
-def conn():
-    c = connect(":memory:")
+def conn(pg_url):
+    c = connect(pg_url)
     init_db(c)
     for i in range(60):  # 50 clean + 10 on the review list
         jid = f"greenhouse:{i}"
         upsert_job(c, {"job_id": jid, "url": f"https://x/{i}", "title": f"Engineer {i}", "company": "Acme",
                        "source": "greenhouse", "description": f"Build things.\nJob {i}."})  # fmt: skip
-        c.execute(
-            "UPDATE jobs SET status = 'scored', score = ?, score_features = ?, skills = ?, review_reason = ? WHERE job_id = ?",
-            (
-                round(i * 0.0371, 4),
-                json.dumps({"coverage": 0.5, "gap_distance": 0.1}),
-                json.dumps(
-                    [{"name": "python", "requirement": "required"}, {"name": "aws", "requirement": "good_to_have"}]
-                ),
-                json.dumps(["suspect"]) if i >= 50 else None,
-                jid,
-            ),
-        )
-    c.commit()
+        set_extraction(c, jid, skills=[{"name": "python", "requirement": "required"},
+                                       {"name": "aws", "requirement": "good_to_have"}],
+                       domain_bucket="backend", legitimacy="legitimate", extraction_confidence="high")  # fmt: skip
+        set_score(c, jid, score=round(i * 0.0371, 4), features={"coverage": 0.5, "gap_distance": 0.1},
+                  review_reason=["suspect"] if i >= 50 else None, score_version="v", embed_tag="t", skills_hash="h",
+                  profile_hash="p")  # fmt: skip
+        set_status(c, jid, "scored")
     yield c
     c.close()
 
@@ -73,7 +66,7 @@ def test_sample_is_deterministic_and_each_sitting_spans_the_score_range(conn):
 
 
 def test_sample_refuses_a_pool_that_is_too_small(conn):
-    conn.execute("UPDATE jobs SET review_reason = '[\"suspect\"]' WHERE CAST(substr(job_id, 12) AS INT) >= 20")
+    conn.execute("UPDATE jobs SET review_reason = '{suspect}' WHERE external_id::int >= 20")
     with pytest.raises(rate.SheetError):
         rate.sample(conn)
 

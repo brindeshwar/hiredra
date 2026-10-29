@@ -6,8 +6,8 @@ from hiredra import vocab
 from hiredra.storage import connect, get_skill_vocab, init_db
 
 
-def test_resolve_skill_inserts_a_new_folded_name():
-    conn = connect(":memory:")
+def test_resolve_skill_inserts_a_new_folded_name(pg_url):
+    conn = connect(pg_url)
     init_db(conn)
     canonical = vocab.resolve_skill(conn, "FastAPI")
     assert canonical == "fastapi"
@@ -15,8 +15,8 @@ def test_resolve_skill_inserts_a_new_folded_name():
     conn.close()
 
 
-def test_resolve_skill_exact_match_is_case_and_whitespace_insensitive():
-    conn = connect(":memory:")
+def test_resolve_skill_exact_match_is_case_and_whitespace_insensitive(pg_url):
+    conn = connect(pg_url)
     init_db(conn)
     vocab.resolve_skill(conn, "Python")
     canonical = vocab.resolve_skill(conn, "  python  ")
@@ -25,8 +25,8 @@ def test_resolve_skill_exact_match_is_case_and_whitespace_insensitive():
     conn.close()
 
 
-def test_resolve_skill_distinct_names_get_distinct_entries():
-    conn = connect(":memory:")
+def test_resolve_skill_distinct_names_get_distinct_entries(pg_url):
+    conn = connect(pg_url)
     init_db(conn)
     vocab.resolve_skill(conn, "python")
     vocab.resolve_skill(conn, "kubernetes")
@@ -35,8 +35,8 @@ def test_resolve_skill_distinct_names_get_distinct_entries():
     conn.close()
 
 
-def test_extraction_time_resolution_does_not_merge_near_duplicates():
-    conn = connect(":memory:")
+def test_extraction_time_resolution_does_not_merge_near_duplicates(pg_url):
+    conn = connect(pg_url)
     init_db(conn)
     vocab.resolve_skill(conn, "fast api")
     # a genuinely different spelling of the same skill does NOT get merged

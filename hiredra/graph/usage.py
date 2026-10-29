@@ -16,17 +16,21 @@ counter's path and re-exports the names.
 
 from __future__ import annotations
 
-from pathlib import Path
 
 from hiredra.quota import (  # noqa: F401 -- moved to hiredra/quota.py (M0.1); re-exported unchanged
     IST,
     PACIFIC,
     DailyBudgetReached,
     DailyUsage,
+    Unmetered,
     next_reset,
     pacific_day,
     reset_text,
 )
 
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-DEFAULT_USAGE_PATH = _REPO_ROOT / "data" / "embed_usage.json"
+
+def usage_for(conn, cfg):
+    """The embedding meter for ``cfg``: Google's daily counter, or ``Unmetered`` for the local model."""
+    if cfg.provider == "local":
+        return Unmetered()
+    return DailyUsage(cfg.rpd_budget, conn, "gemini", cfg.model)

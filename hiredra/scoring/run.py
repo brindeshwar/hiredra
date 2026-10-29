@@ -33,6 +33,7 @@ from hiredra.graph.index import load_skills
 from hiredra.profile import ProfileSkills
 from hiredra.scoring.score import Weights, review_reasons, score_job, skill_weight
 from hiredra.storage import add_note, resolve_alias, set_score, set_status
+from hiredra.storage import select_jobs as _jobs_where
 
 #: level -> profile tier, for the ``nearest_tier`` count (Familiar-inflation check, OD8).
 _TIER_OF_LEVEL = {"production": "strong", "built-with": "working", "learned": "familiar"}
@@ -68,16 +69,16 @@ def select_jobs(
 ) -> list[dict]:
     """``extracted`` jobs, plus ``scored`` ones with any stale stamp (oldest first). ``force`` takes
     every ``scored`` job: the stamps don't cover graph merges, so a merge needs a forced rescore."""
+    order = "j.first_seen_at, j.job_key"
     if force:
-        rows = conn.execute("SELECT * FROM jobs WHERE status IN ('extracted', 'scored') ORDER BY first_seen_at, job_id")
-        return [dict(r) for r in rows]
-    rows = conn.execute(
-        "SELECT * FROM jobs WHERE status = 'extracted' OR (status = 'scored' AND ("
-        "score_version IS NOT ? OR score_embed_tag IS NOT ? OR score_skills_hash IS NOT ?)) "
-        "ORDER BY first_seen_at, job_id",
+        return _jobs_where(conn, "j.status IN ('extracted', 'scored')", (), order)
+    return _jobs_where(
+        conn,
+        "j.status = 'extracted' OR (j.status = 'scored' AND (j.score_version IS DISTINCT FROM %s "
+        "OR j.score_embed_tag IS DISTINCT FROM %s OR j.score_skills_hash IS DISTINCT FROM %s))",
         (weights.score_version, graph_cfg.embed_tag, profile.skills_hash),
+        order,
     )
-    return [dict(r) for r in rows]
 
 
 def _band(fit: float) -> str:
@@ -136,7 +137,6 @@ class ScoringStats:
     selected: int = 0
     scored: int = 0
     rescored: int = 0
-    malformed: int = 0
     embedded: int = 0  # cache misses sent to the embedder
     stopped: str | None = None
     stop_detail: str = ""
@@ -170,24 +170,9 @@ def run_scoring(
     jobs = select_jobs(conn, weights, graph_cfg, profile, force=force)
     stats.selected = len(jobs)
     for job in jobs:
-        try:
-            raw = json.loads(job["skills"] or "[]")
-            if not isinstance(raw, list):
-                raise ValueError("skills is not a list")
-            items = [
-                {"name": str(i["name"]), "requirement": str(i["requirement"])}
-                for i in raw
-                if isinstance(i, dict) and str(i.get("name", "")).strip()
-            ]
-            if len(items) != len(raw):
-                raise ValueError("an entry without a name")
-            for i in items:
-                skill_weight(i["requirement"], weights)  # an unknown requirement is malformed, not a crash
-        except (ValueError, TypeError, KeyError) as err:
-            add_note(conn, job["job_id"], f"scoring: malformed skills, not scored ({err})")
-            stats.malformed += 1
-            continue
-
+        # Well-formed by construction: job_skills rows are typed and the requirement is CHECKed, so the old
+        # "malformed skills JSON" guard went with the SQLite text column.
+        items = job["skills"] or []
         names = [resolve_alias(conn, i["name"]) or i["name"] for i in items]  # F2: alias BEFORE the cache
         try:
             fits = fit_skills(names, reference, graph_cfg, embed, cache=cache)
@@ -205,8 +190,8 @@ def run_scoring(
             conn,
             job["job_id"],
             score=round(result.score, 6),
-            features=json.dumps(features, sort_keys=True),
-            review_reason=json.dumps(reasons) if reasons else None,
+            features=features,
+            review_reason=list(reasons) if reasons else None,
             score_version=weights.score_version,
             embed_tag=graph_cfg.embed_tag,
             skills_hash=profile.skills_hash,
@@ -224,7 +209,7 @@ def run_scoring(
 # ─────────────────────────────────────────────────────────────────────────────
 # views (D13: nothing below the line is hidden, only not promoted)
 # ─────────────────────────────────────────────────────────────────────────────
-_LIST_COLS = "job_id, title, company, score, review_reason, released_at, score_features"
+_LIST_COLS = "job_key AS job_id, title, company, score, review_reason, released_at, score_features"
 
 
 def promoted(conn, weights: Weights) -> list[dict]:
@@ -233,21 +218,21 @@ def promoted(conn, weights: Weights) -> list[dict]:
     if weights.apply_line is None:
         where, params = "released_at IS NOT NULL", ()
     else:
-        where, params = "released_at IS NOT NULL OR (review_reason IS NULL AND score >= ?)", (weights.apply_line,)
+        where, params = "released_at IS NOT NULL OR (review_reason IS NULL AND score >= %s)", (weights.apply_line,)
     rows = conn.execute(
-        f"SELECT {_LIST_COLS} FROM jobs WHERE status = 'scored' AND ({where}) ORDER BY score DESC, job_id", params
+        f"SELECT {_LIST_COLS} FROM jobs WHERE status = 'scored' AND ({where}) ORDER BY score DESC, job_key", params
     )
     return [dict(r) for r in rows]
 
 
 def all_scored(conn) -> list[dict]:
-    rows = conn.execute(f"SELECT {_LIST_COLS} FROM jobs WHERE status = 'scored' ORDER BY score DESC, job_id")
+    rows = conn.execute(f"SELECT {_LIST_COLS} FROM jobs WHERE status = 'scored' ORDER BY score DESC, job_key")
     return [dict(r) for r in rows]
 
 
 def review_list(conn) -> list[dict]:
     rows = conn.execute(
         f"SELECT {_LIST_COLS} FROM jobs WHERE status = 'scored' AND review_reason IS NOT NULL AND released_at IS NULL "
-        "ORDER BY score DESC, job_id"
+        "ORDER BY score DESC, job_key"
     )
     return [dict(r) for r in rows]

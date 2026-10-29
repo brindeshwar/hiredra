@@ -19,10 +19,12 @@ DEFAULT_CONFIG_PATH = _REPO_ROOT / "config" / "graph.yml"
 
 #: Keys a section may leave out. ``fit.calibration_id`` is written by ``calibrate --write``
 #: (S5.1); until the first calibration there is none.
-_OPTIONAL: dict[str, set[str]] = {"fit": {"calibration_id"}}
+_OPTIONAL: dict[str, set[str]] = {"fit": {"calibration_id"}, "embedding": {"provider", "inputs"}}
+PROVIDERS = ("gemini", "local")
+INPUTS = ("bare", "described")
 
 _SECTIONS: dict[str, set[str]] = {
-    "embedding": {"model", "dimensions", "prefix", "inputs_per_request"},
+    "embedding": {"provider", "model", "dimensions", "prefix", "inputs", "inputs_per_request"},
     "limits": {"requests_per_minute", "tokens_per_minute", "requests_per_day", "headroom"},
     "dedup": {"threshold", "review_cosine", "auto_cosine"},
     "fit": {"have", "adj", "calibration_id"},
@@ -73,6 +75,8 @@ class GraphConfig:
     review_cosine: float = 0.93
     auto_cosine: float = 0.96
     calibration_id: str | None = None  # "step5-<date>" once Step 5 has set have/adj
+    provider: str = "gemini"  # gemini (the API) | local (Qwen3 on the CPU, DB4)
+    inputs: str = "bare"  # bare names | described: "name: description" where a description exists (D1.15)
 
     @property
     def rpm_budget(self) -> int:
@@ -91,11 +95,17 @@ class GraphConfig:
     @property
     def embed_tag(self) -> str:
         """Version tag stored beside every vector. Covers everything in this
-        config that changes what a vector *is*: model, dimensionality, prefix.
-        (Provider-side weight drift under the same model id is what the canary
-        check catches -- a config tag can't see that.)"""
+        config that changes what a vector *is*: model, dimensionality, prefix,
+        and for described inputs the descriptions file itself, so editing it
+        re-embeds the index. (Provider-side weight drift under the same model id
+        is what the canary check catches -- a config tag can't see that.)"""
         prefix = hashlib.sha256(self.prefix.encode("utf-8")).hexdigest()[:8] if self.prefix else "none"
-        return f"{self.model}|d{self.dimensions}|prefix={prefix}"
+        tag = f"{self.model}|d{self.dimensions}|prefix={prefix}"
+        if self.inputs == "described":
+            from hiredra.graph.descriptions import source_tag
+
+            tag += f"|desc={source_tag()}"
+        return tag
 
 
 def _str_list(value, where: str) -> tuple[str, ...]:
@@ -133,6 +143,8 @@ def load_graph_config(path: Path | str = DEFAULT_CONFIG_PATH) -> GraphConfig:
         max_chars=int(hv["max_chars"]),
     )
     cfg = GraphConfig(
+        provider=str(emb.get("provider", "gemini")),
+        inputs=str(emb.get("inputs", "bare")),
         model=str(emb["model"]),
         dimensions=int(emb["dimensions"]),
         prefix=str(emb["prefix"] or ""),
@@ -154,6 +166,10 @@ def load_graph_config(path: Path | str = DEFAULT_CONFIG_PATH) -> GraphConfig:
 
     if not cfg.model:
         raise ValueError("graph config: embedding.model must be non-empty")
+    if cfg.provider not in PROVIDERS:
+        raise ValueError(f"graph config: embedding.provider must be one of {PROVIDERS}, got {cfg.provider!r}")
+    if cfg.inputs not in INPUTS:
+        raise ValueError(f"graph config: embedding.inputs must be one of {INPUTS}, got {cfg.inputs!r}")
     if not 128 <= cfg.dimensions <= 3072:
         raise ValueError(f"graph config: embedding.dimensions must be 128-3072, got {cfg.dimensions}")
     if not 1 <= cfg.inputs_per_request <= 100:

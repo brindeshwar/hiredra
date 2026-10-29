@@ -144,15 +144,15 @@ def test_passes_location_no_note_when_hybrid_names_a_place():
 
 
 # --- wiring into run_funnel: location runs first, unknown_location counted -
-def test_run_funnel_location_stage_runs_first_and_counts_unknown(monkeypatch):
+def test_run_funnel_location_stage_runs_first_and_counts_unknown(monkeypatch, pg_url):
     from hiredra.storage import connect, get_job, init_db, upsert_job
 
-    conn = connect(":memory:")
+    conn = connect(pg_url)
     init_db(conn)
     upsert_job(
         conn,
         {
-            "job_id": "in1",
+            "job_id": "greenhouse:in1",
             "url": "u1",
             "title": "Backend Engineer",
             "company": "Acme",
@@ -164,7 +164,7 @@ def test_run_funnel_location_stage_runs_first_and_counts_unknown(monkeypatch):
     upsert_job(
         conn,
         {
-            "job_id": "us1",
+            "job_id": "greenhouse:us1",
             "url": "u2",
             "title": "Backend Engineer",
             "company": "Acme",
@@ -176,7 +176,7 @@ def test_run_funnel_location_stage_runs_first_and_counts_unknown(monkeypatch):
     upsert_job(
         conn,
         {
-            "job_id": "unk1",
+            "job_id": "greenhouse:unk1",
             "url": "u3",
             "title": "Backend Engineer",
             "company": "Acme",
@@ -193,7 +193,7 @@ def test_run_funnel_location_stage_runs_first_and_counts_unknown(monkeypatch):
     assert stats.unknown_location == 1
     assert stats.kept == 2  # the India job and the unknown-location job both survive to 'filtered'
 
-    us_job = get_job(conn, "us1")
+    us_job = get_job(conn, "greenhouse:us1")
     assert us_job["status"] == "dropped" and us_job["status_detail"].startswith("location:")
     # dropped on location BEFORE the seniority gate ever ran -- years_required stays unset
     assert us_job["years_required"] is None
@@ -201,15 +201,15 @@ def test_run_funnel_location_stage_runs_first_and_counts_unknown(monkeypatch):
     conn.close()
 
 
-def test_run_funnel_flags_onsite_unknown_place_via_job_events():
+def test_run_funnel_flags_onsite_unknown_place_via_job_events(pg_url):
     from hiredra.storage import connect, get_events, init_db, upsert_job
 
-    conn = connect(":memory:")
+    conn = connect(pg_url)
     init_db(conn)
     upsert_job(
         conn,
         {
-            "job_id": "hyb1",
+            "job_id": "ashby:hyb1",
             "url": "u1",
             "title": "Backend Engineer",
             "company": "Acme",
@@ -225,7 +225,7 @@ def test_run_funnel_flags_onsite_unknown_place_via_job_events():
     upsert_job(
         conn,
         {
-            "job_id": "unk1",
+            "job_id": "ashby:unk1",
             "url": "u2",
             "title": "Backend Engineer",
             "company": "Acme",
@@ -241,11 +241,11 @@ def test_run_funnel_flags_onsite_unknown_place_via_job_events():
     assert stats.onsite_unknown_place == 1  # only the hybrid one, not the generic unknown too
     assert stats.kept == 2  # both retained, not dropped
 
-    events = [e for e in get_events(conn, "hyb1") if e["kind"] == "note"]
+    events = [e for e in get_events(conn, "ashby:hyb1") if e["kind"] == "note"]
     assert len(events) == 1
     assert events[0]["detail"] == "location: hybrid, place unknown"
 
-    events2 = [e for e in get_events(conn, "unk1") if e["kind"] == "note"]
+    events2 = [e for e in get_events(conn, "ashby:unk1") if e["kind"] == "note"]
     assert len(events2) == 1
     assert events2[0]["detail"] == "location: unknown"
 

@@ -2,7 +2,7 @@
 backfill (docs/sourcing.md sec. 9). Same code, differs only by ``RunConfig`` +
 ``Sink`` + ``RunStore``.
 
-``run()`` imports no ``sqlite3`` -- both DB-touching concerns (job persistence,
+``run()`` imports no database driver -- both DB-touching concerns (job persistence,
 run/cooldown metadata) are injected as a ``Sink`` and a ``RunStore``. Unit tests
 drive it with fakes and no real database.
 """
@@ -17,7 +17,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 
-from hiredra.sourcing.config import RunConfig, load_companies
+from hiredra.sourcing.config import RunConfig, list_provenance, load_companies
 from hiredra.sourcing.http import Blocked, FetchError, HTTPError, HttpClient
 from hiredra.sourcing.jobspy_source import JobSpySource, SiteOutcome
 from hiredra.sourcing.provider import CompanyEntry, FetchContext, Provider, company_slug
@@ -189,6 +189,7 @@ def run(
                         jobs_c,
                         company_slug=company_slug(provider, entry),
                         list_tag=str(tag) if tag else None,
+                        provenance=list_provenance(config.companies_path),
                     )
                     outcomes.append(CompanyOutcome(entry.name, "ok", provider.name, len(jobs_c)))
 

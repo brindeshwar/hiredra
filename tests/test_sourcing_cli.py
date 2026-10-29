@@ -19,12 +19,12 @@ class _FakeJobSpySource:
         return JobSpyResult(jobs=[], outcomes=())
 
 
-def test_run_then_runs_subcommands(tmp_path, monkeypatch, capsys):
+def test_run_then_runs_subcommands(tmp_path, monkeypatch, capsys, pg_url):
     monkeypatch.setattr("hiredra.sourcing.orchestrator.JobSpySource", _FakeJobSpySource)
 
     cfg_path = tmp_path / "scoring.yml"
     cfg_path.write_text("kind: scoring\njobspy: {sites: []}\n", encoding="utf-8")
-    db_path = tmp_path / "test.db"
+    db_path = pg_url
 
     from hiredra.sourcing.__main__ import main
 
@@ -92,12 +92,12 @@ def test_stdout_reconfigure_is_what_prevents_the_crash():
     lenient.flush()
 
 
-def test_resume_flag_reuses_the_run(tmp_path, monkeypatch, capsys):
+def test_resume_flag_reuses_the_run(tmp_path, monkeypatch, capsys, pg_url):
     monkeypatch.setattr("hiredra.sourcing.orchestrator.JobSpySource", _FakeJobSpySource)
 
     cfg_path = tmp_path / "scoring.yml"
     cfg_path.write_text("kind: scoring\njobspy: {sites: []}\n", encoding="utf-8")
-    db_path = tmp_path / "test.db"
+    db_path = pg_url
 
     from hiredra.sourcing.__main__ import main
 

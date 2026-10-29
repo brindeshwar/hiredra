@@ -16,8 +16,8 @@ from hiredra.storage import db
 
 
 @pytest.fixture()
-def conn():
-    c = db.connect(":memory:")
+def conn(pg_url):
+    c = db.connect(pg_url)
     db.init_db(c)
     yield c
     c.close()

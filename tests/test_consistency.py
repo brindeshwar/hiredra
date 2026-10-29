@@ -67,8 +67,8 @@ class Fake:
 
 
 @pytest.fixture()
-def conn():
-    c = connect(":memory:")
+def conn(pg_url):
+    c = connect(pg_url)
     init_db(c)
     yield c
     c.close()

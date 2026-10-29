@@ -57,8 +57,8 @@ class FakeReader:
 
 
 @pytest.fixture()
-def conn():
-    c = connect(":memory:")
+def conn(pg_url):
+    c = connect(pg_url)
     init_db(c)
     yield c
     c.close()
@@ -369,7 +369,7 @@ def _write_parquet(path, rows):
     con = duckdb.connect()
     con.execute("CREATE TABLE t (id INTEGER, title VARCHAR, enrichment_json VARCHAR)")
     for i, raw in enumerate(rows):
-        con.execute("INSERT INTO t VALUES (?, ?, ?)", [i, f"job {i}", raw])
+        con.execute("INSERT INTO t VALUES (?, ?, ?)", [i, f"job {i}", raw])  # DuckDB, not Postgres
     con.execute(f"COPY t TO '{path.as_posix()}' (FORMAT PARQUET)")
     con.close()
 

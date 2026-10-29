@@ -87,6 +87,17 @@ def _require(cls, kwargs, path) -> None:
 _COMPANY_KEYS = {"name", "careers_url", "api", "provider", "slug", "enabled", "extra"}
 
 
+#: Which company list a board came from (``boards.provenance``), by the list's file name.
+LIST_PROVENANCE = {"companies.yml": "curated", "companies.wide.yml": "openjobs"}
+
+
+def list_provenance(path: str | Path | None) -> str:
+    """``curated`` / ``openjobs`` for the two known lists, another list's file stem, ``orphan`` for none."""
+    if not path:
+        return "orphan"
+    return LIST_PROVENANCE.get(Path(path).name, Path(path).stem)
+
+
 def load_companies(path: str | Path) -> list[CompanyEntry]:
     doc = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
     raw = doc.get("companies") or []

@@ -282,13 +282,13 @@ def test_empty_sites_raises(ctx):
 
 
 # ── persist round-trip ─────────────────────────────────────────────────────
-def test_fetch_to_persist(ctx):
+def test_fetch_to_persist(ctx, pg_url):
     fake = FakeScrape()
     fake.by_site["indeed"] = pd.DataFrame([_ROW, _ROW2])
     src, _ = _source(fake, sites=("indeed",), default_query=SiteQuery(search_terms=("x",)))
     result = src.fetch(ctx)
 
-    conn = db.connect(":memory:")
+    conn = db.connect(pg_url)
     db.init_db(conn)
     persisted = persist_jobs(conn, result.jobs)
     assert persisted.inserted == 2
