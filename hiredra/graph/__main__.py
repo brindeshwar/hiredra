@@ -1,6 +1,6 @@
 """CLI for the between-runs graph maintenance steps (build 4.3).
 
-    python -m hiredra.graph status                    # index counts + today's request budget (offline)
+    python -m hiredra.graph status                    # index counts and the embedding queue
     python -m hiredra.graph harvest [--dry-run]       # open-jobs market vocabulary -> skill_vocab
     python -m hiredra.graph consistency [--sample N]  # batch vs one-at-a-time vs reversed, against stored vectors
     python -m hiredra.graph sync [--limit N]          # version gate (canary) + embed pending nodes
@@ -15,10 +15,9 @@
 `merges` never changes the database unless `--apply` is given. The dry-run sorts
 pairs into AUTO (pre-approved), ALIAS (your alias file, pre-approved) and REVIEW
 (not approved -- you set "approve": true), and `--apply` applies only entries
-marked true. `sync` and `consistency` check today's request budget first and
-refuse WITHOUT calling the API if Google's daily quota is already known to be gone.
-Every command that writes or spends budget (sync, consistency, harvest, merges
---apply) takes a run lock first, so two of them can never overlap (exit code 4).
+marked true. Embedding runs the local model (no network, no quota).
+Every command that writes or embeds (sync, consistency, harvest, merges --apply,
+overlay, calibrate) takes a run lock first, so two of them can never overlap (exit code 4).
 Every command opens the DB through `init_db`, which migrates an older schema.
 """
 
@@ -27,7 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import date, datetime, timezone
+from datetime import date
 from pathlib import Path
 
 from hiredra.graph.config import DEFAULT_CONFIG_PATH, load_graph_config
@@ -38,9 +37,10 @@ from hiredra.graph.curation import (
     load_never_merge,
 )
 from hiredra.graph.harvest import DEFAULT_DF_PATH, harvest, load_df
-from hiredra.graph.lock import LockHeld, RunLock
+from hiredra.graph.lock import RunLock
 from hiredra.graph.merge import DEFAULT_REVIEW_PATH, apply_review, propose_merges, write_review
-from hiredra.graph.usage import DailyUsage, reset_text, usage_for
+from hiredra.lock import LockHeld
+from hiredra.quota import classify_failure
 from hiredra.storage import (
     connect,
     init_db,
@@ -54,10 +54,6 @@ def _log(msg: str) -> None:
     print(msg, flush=True)
 
 
-def _usage(conn, cfg) -> DailyUsage:
-    return usage_for(conn, cfg)
-
-
 def _warn_if_no_df(conn, weights, args) -> None:
     """Without the harvest's frequency file, embed order and merge-survivor choice
     silently fall back to shorter-name / alphabetical -- say so."""
@@ -68,31 +64,14 @@ def _warn_if_no_df(conn, weights, args) -> None:
         )
 
 
-def _after_reset() -> str:
-    return f"Run `sync` again after {reset_text(datetime.now(timezone.utc))}."
-
-
 #: What to do next, per stop reason (see hiredra.graph.sync.EmbedReport.stopped).
 _RESUME_HINT = {
-    "daily_budget": _after_reset,
-    "daily_quota": _after_reset,
-    "transient": lambda: (
-        "Google or the network kept failing after retries; the data is fine. Run `sync` again in a few minutes."
-    ),
-    "api_error": lambda: (
-        "Google rejected the request (check GEMINI_API_KEY, the model name and access). Fix that first, then run `sync` again."
-    ),
-    "bad_response": lambda: (
-        "Google returned vectors we can't use (wrong count or size). Read the error above before re-running: it may repeat."
+    "bad_response": (
+        "The model returned vectors we can't use (wrong count or size, or a zero vector). Read the error above "
+        "before re-running: it will repeat. A changed embedding.dimensions in config/graph.yml is the usual cause."
     ),
 }
-
-
-def _refuse_if_exhausted(usage: DailyUsage) -> bool:
-    if usage.exhausted():
-        _log(f"NOT RUN (no API call made): {usage.summary()}")
-        return True
-    return False
+_DEFAULT_HINT = "Read the error above, fix the cause, then run `sync` again."
 
 
 def _cmd_status(conn, cfg, args) -> int:
@@ -102,12 +81,6 @@ def _cmd_status(conn, cfg, args) -> int:
     _log(f"embedded  : {st['current']} current, {st['stale']} stale, {st['unembedded']} not yet")
     _log(f"aliases   : {st['aliases']}")
     _log(f"queue     : {len(skills_needing_embedding(conn, cfg.embed_tag))} node(s) need embedding")
-    _log(f"today     : {_usage(conn, cfg).summary()}")
-    _log(
-        f"limits    : Google {cfg.requests_per_minute} req/min, {cfg.tokens_per_minute} tokens/min, "
-        f"{cfg.requests_per_day} req/day (each input in a batch = 1 request); we stay at "
-        f"{cfg.rpm_budget}/{cfg.tpm_budget}/{cfg.rpd_budget}"
-    )
     return 0
 
 
@@ -150,15 +123,8 @@ def _cmd_consistency(conn, cfg, args) -> int:
     from hiredra.graph.consistency import check_batch_consistency
     from hiredra.graph.embedder import build_embedder
 
-    usage = _usage(conn, cfg)
-    if _refuse_if_exhausted(usage):
-        return 2
-    need = 3 * args.sample
-    if usage.remaining() < need:
-        _log(f"NOT RUN (no API call made): the check needs ~{need} requests but {usage.summary()}")
-        return 2
-    _log(f"consistency check: {args.sample} skills x 3 ways = ~{need} counted requests. {usage.summary()}")
-    r = check_batch_consistency(conn, cfg, build_embedder(cfg, usage=usage), sample=args.sample)
+    _log(f"consistency check: {args.sample} skills x 3 ways = {3 * args.sample} embeddings")
+    r = check_batch_consistency(conn, cfg, build_embedder(cfg), sample=args.sample)
     if r.skipped_reason:
         _log(f"SKIPPED: {r.skipped_reason}")
         return 2
@@ -168,7 +134,7 @@ def _cmd_consistency(conn, cfg, args) -> int:
     if r.error:
         _log(f"COULD NOT FINISH: {r.error}")
         return 2
-    _log(f"threshold {r.threshold}; {r.requests_used} counted requests used")
+    _log(f"threshold {r.threshold}; {r.requests_used} embeddings made")
     if r.consistent:
         _log("CONSISTENT: batching does not change the vectors. Safe to embed the rest the same way.")
         return 0
@@ -176,7 +142,7 @@ def _cmd_consistency(conn, cfg, args) -> int:
     _log("Do NOT embed the pending skills yet -- that would mix two kinds of vector in one index.")
     _log(
         "Fallback: `python -m hiredra.graph sync --reembed-all` clears every vector and re-embeds all "
-        "nodes under ONE method (about two days at the daily budget), most common skills first."
+        "nodes under ONE method, most common skills first."
     )
     return 3
 
@@ -185,26 +151,14 @@ def _cmd_sync(conn, cfg, args) -> int:
     from hiredra.graph.embedder import build_embedder
     from hiredra.graph.sync import ensure_index_current
 
-    usage = _usage(conn, cfg)
-    if _refuse_if_exhausted(usage):
-        return 2
     weights = load_df(args.df_path)
     _warn_if_no_df(conn, weights, args)
     if args.reembed_all:
         cleared = invalidate_skill_vectors(conn)
         _log(f"--reembed-all: cleared {cleared} stored vectors; the whole index will be re-embedded")
-    embed = build_embedder(cfg, usage=usage)
-    if cfg.provider == "local":
-        _log(f"embed tag {cfg.embed_tag}; local model, {cfg.inputs_per_request} skills per batch, no quota")
-    else:
-        _log(
-            f"embed tag {cfg.embed_tag}; {cfg.inputs_per_request} skills per request, pacing "
-            f"{cfg.rpm_budget} req/min and {cfg.tpm_budget} tokens/min (each skill = 1 request)"
-        )
-    _log(f"today: {usage.summary()}")
-    gate = ensure_index_current(
-        conn, cfg, embed, limit=args.limit, weights=weights, daily_remaining=usage.remaining, log=_log
-    )
+    embed = build_embedder(cfg)
+    _log(f"embed tag {cfg.embed_tag}; local model, {cfg.inputs_per_request} skills per batch")
+    gate = ensure_index_current(conn, cfg, embed, limit=args.limit, weights=weights, log=_log)
     e = gate.embed
     _log("")
     _log(
@@ -212,10 +166,9 @@ def _cmd_sync(conn, cfg, args) -> int:
         f"in {e.chunks} chunk(s), {e.elapsed_s:.0f}s; still needing embedding: {e.remaining}"
     )
     _log(f"index now: {gate.after}")
-    _log(f"today: {usage.summary()}")
     if e.stopped:
         _log(f"STOPPED ({e.stopped}): {e.error}")
-        _log("Every finished chunk is saved. " + _RESUME_HINT[e.stopped]())
+        _log("Every finished chunk is saved. " + _RESUME_HINT.get(e.stopped, _DEFAULT_HINT))
         return 2
     _log(
         "READY -- the whole index is embedded under the live version."
@@ -309,10 +262,8 @@ def _cmd_merges(conn, cfg, args) -> int:
     return 0
 
 
-#: commands that write to the DB or spend Google budget take the run lock
 def _cmd_overlay(conn, cfg, args) -> int:
     from hiredra.graph import overlay as ov
-    from hiredra.graph.embedder import classify_failure
     from hiredra.profile import ProfileError, parse_skills
 
     try:
@@ -342,12 +293,10 @@ def _cmd_overlay(conn, cfg, args) -> int:
         _log(f"state written: {args.overlay_path}. Next: `python -m hiredra.graph sync` embeds the new profile nodes.")
         return 0
 
-    usage = _usage(conn, cfg)
-
     def embedder():
         from hiredra.graph.embedder import build_embedder
 
-        return build_embedder(cfg, usage=usage)
+        return build_embedder(cfg)
 
     try:
         plan = ov.plan_overlay(conn, cfg, profile, embedder)
@@ -380,7 +329,6 @@ def _cmd_overlay(conn, cfg, args) -> int:
 
 def _cmd_calibrate(conn, cfg, args) -> int:
     from hiredra.graph import calibrate as cal
-    from hiredra.graph.embedder import classify_failure
 
     if args.suggest:
         try:
@@ -404,12 +352,10 @@ def _cmd_calibrate(conn, cfg, args) -> int:
         _log(f"NOT RUN: {exc}")
         return 1
 
-    usage = _usage(conn, cfg)
-
     def embedder():
         from hiredra.graph.embedder import build_embedder
 
-        return build_embedder(cfg, usage=usage)
+        return build_embedder(cfg)
 
     try:
         cosines = cal.pair_cosines(conn, cfg, pairs, embedder, cache_path=args.cosines_path)
@@ -472,7 +418,7 @@ def main(argv: list[str] | None = None) -> int:
         help="write nodes even if a file failed (document frequencies then cover a subset)",
     )
     c = sub.add_parser("consistency")
-    c.add_argument("--sample", type=int, default=8, help="skills to compare (uses 3 x N counted requests)")
+    c.add_argument("--sample", type=int, default=8, help="skills to compare (3 x N embeddings)")
     s = sub.add_parser("sync")
     s.add_argument("--limit", type=int, default=None, help="embed at most N skills this run")
     s.add_argument(

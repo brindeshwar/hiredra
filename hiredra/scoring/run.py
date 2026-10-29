@@ -10,8 +10,8 @@ overlay or unembedded ``mine`` nodes; ``run_scoring`` then:
 * scores ``extracted`` jobs, and re-scores ``scored`` ones whose stamps went stale (weights
   version, embedding tag or profile skills hash);
 * writes the score, the feature JSON (the ledger row for a future learner), the review reason
-  and the four stamps. Only cache misses (a JD skill newer than the last sync) are embedded,
-  through the daily counter; a budget stop ends the run cleanly with finished rows kept.
+  and the four stamps. Only cache misses (a JD skill newer than the last sync) are embedded; a model
+  failure ends the run cleanly with finished rows kept.
 
 The model never sees a score: it only supplied skill names and the domain bucket (rule 3).
 """
@@ -27,10 +27,11 @@ from pathlib import Path
 import numpy as np
 
 from hiredra.graph.config import GraphConfig
-from hiredra.graph.embedder import Embedder, classify_failure
+from hiredra.graph.embedder import Embedder
 from hiredra.graph.fit import fit_skills
 from hiredra.graph.index import load_skills
 from hiredra.profile import ProfileSkills
+from hiredra.quota import classify_failure
 from hiredra.scoring.score import Weights, review_reasons, score_job, skill_weight
 from hiredra.storage import add_note, resolve_alias, set_score, set_status
 from hiredra.storage import select_jobs as _jobs_where

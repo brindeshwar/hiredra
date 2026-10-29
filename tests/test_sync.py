@@ -10,7 +10,8 @@ import pytest
 from google.genai.errors import ClientError, ServerError
 
 from hiredra.graph.config import GraphConfig
-from hiredra.graph.embedder import DailyQuotaExceeded, EmbeddingError
+from hiredra.graph.embedder import EmbeddingError
+from hiredra.quota import DailyQuotaExceeded
 from hiredra.graph.index import load_skills
 from hiredra.graph.sync import check_canary, embed_pending, ensure_index_current
 from hiredra.storage import add_market_skill, connect, get_skill_vocab, init_db, skill_index_status
@@ -24,7 +25,6 @@ def _cfg(**over) -> GraphConfig:
         dimensions=DIM,
         prefix="",
         inputs_per_request=2,
-        requests_per_minute=100,
         dedup_threshold=0.9,
         have=0.9,
         adj=0.7,
@@ -317,95 +317,6 @@ def test_gate_is_not_ready_when_the_canary_could_not_run_even_if_the_drain_succe
     assert not gate.ready  # unverified index is not "current"
 
 
-# ── today's request budget (build 4.3 fix) ───────────────────────────────────
-def test_the_daily_budget_trims_the_run_and_stops_with_that_reason(conn):
-    cfg = _cfg()
-    _seed(conn, *[f"s{i}" for i in range(10)])
-    emb = FakeEmbedder()
-    r = embed_pending(conn, cfg, emb, daily_remaining=lambda: 4)
-    assert (r.attempted, r.embedded, r.remaining, r.stopped) == (4, 4, 6, "daily_budget")
-    assert "covers 4 of 10" in r.error
-    assert len(emb.embedded_names) == 4
-
-
-def test_a_zero_budget_makes_no_call_at_all(conn):
-    cfg = _cfg()
-    _seed(conn, "a", "b", "c")
-    emb = FakeEmbedder()
-    r = embed_pending(conn, cfg, emb, daily_remaining=lambda: 0)
-    assert emb.calls == [] and (r.embedded, r.remaining, r.stopped) == (0, 3, "daily_budget")
-
-
-def test_a_budget_larger_than_the_queue_is_not_a_stop(conn):
-    cfg = _cfg()
-    _seed(conn, "a", "b", "c")
-    r = embed_pending(conn, cfg, FakeEmbedder(), daily_remaining=lambda: 500)
-    assert (r.embedded, r.remaining, r.stopped) == (3, 0, None)
-
-
-def test_the_smaller_of_limit_and_budget_wins(conn):
-    cfg = _cfg()
-    _seed(conn, *[f"s{i}" for i in range(10)])
-    by_limit = embed_pending(conn, cfg, FakeEmbedder(), limit=3, daily_remaining=lambda: 5)
-    assert (by_limit.embedded, by_limit.stopped) == (3, None)  # --limit cut it, not the budget
-    by_budget = embed_pending(conn, cfg, FakeEmbedder(), limit=6, daily_remaining=lambda: 2)
-    assert (by_budget.embedded, by_budget.stopped) == (2, "daily_budget")
-
-
-def test_the_next_days_run_continues_where_the_budget_stopped_it(conn):
-    cfg = _cfg()
-    _seed(conn, *[f"s{i}" for i in range(9)])
-    day1, day2 = FakeEmbedder(), FakeEmbedder()
-    embed_pending(conn, cfg, day1, daily_remaining=lambda: 5)
-    r2 = embed_pending(conn, cfg, day2, daily_remaining=lambda: 900)
-    assert (r2.embedded, r2.remaining, r2.stopped) == (4, 0, None)
-    assert set(day1.embedded_names).isdisjoint(day2.embedded_names)
-    assert len(set(day1.embedded_names) | set(day2.embedded_names)) == 9
-
-
-def test_the_embedders_own_budget_error_is_reported_as_daily_budget_not_a_crash(conn):
-    from hiredra.graph.usage import DailyBudgetReached
-
-    cfg = _cfg()
-    _seed(conn, "a", "b", "c", "d")
-    emb = FakeEmbedder(script={2: DailyBudgetReached("today's request budget is used")})
-    r = embed_pending(conn, cfg, emb)
-    assert (r.stopped, r.embedded) == ("daily_budget", 2)
-
-
-def test_the_gate_reads_the_budget_after_the_canary_has_spent_its_share(conn, tmp_path):
-    """Canary requests and embed requests draw on the SAME daily budget, so the
-    run is trimmed to what is really left and never trips the embedder's check."""
-    from datetime import datetime, timezone
-
-    from hiredra.graph.embedder import build_embedder
-    from hiredra.graph.usage import DailyUsage
-
-    class Client:
-        def __init__(self):
-            self.calls = []
-
-        def embed_documents(self, texts, batch_size=100):
-            self.calls.append(list(texts))
-            return [list(_unit(t)) for t in texts]
-
-    cfg = _cfg(inputs_per_request=50)
-    _seed(conn, "python", "a", "b")
-    embed_pending(conn, cfg, FakeEmbedder())  # index python, a, b
-    _seed(conn, *[f"new{i}" for i in range(10)])
-
-    moment = datetime(2026, 9, 21, 14, 0, tzinfo=timezone.utc)
-    usage = DailyUsage(8, conn, "gemini", "gemini-embedding-2", now=lambda: moment)
-    client = Client()
-    embed = build_embedder(cfg, client=client, usage=usage, sleep=lambda s: None, clock=lambda: 0.0)
-    gate = ensure_index_current(conn, cfg, embed, daily_remaining=usage.remaining)
-
-    assert client.calls[0] == ["python"]  # the canary (only 'python' exists among the canary names)
-    assert gate.embed.embedded == 7 and gate.embed.stopped == "daily_budget"
-    assert usage.used() == 8 and usage.remaining() == 0  # canary 1 + 7 skills = exactly the budget
-    assert not gate.ready  # 3 skills still wait for tomorrow
-
-
 # ── a real bug must not hide behind a status line (build 4.3 hardening) ──────
 @pytest.mark.parametrize(
     "bug", [KeyError("missing"), TypeError("bad arg"), ValueError("bad value"), AttributeError("x")]
@@ -451,13 +362,10 @@ def test_a_network_failure_is_a_transient_stop(conn):
 
 
 def test_each_stop_reason_is_distinct(conn, pg_url):
-    """quota / budget / transient / api_error / bad_response are five different labels."""
-    from hiredra.graph.usage import DailyBudgetReached
-
+    """quota / transient / api_error / bad_response are four different labels."""
     reasons = set()
     for exc in (
         DailyQuotaExceeded("PerDay"),
-        DailyBudgetReached("budget"),
         _transient(),
         _wrapped(ClientError(400, {"error": {"message": "bad request"}})),
         EmbeddingError("zero norm"),
@@ -467,7 +375,7 @@ def test_each_stop_reason_is_distinct(conn, pg_url):
         _seed(c, "a")
         reasons.add(embed_pending(c, _cfg(), FakeEmbedder(script={1: exc})).stopped)
         c.close()
-    assert reasons == {"daily_quota", "daily_budget", "transient", "api_error", "bad_response"}
+    assert reasons == {"daily_quota", "transient", "api_error", "bad_response"}
 
 
 def test_the_canary_reraises_an_unknown_exception_but_reports_a_google_failure(conn):

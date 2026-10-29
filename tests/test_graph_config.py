@@ -14,11 +14,6 @@ embedding:
   dimensions: 768
   prefix: ""
   inputs_per_request: 50
-limits:
-  requests_per_minute: 100
-  tokens_per_minute: 30000
-  requests_per_day: 1000
-  headroom: 0.90
 dedup:
   threshold: 0.90
   review_cosine: 0.93
@@ -50,9 +45,7 @@ def test_real_config_file_loads_and_matches_the_approved_design():
     """D1.15 (decided 2026-10-26, switched in DB4): Qwen3-Embedding-0.6B on the CPU, the skill instruction,
     "name: description" inputs, 1024 dimensions."""
     cfg = load_graph_config(DEFAULT_CONFIG_PATH)
-    assert (cfg.provider, cfg.model, cfg.dimensions, cfg.inputs) == (
-        "local", "Qwen/Qwen3-Embedding-0.6B", 1024, "described"
-    )  # fmt: skip
+    assert (cfg.model, cfg.dimensions, cfg.inputs) == ("Qwen/Qwen3-Embedding-0.6B", 1024, "described")
     assert cfg.prefix == "Instruct: Given a job skill, retrieve the same or a closely related job skill\nQuery: "
     assert cfg.dedup_threshold == 0.90
     assert cfg.adj < cfg.have
@@ -63,14 +56,19 @@ def _with(extra: str) -> str:
     return _BASE.replace('prefix: ""', 'prefix: ""' + "".join(f"\n  {line}" for line in extra.split(";")))
 
 
-def test_provider_and_inputs_default_to_the_old_behaviour_and_are_checked(tmp_path):
-    cfg = _load(tmp_path)
-    assert (cfg.provider, cfg.inputs) == ("gemini", "bare")
-    local = _load(tmp_path, _with("provider: local;inputs: described"))
-    assert (local.provider, local.inputs) == ("local", "described")
-    for bad in ("provider: openai", "inputs: everything"):
-        with pytest.raises(ValueError, match=bad.split(":")[0]):
-            _load(tmp_path, _with(bad))
+def test_inputs_default_to_bare_names_and_are_checked(tmp_path):
+    assert _load(tmp_path).inputs == "bare"
+    assert _load(tmp_path, _with("inputs: described")).inputs == "described"
+    with pytest.raises(ValueError, match="inputs"):
+        _load(tmp_path, _with("inputs: everything"))
+
+
+def test_the_removed_gemini_keys_are_rejected(tmp_path):
+    """The Gemini embedding path is gone (after DB4): its provider switch and rate limits are unknown keys now."""
+    with pytest.raises(ValueError, match="unknown key"):
+        _load(tmp_path, _with("provider: gemini"))
+    with pytest.raises(ValueError, match="unknown section"):
+        _load(tmp_path, _BASE + "limits:\n  requests_per_minute: 100\n")
 
 
 def test_described_inputs_put_the_descriptions_file_in_the_tag(tmp_path, monkeypatch):
@@ -119,13 +117,6 @@ def test_missing_key_is_an_error(tmp_path):
         ("dimensions: 768", "dimensions: 4096"),
         ("inputs_per_request: 50", "inputs_per_request: 101"),
         ("inputs_per_request: 50", "inputs_per_request: 0"),
-        ("requests_per_minute: 100", "requests_per_minute: 0"),
-        ("tokens_per_minute: 30000", "tokens_per_minute: 0"),
-        ("requests_per_day: 1000", "requests_per_day: 0"),
-        ("headroom: 0.90", "headroom: 0"),
-        ("headroom: 0.90", "headroom: 1.5"),
-        ("requests_per_minute: 100", "requests_per_minute: 50"),  # 45/min budget < 50 inputs per request
-        ("requests_per_day: 1000", "requests_per_day: 80"),  # 72/day budget < 90/min budget
         ("threshold: 0.90", "threshold: 0"),
         ("have: 0.90", "have: 0.60"),  # have must exceed adj
         ("adj: 0.70", "adj: 0"),
@@ -179,36 +170,17 @@ def test_a_dated_export_directory_is_accepted(tmp_path):
     assert cfg.harvest.export_date == "2026-09-19"
 
 
-# ── the real Google limits (build 4.3 fix) ───────────────────────────────────
-def test_limits_load_and_budgets_apply_the_headroom(tmp_path):
-    cfg = _load(tmp_path)
-    assert (cfg.requests_per_minute, cfg.tokens_per_minute, cfg.requests_per_day) == (100, 30000, 1000)
-    assert cfg.inputs_per_request == 50
-    assert (cfg.rpm_budget, cfg.tpm_budget, cfg.rpd_budget) == (90, 27000, 900)  # 0.90 headroom on each
-
-
-def test_real_config_matches_the_dashboard_numbers():
-    cfg = load_graph_config(DEFAULT_CONFIG_PATH)
-    assert (cfg.requests_per_minute, cfg.tokens_per_minute, cfg.requests_per_day) == (100, 30_000, 1_000)
-    assert cfg.inputs_per_request <= 100 and cfg.inputs_per_request <= cfg.rpm_budget
-
-
 def test_the_old_per_string_names_are_gone(tmp_path):
     for old in ("batch_size: 50", "items_per_minute: 90"):
         with pytest.raises(ValueError, match="unknown key"):
             _load(tmp_path, _BASE.replace("  inputs_per_request: 50", f"  inputs_per_request: 50\n  {old}"))
 
 
-def test_changing_rate_settings_never_changes_the_embedding_tag(tmp_path):
-    """Rate limits are how we SEND requests, not what a vector is: the 950 stored
-    vectors must stay valid when a limit or the chunk size changes."""
+def test_changing_the_batch_size_never_changes_the_embedding_tag(tmp_path):
+    """The batch size is how we SEND skills, not what a vector is: the stored
+    vectors must stay valid when it changes."""
     base = _load(tmp_path).embed_tag
-    changed = _load(
-        tmp_path,
-        _BASE.replace("requests_per_minute: 100", "requests_per_minute: 60")
-        .replace("inputs_per_request: 50", "inputs_per_request: 20")
-        .replace("headroom: 0.90", "headroom: 0.5"),
-    ).embed_tag
+    changed = _load(tmp_path, _BASE.replace("inputs_per_request: 50", "inputs_per_request: 20")).embed_tag
     assert base == changed == "gemini-embedding-2|d768|prefix=none"
 
 

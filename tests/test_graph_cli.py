@@ -10,7 +10,7 @@ import numpy as np
 import pytest
 
 from hiredra.graph import __main__ as cli
-from hiredra.graph.embedder import DailyQuotaExceeded
+from hiredra.quota import DailyQuotaExceeded
 from hiredra.graph.harvest import harvest as real_harvest
 from hiredra.storage import (
     add_market_skill,
@@ -26,7 +26,6 @@ DIM = 128
 
 CONFIG = textwrap.dedent("""
     embedding: {model: gemini-embedding-2, dimensions: 128, prefix: "", inputs_per_request: 2}
-    limits: {requests_per_minute: 100, tokens_per_minute: 30000, requests_per_day: 1000, headroom: 0.9}
     dedup: {threshold: 0.90, review_cosine: 0.93, auto_cosine: 0.96}
     fit: {have: 0.90, adj: 0.70}
     harvest:
@@ -218,7 +217,7 @@ def test_sync_stops_with_exit_2_on_a_daily_quota_and_says_how_to_resume(env, mon
     )
     assert run(env, "sync") == 2
     out = capsys.readouterr().out
-    assert "STOPPED (daily_quota)" in out and "Run `sync` again" in out
+    assert "STOPPED (daily_quota)" in out and "run `sync` again" in out
     assert skill_index_status(_conn(env), "gemini-embedding-2|d128|prefix=none")["current"] == 2  # progress kept
 
 
@@ -280,13 +279,7 @@ def test_reviewer_edits_are_honoured_through_the_cli(env, capsys):
     assert resolve_alias(_conn(env), "fast api") is None
 
 
-# ── today's budget, the exhausted-day guard, consistency, --reembed-all (build 4.3 fix) ──
-def _usage_obj(env):
-    from hiredra.graph.usage import DailyUsage
-
-    return DailyUsage(900, _conn(env), "gemini", "gemini-embedding-2")  # same budget as the test config (1000 x 0.9)
-
-
+# ── consistency, --reembed-all (build 4.3 fix) ──
 def _exploding_embedder(monkeypatch):
     """Any attempt to BUILD an embedder (i.e. to get ready to call the API) fails the test."""
 
@@ -294,51 +287,6 @@ def _exploding_embedder(monkeypatch):
         raise AssertionError("an embedder was built: the CLI was about to call the API")
 
     monkeypatch.setattr("hiredra.graph.embedder.build_embedder", boom)
-
-
-def test_status_shows_todays_budget_and_the_real_limits(env, capsys):
-    _usage_obj(env).record(123)
-    assert run(env, "status") == 0
-    out = capsys.readouterr().out
-    assert "123 of 900 requests used today" in out
-    assert "100 req/min, 30000 tokens/min, 1000 req/day" in out and "each input in a batch = 1 request" in out
-    assert "90/27000/900" in out
-
-
-def test_sync_refuses_with_no_api_call_when_google_already_said_the_day_is_over(env, monkeypatch, capsys):
-    c = _conn(env)
-    add_market_skill(c, "a")
-    c.close()
-    _usage_obj(env).mark_exhausted("reported by Google")
-    _exploding_embedder(monkeypatch)
-    assert run(env, "sync") == 2
-    out = capsys.readouterr().out
-    assert "NOT RUN (no API call made)" in out and "already reported exhausted" in out and "IST" in out
-
-
-def test_sync_stops_at_the_budget_before_googles_cap_and_says_how_to_resume(env, monkeypatch, capsys):
-    c = _conn(env)
-    for n in ("a", "b", "c", "d", "e"):
-        add_market_skill(c, n)
-    c.close()
-    _usage_obj(env).record(897)  # 3 requests left today
-    _patch_embedder(monkeypatch, FakeEmbedder())
-    assert run(env, "sync") == 2
-    out = capsys.readouterr().out
-    assert "STOPPED (daily_budget)" in out and "covers 3 of 5" in out
-    assert "Run `sync` again" in out and "Pacific" in out
-    assert skill_index_status(_conn(env), "gemini-embedding-2|d128|prefix=none")["current"] == 3
-
-
-def test_sync_prints_the_units_and_pacing_in_googles_terms(env, monkeypatch, capsys):
-    c = _conn(env)
-    add_market_skill(c, "a")
-    c.close()
-    _patch_embedder(monkeypatch, FakeEmbedder())
-    run(env, "sync")
-    out = capsys.readouterr().out
-    assert "2 skills per request" in out and "90 req/min" in out and "27000 tokens/min" in out
-    assert "each skill = 1 request" in out and "requests used today" in out
 
 
 def _index_with_vectors(env, names):
@@ -364,7 +312,6 @@ def test_consistency_passes_and_says_batching_is_safe(env, monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "CONSISTENT" in out and "batching does not change the vectors" in out
     assert "batch " in out and "one_by_one" in out and "reversed" in out
-    assert _usage_obj(env).used() == 0  # fake embedder bypasses the real counter; nothing recorded
 
 
 def test_consistency_failure_exits_3_and_prints_the_fallback_without_changing_anything(env, monkeypatch, capsys):
@@ -380,25 +327,8 @@ def test_consistency_failure_exits_3_and_prints_the_fallback_without_changing_an
     assert run(env, "consistency", "--sample", "4") == 3
     out = capsys.readouterr().out
     assert "INCONSISTENT" in out and "Do NOT embed the pending skills yet" in out
-    assert "sync --reembed-all" in out and "two days" in out
+    assert "sync --reembed-all" in out
     assert iter_skill_vocab(_conn(env)) == before  # it only reports; it never re-embeds by itself
-
-
-def test_consistency_refuses_with_no_api_call_when_the_day_is_exhausted(env, monkeypatch, capsys):
-    _index_with_vectors(env, NAMES12)
-    _usage_obj(env).mark_exhausted()
-    _exploding_embedder(monkeypatch)
-    assert run(env, "consistency") == 2
-    assert "NOT RUN (no API call made)" in capsys.readouterr().out
-
-
-def test_consistency_refuses_if_the_budget_cannot_cover_it(env, monkeypatch, capsys):
-    _index_with_vectors(env, NAMES12)
-    _usage_obj(env).record(890)  # 10 left; the default check needs 24
-    _exploding_embedder(monkeypatch)
-    assert run(env, "consistency") == 2
-    out = capsys.readouterr().out
-    assert "NOT RUN (no API call made)" in out and "needs ~24 requests" in out
 
 
 def test_consistency_with_nothing_embedded_is_skipped(env, monkeypatch, capsys):
@@ -611,9 +541,9 @@ def _bad_response():
 @pytest.mark.parametrize(
     "label,make_exc,hint",
     [
-        ("transient", _server_error, "in a few minutes"),
-        ("api_error", _client_error, "check GEMINI_API_KEY"),
-        ("bad_response", _bad_response, "may repeat"),
+        ("transient", _server_error, "fix the cause, then run `sync` again"),
+        ("api_error", _client_error, "fix the cause, then run `sync` again"),
+        ("bad_response", _bad_response, "it will repeat"),
     ],
 )
 def test_each_stop_reason_prints_its_own_next_step_and_exits_2(env, monkeypatch, capsys, label, make_exc, hint):
@@ -642,7 +572,7 @@ def test_an_unknown_exception_escapes_the_cli_but_finished_chunks_and_the_lock_a
         pass
 
 
-# ── the run lock covers exactly the commands that write or spend budget ──────
+# ── the run lock covers exactly the commands that write or embed ─────────────
 def _held(env):
     from hiredra.graph.lock import RunLock
 
@@ -659,7 +589,6 @@ def test_sync_refuses_while_another_run_holds_the_lock_and_makes_no_call(env, mo
     out = capsys.readouterr().out
     assert "NOT RUN: another graph maintenance run is in progress" in out and "sync (another terminal)" in out
     assert skill_index_status(_conn(env), "gemini-embedding-2|d128|prefix=none")["current"] == 0
-    assert _usage_obj(env).used() == 0
 
 
 def test_the_other_writing_commands_are_locked_out_too(env, monkeypatch, capsys):
@@ -694,13 +623,16 @@ def test_the_lock_is_released_after_every_kind_of_finish(env, monkeypatch):
     assert run(env, "sync") == 0  # normal finish
     with _held(env):
         pass
-    _usage_obj(env).mark_exhausted()
-    assert run(env, "sync") == 2  # early refusal (non-zero exit)
+    c = _conn(env)
+    add_market_skill(c, "b")
+    c.close()
+    _patch_embedder(monkeypatch, FakeEmbedder(script={1: DailyQuotaExceeded("PerDay")}))
+    assert run(env, "sync") == 2  # a stopped run (non-zero exit)
     with _held(env):
         pass
 
 
-def test_a_second_sync_started_while_the_first_runs_cannot_double_spend_the_budget(env, monkeypatch):
+def test_a_second_sync_started_while_the_first_runs_is_refused(env, monkeypatch):
     """The scenario the lock exists for: run B starts while run A is mid-embed."""
     from hiredra.graph.lock import RunLock
 

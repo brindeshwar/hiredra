@@ -17,7 +17,7 @@ from hiredra.graph import calibrate as cal
 from hiredra.graph.__main__ import main as graph_main
 from hiredra.graph.config import GraphConfig, load_graph_config
 from hiredra.graph.index import save_vectors
-from hiredra.graph.embedder import DailyQuotaExceeded
+from hiredra.quota import DailyQuotaExceeded
 from hiredra.storage import add_market_skill, connect, init_db, set_extraction, set_status, upsert_job
 
 DIM = 128
@@ -30,7 +30,6 @@ def _cfg(**over) -> GraphConfig:
         dimensions=DIM,
         prefix="",
         inputs_per_request=50,
-        requests_per_minute=100,
         dedup_threshold=0.9,
         have=0.9,
         adj=0.7,
