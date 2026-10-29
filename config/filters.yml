@@ -14,6 +14,10 @@
 #   member of technical staff                — common AI-lab generic IC title
 # "data architect" was considered and dropped: "architect" is already a
 # senior term below, so the addition would be dead (seniority runs first).
+# 2026-10-29, freehire step-7 comparison on 20,772 jobs (docs/freehire-merge/07-step7-filter.md), owner ticked:
+#   F3: the bare "agent" kept call-centre, front-desk, collections and insurance agents -> "ai agent" and
+#       "agent engineer" instead.
+#   F5: titles freehire files as software/data/AI that this list missed -> the additions at the end.
 allow:
   - ai engineer
   - ai/ml
@@ -25,7 +29,8 @@ allow:
   - gen ai
   - generative ai
   - nlp
-  - agent
+  - ai agent
+  - agent engineer
   - agentic
   - backend
   - back end
@@ -56,6 +61,16 @@ allow:
   - analytics engineer
   - product engineer
   - member of technical staff
+  - software engineering intern
+  - software engineering internship
+  - prompt engineer
+  - computer vision
+  - java developer
+  - java engineer
+  - golang
+  - .net developer
+  - dotnet developer
+  - distributed systems
 
 # Role-type BLOCK: title rejects. Wins if a title also hits ALLOW.
 block:
@@ -83,6 +98,29 @@ block:
   - bpo
   - data entry
 
+# Role-type OFF-BUCKET (F6, 2026-10-29, owner): frontend, mobile, test and SRE roles sit outside the
+# backend/agent/LLM/data buckets but get in through "software engineer" or "distributed systems". Dropped
+# like a block term, UNLESS the title also names backend or full stack (off_bucket_exempt): F6 targets
+# frontend-only roles, not "Frontend/Backend Engineer" or "Full Stack Engineer (Frontend Oriented)".
+off_bucket:
+  - frontend
+  - front end
+  - front-end
+  - ios
+  - android
+  - qa
+  - test automation
+  - sdet
+  - sre
+  - site reliability
+off_bucket_exempt:
+  - backend
+  - back end
+  - back-end
+  - full stack
+  - fullstack
+  - full-stack
+
 # Location eligibility -- runs FIRST in the funnel (largest cut on a global
 # intake). eligible_for is a hiredra.location.eligibility() preference string
 # ("India", or a compound like "India or Remote"); everything else (country/
@@ -99,6 +137,8 @@ location:
 # seniority is decided by the years regex + anti-signal phrases below, not by
 # this list — otherwise the "member of technical staff" ALLOW addition above
 # would never survive to be tested.
+# F4 (2026-10-29, owner): "ii" removed -- "Engineer II" is usually the second level (often 1-3 years), so the
+# years parser decides; "iii" / "iv" stay. F7: Portuguese "sênior" and "vice president" added.
 senior_title_terms:
   - senior
   - sr.
@@ -112,7 +152,8 @@ senior_title_terms:
   - director
   - vp
   - avp
-  - ii
+  - vice president
+  - sênior
   - iii
   - iv
 

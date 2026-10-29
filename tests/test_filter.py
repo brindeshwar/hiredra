@@ -280,6 +280,53 @@ def test_role_type_block_wins_on_both():
     assert not r.keep and "block term" in r.reason
 
 
+@pytest.mark.parametrize(
+    "title,keep",
+    [
+        ("Software Engineer (Frontend)", False),  # F6: frontend-only gets in through "software engineer"
+        ("SDE II - QA, (Fixed term Contract)", False),
+        ("Golang SRE / Production Engineer", False),
+        ("Frontend/Backend Engineer", True),  # names backend: not frontend-only
+        ("Full Stack Engineer (Frontend Oriented)", True),
+        ("Backend Engineer", True),
+    ],
+)
+def test_off_bucket_terms_drop_frontend_test_and_sre_roles_unless_backend_or_full_stack(title, keep):
+    r = funnel.passes_role_type(title, CONFIG)
+    assert r.keep is keep
+    if not keep:
+        assert "off-bucket term" in r.reason
+
+
+@pytest.mark.parametrize(
+    "title,keep",
+    [
+        ("Collections Agent", False),  # F3: the bare "agent" kept call-centre and insurance agents
+        ("Tier 1 - Support Agent", False),
+        ("AI Agent Observability Engineer", True),
+        ("Binance Accelerator Program - AI Agent Engineer", True),
+        ("Summer 2027 Software Engineering Internship/Co-op", True),  # F5 additions
+        ("Java Developer", True),
+        ("Prompt Engineer", True),
+    ],
+)
+def test_role_type_after_the_freehire_comparison(title, keep):
+    assert funnel.passes_role_type(title, CONFIG).keep is keep
+
+
+@pytest.mark.parametrize(
+    "title,keep",
+    [
+        ("Software Engineer II", True),  # F4: II is the second level; the years decide
+        ("Software Engineer III", False),
+        ("Android Software Engineer Sênior", False),  # F7
+        ("Machine Learning Engineer, Vice President", False),
+    ],
+)
+def test_senior_title_terms_after_the_freehire_comparison(title, keep):
+    assert (funnel.has_senior_title_term(title, CONFIG.senior_title_terms) is None) is keep
+
+
 # --- wiring ----------------------------------------------------------------
 def test_run_funnel_advances_and_drops_with_reasons(pg_url):
     conn = connect(pg_url)
