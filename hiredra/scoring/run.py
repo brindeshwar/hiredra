@@ -99,6 +99,7 @@ def build_features(job: dict, skills: list[dict], fits, result, reasons, weights
             {
                 "skill": f.skill,
                 "req": item["requirement"],
+                "src": item.get("source", "llm"),
                 "w": skill_weight(item["requirement"], weights),
                 "nearest": f.nearest,
                 "s": round(f.similarity, 4),

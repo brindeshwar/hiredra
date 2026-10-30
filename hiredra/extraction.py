@@ -27,7 +27,7 @@ Hardened in M0.1: a daily request counter (stop before Google's cap), a run lock
 shared by every flash-lite spender, labelled stops (the failure table on
 ``run_extraction``), and an ``extraction_version`` stamp on every job it writes.
 
-    python -m hiredra.extraction [--limit N] [--stale] [--db PATH] [--config PATH]
+    python -m hiredra.extraction [--limit N] [--stale] [--dictionary] [--db PATH] [--config PATH]
                                  [--usage-path PATH] [--lock-path PATH]
 
 Exit codes (same as the graph CLI): 0 ok, 2 stopped with a reason, 4 lock held, 1 config error.
@@ -56,7 +56,7 @@ from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, ValidationError
 from tenacity import Retrying, retry_if_exception, stop_after_attempt
 
-from hiredra import vocab
+from hiredra import skilltag, vocab
 from hiredra.lock import LockHeld, RunLock
 from hiredra.nvidia import NvidiaChain
 from hiredra.quota import DailyQuotaExceeded, DailyUsage, classify_failure, jittered_wait, reset_text
@@ -66,6 +66,7 @@ from hiredra.storage import (
     init_db,
     iter_jobs,
     select_jobs,
+    set_dictionary_skills,
     set_extraction,
     set_skills,
     set_status,
@@ -97,6 +98,8 @@ class ExtractionConfig:
     max_skill_words: int = 4
     generic_skills: frozenset = frozenset()
     skill_synonyms: dict = field(default_factory=dict)
+    # The dictionary producer's own stoplist (on top of generic_skills): umbrella words and office tools.
+    dictionary_skip: frozenset = frozenset()
     # Fallback provider (docs/model-selection-extraction.md): used when Gemini's daily budget is spent.
     fallback_provider: str | None = None  # "nvidia" or None
     fallback_model: str = ""
@@ -130,6 +133,7 @@ def load_extraction_config(
         max_skill_words=int(data.get("max_skill_words", 4)),
         generic_skills=frozenset(_norm(x) for x in data.get("generic_skills") or []),
         skill_synonyms={_norm(k): tuple(_norm(v) for v in vs) for k, vs in (data.get("skill_synonyms") or {}).items()},
+        dictionary_skip=frozenset(_norm(x) for x in data.get("dictionary_skip") or []),
         **_fallback_fields(data.get("fallback") or {}),
     )
 
@@ -321,6 +325,16 @@ def extraction_version(config: ExtractionConfig | None = None, model: str = MODE
     return f"{model}:{hashlib.sha256(blob.encode('utf-8')).hexdigest()[:8]}"
 
 
+def dictionary_version(config: ExtractionConfig) -> str:
+    """``skilltag:<sha8>`` over the dictionary file and the two stoplists ``dictionary_extras`` applies.
+    Separate from the extraction stamp: re-deriving dictionary skills is free, so it never makes a job stale
+    for the LLM."""
+    blob = skilltag.SKILL_DICT_PATH.read_bytes() + json.dumps(
+        [sorted(config.generic_skills), sorted(config.dictionary_skip)]
+    ).encode("utf-8")
+    return f"skilltag:{hashlib.sha256(blob).hexdigest()[:8]}"
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # guards: the model is trusted for reading, never for constraints (rule 3)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -383,6 +397,44 @@ def apply_guards(skills: list, jd_text: str, config: ExtractionConfig) -> tuple[
         dropped["over cap"] = [i.name for i in kept[config.max_skills :]]
         kept = kept[: config.max_skills]
     return kept, dropped
+
+
+def dictionary_extras(
+    llm_names: list[str],
+    clean_text: str,
+    company: str,
+    domain_bucket: str | None,
+    slug_names: dict[str, str],
+    config: ExtractionConfig,
+) -> tuple[list[str], dict[str, list[str]]]:
+    """The second skill producer (D10.3): dictionary skills the LLM did not list, as our vocabulary names.
+
+    The step-9 comparison found the LLM leaves out skills named inside long lists, and a prompt change did
+    not bring them back; freehire's dictionary finds them deterministically. They are added as
+    good_to_have by the caller. Returns ``(extras, dropped)``; a dictionary skill is dropped as ``generic``
+    (the owner's generic or dictionary_skip list), ``company`` (the hiring company's own name: freehire
+    tags "stripe" on every Stripe posting) or ``listed`` (the LLM listed it, or a skill containing it or
+    contained in it as whole words: "spark" beside "apache spark").
+    """
+    company_norm = f" {_norm(company or '')} "
+    listed = [f" {_norm(n)} " for n in llm_names]
+    extras: list[str] = []
+    dropped: dict[str, list[str]] = {}
+    for slug in skilltag.parse(clean_text, skilltag.DOMAIN_CATEGORY.get(domain_bucket or "")):
+        name = slug_names[slug]
+        n = _norm(name)
+        reason = None
+        if not n or n in config.generic_skills or n in config.dictionary_skip:
+            reason = "generic"
+        elif company_norm.startswith(f" {n} "):
+            reason = "company"
+        elif any(f" {n} " in m or m in f" {n} " for m in listed):
+            reason = "listed"
+        if reason:
+            dropped.setdefault(reason, []).append(name)
+        elif name not in extras:
+            extras.append(name)
+    return extras, dropped
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -531,6 +583,8 @@ def run_extraction(
     graph = build_extraction_graph(chain, usage, sleep=sleep)
     pacer = _Pacer(config.requests_per_minute, sleep=sleep)
     stamp = extraction_version(config, model)
+    dict_stamp = dictionary_version(config)
+    slug_names = skilltag.vocab_names(conn)
     streak = 0
 
     jobs = list(iter_jobs(conn, status="filtered"))
@@ -602,6 +656,10 @@ def run_extraction(
             extraction_confidence=confidence,
             extraction_version=stamp,
         )
+        extras, _ = dictionary_extras(
+            [s["name"] for s in skills], clean_text, job["company"], result.domain_bucket, slug_names, config
+        )
+        set_dictionary_skills(conn, job_id, [vocab.resolve_skill(conn, n) for n in extras], dict_stamp)
         set_status(conn, job_id, "extracted")
         stats.extracted += 1
 
@@ -646,7 +704,12 @@ def reguard_jobs(conn, config: ExtractionConfig) -> dict[str, int]:
     rows = select_jobs(conn, "j.status = 'extracted' AND j.extraction_version = %s", (unguarded,), "j.job_key")
     for row in rows:
         clean_text, _ = preprocess(row["description"] or "", row["company"], config)
-        items = [SkillItem(name=s["name"], requirement=s["requirement"]) for s in row["skills"] or []]
+        items = [
+            SkillItem(name=s["name"], requirement=s["requirement"])
+            for s in row["skills"] or []
+            if s.get("source", "llm") == "llm"
+        ]
+        found = [s for s in row["skills"] or [] if s.get("source") == "dictionary"]  # not the LLM's: kept as is
         kept, dropped = apply_guards(items, clean_text, config)
         confidence = row["extraction_confidence"]
         if not kept and items and confidence == "high":
@@ -662,11 +725,38 @@ def reguard_jobs(conn, config: ExtractionConfig) -> dict[str, int]:
         set_skills(
             conn,
             row["job_id"],
-            [{"name": i.name, "requirement": i.requirement} for i in kept],
+            [{"name": i.name, "requirement": i.requirement} for i in kept] + found,
             extraction_confidence=confidence,
             extraction_version=guarded,
         )
         counts["jobs"] += 1
+    return counts
+
+
+def add_dictionary_skills(conn, config: ExtractionConfig) -> dict[str, int]:
+    """Run the dictionary producer (D10.3) on every extracted or scored job whose dictionary stamp is not the
+    current one. No API call: it needs only the stored LLM skills and the JD. Scored jobs keep their score
+    until the next ``python -m hiredra.scoring run --force``."""
+    stamp = dictionary_version(config)
+    slug_names = skilltag.vocab_names(conn)
+    counts = {"jobs": 0, "scored": 0, "skills_added": 0}
+    rows = select_jobs(
+        conn,
+        "j.status IN ('extracted', 'scored') AND j.extraction_confidence IS NOT NULL "
+        "AND j.dictionary_version IS DISTINCT FROM %s",
+        (stamp,),
+        "j.job_key",
+    )
+    for row in rows:
+        clean_text, _ = preprocess(row["description"] or "", row["company"], config)
+        llm = [s["name"] for s in row["skills"] or [] if s.get("source", "llm") == "llm"]
+        before = {s["name"] for s in row["skills"] or [] if s.get("source") == "dictionary"}
+        extras, _ = dictionary_extras(llm, clean_text, row["company"], row["domain_bucket"], slug_names, config)
+        names = [n if n in before else vocab.resolve_skill(conn, n) for n in extras]  # a sighting counts once
+        set_dictionary_skills(conn, row["job_id"], names, stamp)
+        counts["jobs"] += 1
+        counts["scored"] += row["status"] == "scored"
+        counts["skills_added"] += len(names)
     return counts
 
 
@@ -687,6 +777,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--stale", action="store_true", help="list jobs extracted with an older stamp (no API call)")
     parser.add_argument(
         "--reguard", action="store_true", help="apply the current guards to jobs extracted without them (no API call)"
+    )
+    parser.add_argument(
+        "--dictionary",
+        action="store_true",
+        help="add the skill dictionary's finds to extracted/scored jobs not yet stamped with it (no API call)",
     )
     parser.add_argument(
         "--provider",
@@ -713,6 +808,21 @@ def main(argv: list[str] | None = None) -> int:
             f"reguard: {counts['jobs']} job(s) re-checked, {counts['skills_dropped']} skill(s) dropped, "
             f"{counts['now_low_confidence']} now low confidence; stamp {extraction_version(config)}"
         )
+        return 0
+
+    if args.dictionary:
+        conn = connect(args.db)
+        try:
+            init_db(conn)
+            counts = add_dictionary_skills(conn, config)
+        finally:
+            conn.close()
+        print(
+            f"dictionary: {counts['jobs']} job(s), {counts['skills_added']} skill(s) added as good_to_have; "
+            f"stamp {dictionary_version(config)}"
+        )
+        if counts["scored"]:
+            print(f"  {counts['scored']} scored job(s) changed: re-score with `python -m hiredra.scoring run --force`")
         return 0
 
     if args.stale:

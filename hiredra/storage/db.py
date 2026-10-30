@@ -104,15 +104,16 @@ _REQUIRED_JOB_FIELDS = ("url", "title", "company", "source")
 
 # Every job column a caller reads, plus the board's slug and tag and the
 # skills list, in the shapes the SQLite rows had them: ``job_id`` is the key, ``skills`` is None until extraction
-# ran and then a list of {name, requirement} in extraction order.
+# ran and then a list of {name, requirement, source} in order: the LLM's skills, then the dictionary's (0005).
 _JOB_SELECT = """
 SELECT j.job_key AS job_id, j.id, j.source, j.external_id, j.url, j.apply_url, j.title, j.company, j.location,
        j.countries, j.is_remote, j.work_mode, j.date_posted, j.job_type, j.employment_type, j.salary,
        j.description, j.content_hash, j.role_fingerprint, j.duplicate_of, j.years_required,
        j.status, j.status_detail, j.status_changed_at,
-       j.domain_bucket, j.legitimacy, j.extraction_confidence, j.extraction_version,
+       j.domain_bucket, j.legitimacy, j.extraction_confidence, j.extraction_version, j.dictionary_version,
        CASE WHEN j.extraction_confidence IS NULL THEN NULL ELSE COALESCE(
-           (SELECT json_agg(json_build_object('name', s.skill, 'requirement', s.requirement) ORDER BY s.position)
+           (SELECT json_agg(json_build_object('name', s.skill, 'requirement', s.requirement, 'source', s.source)
+                            ORDER BY s.position)
               FROM job_skills s WHERE s.job_id = j.id), '[]'::json) END AS skills,
        j.score, j.score_features, j.review_reason, j.released_at, j.scored_at, j.score_version, j.score_embed_tag,
        j.score_skills_hash, j.score_profile_hash, j.outcome, j.outcome_at, j.outcome_detail,
@@ -425,15 +426,37 @@ def set_extraction(
 
 def _replace_skills(conn: psycopg.Connection, jid: int, skills: Sequence[Mapping[str, str]]) -> None:
     conn.execute("DELETE FROM job_skills WHERE job_id = %s", (jid,))
+    _insert_skills(conn, jid, skills, 0)
+
+
+def _insert_skills(conn: psycopg.Connection, jid: int, skills: Sequence[Mapping[str, str]], start: int) -> None:
+    """Append ``skills`` from position ``start``; a name repeated (or already stored) is kept once."""
     rows, names = [], set()
     for item in skills:
         if item["name"] not in names:
-            rows.append((jid, item["name"], item["requirement"], len(names)))
+            rows.append((jid, item["name"], item["requirement"], item.get("source", "llm"), start + len(names)))
             names.add(item["name"])
     if rows:
         conn.cursor().executemany(
-            "INSERT INTO job_skills (job_id, skill, requirement, position) VALUES (%s, %s, %s, %s)", rows
+            "INSERT INTO job_skills (job_id, skill, requirement, source, position) VALUES (%s, %s, %s, %s, %s) "
+            "ON CONFLICT (job_id, skill) DO NOTHING",
+            rows,
         )
+
+
+def set_dictionary_skills(conn: psycopg.Connection, job_id: str, names: Sequence[str], version: str) -> None:
+    """Replace a job's dictionary-found skills (D10.3) with ``names``, as good_to_have after the LLM's own, and
+    stamp ``dictionary_version``. The LLM's rows are not touched; a name the LLM already listed is skipped."""
+    with conn.transaction():
+        jid = _id(conn, job_id)
+        conn.execute("DELETE FROM job_skills WHERE job_id = %s AND source = 'dictionary'", (jid,))
+        start = conn.execute(
+            "SELECT COALESCE(MAX(position) + 1, 0) AS n FROM job_skills WHERE job_id = %s", (jid,)
+        ).fetchone()["n"]
+        _insert_skills(
+            conn, jid, [{"name": n, "requirement": "good_to_have", "source": "dictionary"} for n in names], start
+        )
+        conn.execute("UPDATE jobs SET dictionary_version = %s WHERE id = %s", (version, jid))
 
 
 def set_skills(conn: psycopg.Connection, job_id: str, skills: Sequence[Mapping[str, str]], **columns: Any) -> None:

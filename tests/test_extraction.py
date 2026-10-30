@@ -41,6 +41,11 @@ def _job(**overrides):
     return job
 
 
+def _llm_skills(row):
+    """The LLM's skills of a stored job, without the dictionary's (tested on their own below)."""
+    return [{"name": s["name"], "requirement": s["requirement"]} for s in row["skills"] if s["source"] == "llm"]
+
+
 def _filtered_job(conn, **overrides):
     job = _job(**overrides)
     upsert_job(conn, job)
@@ -221,8 +226,7 @@ def test_run_extraction_writes_all_four_fields_and_advances_status(pg_url):
     assert row["domain_bucket"] == "backend"
     assert row["legitimacy"] == "legitimate"
     assert row["extraction_confidence"] == "high"
-    skills = row["skills"]
-    assert skills == [
+    assert _llm_skills(row) == [
         {"name": "fastapi", "requirement": "required"},
         {"name": "python", "requirement": "good_to_have"},
     ]
@@ -244,8 +248,7 @@ def test_run_extraction_canonicalizes_skill_names_through_the_vocab(pg_url):
     extraction.run_extraction(conn, CONFIG, chain=chain)
 
     assert get_skill_vocab(conn, "fastapi") is not None
-    skills = get_job(conn, job_id)["skills"]
-    assert skills == [{"name": "fastapi", "requirement": "required"}]
+    assert _llm_skills(get_job(conn, job_id)) == [{"name": "fastapi", "requirement": "required"}]
     conn.close()
 
 
@@ -660,7 +663,7 @@ def test_guards_run_inside_extraction_and_are_noted(db):
     result = _result(skills=_items("python", "kafka", "ai"))
     extraction.run_extraction(db, GUARDED, chain=_ScriptChain(result), sleep=lambda s: None)
     row = get_job(db, job_id)
-    assert [s["name"] for s in row["skills"]] == ["python"]
+    assert [s["name"] for s in _llm_skills(row)] == ["python"]
     assert row["extraction_confidence"] == "high"
     assert any("guards dropped ungrounded: kafka; generic: ai" in n for n in _notes(db, job_id))
     assert row["extraction_version"] == extraction.extraction_version(GUARDED)
@@ -670,7 +673,7 @@ def test_no_surviving_skill_means_low_confidence(db):
     job_id = _filtered_job(db, description=_JD * 2)
     extraction.run_extraction(db, GUARDED, chain=_ScriptChain(_result(skills=_items("kafka"))), sleep=lambda s: None)
     row = get_job(db, job_id)
-    assert row["skills"] == [] and row["extraction_confidence"] == "low"
+    assert _llm_skills(row) == [] and row["extraction_confidence"] == "low"
 
 
 def test_guard_settings_are_part_of_the_stamp():

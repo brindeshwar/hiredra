@@ -37,6 +37,17 @@ generic_skills: [
   monitoring, alerting, metrics, logging, documentation, deployment, collaboration, communication,
   teamwork, leadership, problem solving, ownership, safety, tone, latency, performance
 ]
+# --- Dictionary producer (hiredra.extraction.dictionary_extras, decision D10.3) -----------------
+# freehire's skill dictionary runs after the LLM and adds the skills the LLM did not list, as
+# good_to_have. It skips the generic_skills above and this list: umbrella words the dictionary tags
+# on most postings, and office tools / compliance names that are rarely the job's requirement
+# (the step-9 comparison's two noise groups).
+dictionary_skip: [
+  api, automation, analytics, agile, saas, machine learning, data science, llm, agentic ai,
+  generative ai, networking, iot, observability, devops, data engineering,
+  asana, notion, slack, zoom, jira, confluence, gdpr, hipaa, soc 2, iso 27001, github,
+  google workspace, microsoft office, excel, statistics, user research, openai, anthropic
+]
 # canonical name -> other names that count as "the JD names it"
 skill_synonyms:
   gcp: [google cloud, google cloud platform]
