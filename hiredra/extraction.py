@@ -329,9 +329,10 @@ def dictionary_version(config: ExtractionConfig) -> str:
     """``skilltag:<sha8>`` over the dictionary file and the two stoplists ``dictionary_extras`` applies.
     Separate from the extraction stamp: re-deriving dictionary skills is free, so it never makes a job stale
     for the LLM."""
-    blob = skilltag.SKILL_DICT_PATH.read_bytes() + json.dumps(
-        [sorted(config.generic_skills), sorted(config.dictionary_skip)]
-    ).encode("utf-8")
+    text = skilltag.SKILL_DICT_PATH.read_text(encoding="utf-8").replace("\r\n", "\n")  # same stamp after CRLF checkout
+    blob = text.encode("utf-8") + json.dumps([sorted(config.generic_skills), sorted(config.dictionary_skip)]).encode(
+        "utf-8"
+    )
     return f"skilltag:{hashlib.sha256(blob).hexdigest()[:8]}"
 
 
