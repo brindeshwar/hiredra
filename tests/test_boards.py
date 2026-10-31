@@ -69,6 +69,19 @@ def test_import_board_outcomes(conn):
     assert db.import_board(conn, **{**kw, "board": "never"}, enabled=False) == "skipped"
 
 
+def test_a_known_board_keeps_its_company_and_mints_none_for_another_spelling(conn):
+    _board(conn, "greenhouse", "1910genetics", "openjobs", name="1910 Genetics")
+    kw = dict(provider="greenhouse", board="1910genetics", provenance="ats-inventory", source_name="greenhouse.csv")
+    assert db.import_board(conn, name="1910", **kw) == "known"
+    assert conn.execute("SELECT name FROM companies").fetchall() == [("1910 Genetics",)]
+
+    conn.execute("UPDATE boards SET company_id = NULL")  # a board with no company yet does get one
+    assert db.import_board(conn, name="1910", **kw) == "known"
+    assert conn.execute(
+        "SELECT c.name FROM boards b JOIN companies c ON c.id = b.company_id"
+    ).fetchone()[0] == "1910"  # fmt: skip
+
+
 def test_a_board_retired_for_another_reason_is_not_re_enabled(conn):
     _board(conn, "ashby", "ramp", "curated", status="retired")
     conn.execute("UPDATE boards SET status_reason = 'board removed by the company'")
@@ -159,3 +172,47 @@ def test_cli_run_crawls_the_boards_the_config_names(tmp_path, monkeypatch, capsy
     assert main(["run", "--config", str(wide), "--db", pg_url]) == 0
     assert [e.name for e in recorder.entries] == ["Acme", "Ramp"]
     assert "-> OK" in capsys.readouterr().out
+
+
+# ── public ATS-company lists (slice 2.3) ────────────────────────────────────
+def test_load_inventory(tmp_path):
+    from hiredra.sourcing.config import ConfigError, load_inventory
+
+    p = _write(
+        tmp_path,
+        "name,slug,url\n10x Team,10xteam,https://jobs.ashbyhq.com/10xteam\n,noname,https://x\nNo Slug,,https://y\n",
+        "ashby.csv",
+    )
+    [entry] = load_inventory(p, "ashby")
+    assert (entry.name, entry.provider, entry.careers_url) == ("10x Team", "ashby", "https://jobs.ashbyhq.com/10xteam")
+    assert entry.extra == {"slug": "10xteam", "provenance": "ats-inventory"}
+    with pytest.raises(ConfigError):
+        load_inventory(_write(tmp_path, "name,url\nA,https://a\n", "legacy.csv"), "ashby")
+
+
+def test_cli_imports_an_inventory_csv(tmp_path, capsys, pg_url):
+    from hiredra.sourcing.__main__ import main
+
+    conn = db.connect(pg_url)
+    try:
+        db.init_db(conn)
+        _board(conn, "lever", "100ms", "openjobs", name="100MS")
+    finally:
+        conn.close()
+    path = _write(
+        tmp_path,
+        "name,slug,url\n100MS,100ms,https://jobs.lever.co/100ms\n15Five,15five,https://jobs.lever.co/15five\n",
+        "lever.csv",
+    )
+    assert main(["boards", "import", str(path), "--db", pg_url]) == 0
+    assert "2 entries -> known 1, new 1" in capsys.readouterr().out
+    conn = db.connect(pg_url)
+    try:
+        rows = conn.execute("SELECT board, provenance, status FROM boards ORDER BY board").fetchall()
+        assert [tuple(r) for r in rows] == [("100ms", "openjobs", "active"), ("15five", "ats-inventory", "pending")]
+    finally:
+        conn.close()
+
+    other = _write(tmp_path, "name,slug,url\nAcme,acme,https://acme.wd1.myworkdayjobs.com\n", "workday.csv")
+    assert main(["boards", "import", str(other), "--db", pg_url]) == 1  # no Workday adapter yet (build step 3)
+    assert "no provider or board slug for 1: Acme" in capsys.readouterr().out

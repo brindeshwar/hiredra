@@ -1,10 +1,11 @@
 """``python -m hiredra.sourcing run --config PATH [--db URL] [--resume]``
 ``python -m hiredra.sourcing runs [--db URL] [--limit N]``
-``python -m hiredra.sourcing boards import PATH [--provenance NAME] [--db URL]``
+``python -m hiredra.sourcing boards import PATH [--provenance NAME] [--provider NAME] [--db URL]``
 ``python -m hiredra.sourcing companies merge [--apply] [--curated PATH] [--db URL]``
 
 A run crawls the ``boards`` table, picked by the run config's ``boards`` key (decision D2.1). A company list such
-as ``config/companies.yml`` reaches the table through ``boards import``: new entries are added as ``pending``,
+as ``config/companies.yml``, or a public ``name,slug,url`` CSV of one ATS's companies (D2.2, ``--provider``
+defaults to the file stem), reaches the table through ``boards import``: new entries are added as ``pending``,
 known ones only get blank fields filled, and ``enabled: false`` retires a board.
 
 The CLI owns the one shared connection to the operational DB: opens it once,
@@ -26,7 +27,7 @@ for _stream in (sys.stdout, sys.stderr):
 from pathlib import Path
 
 from hiredra.sourcing import companies as company_merge
-from hiredra.sourcing.config import board_entry, load_companies, load_run_config
+from hiredra.sourcing.config import INVENTORY_PROVENANCE, board_entry, load_companies, load_inventory, load_run_config
 from hiredra.sourcing.orchestrator import RunReport, run as run_orchestrator
 from hiredra.sourcing.provider import company_slug
 from hiredra.sourcing.registry import REGISTRY, route
@@ -90,7 +91,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
 
 
 def _cmd_boards_import(args: argparse.Namespace) -> int:
-    entries = load_companies(args.path, args.provenance, include_disabled=True)
+    if Path(args.path).suffix.lower() == ".csv":
+        provider = args.provider or Path(args.path).stem
+        entries = load_inventory(args.path, provider, args.provenance or INVENTORY_PROVENANCE)
+    else:
+        entries = load_companies(args.path, args.provenance, include_disabled=True)
     counts: dict[str, int] = {}
     unroutable: list[str] = []
     conn = db.connect(args.db)
@@ -120,7 +125,8 @@ def _cmd_boards_import(args: argparse.Namespace) -> int:
     summary = ", ".join(f"{k} {v}" for k, v in sorted(counts.items())) or "nothing"
     print(f"boards import {args.path}: {len(entries)} entries -> {summary}")
     if unroutable:
-        print(f"  [!] no provider or board slug for {len(unroutable)}: {', '.join(unroutable)}")
+        more = f" and {len(unroutable) - 20} more" if len(unroutable) > 20 else ""
+        print(f"  [!] no provider or board slug for {len(unroutable)}: {', '.join(unroutable[:20])}{more}")
     return 1 if unroutable else 0
 
 
@@ -194,7 +200,12 @@ def main(argv: list[str] | None = None) -> int:
     boards_sub = p_boards.add_subparsers(dest="boards_command", required=True)
     p_import = boards_sub.add_parser("import", help="write a company list (e.g. config/companies.yml) into boards")
     p_import.add_argument("path")
-    p_import.add_argument("--provenance", default=None, help="default: curated for companies.yml, else the file stem")
+    p_import.add_argument(
+        "--provenance",
+        default=None,
+        help="default: curated for companies.yml, ats-inventory for a CSV, else the file stem",
+    )
+    p_import.add_argument("--provider", default=None, help="a CSV's ATS (default: the file stem, e.g. lever.csv)")
     p_import.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
     p_import.set_defaults(func=_cmd_boards_import)
 

@@ -364,7 +364,8 @@ def import_board(
     ``skipped``    disabled and never stored: nothing to do.
     """
     row = conn.execute(
-        "SELECT id, status, status_reason FROM boards WHERE provider = %s AND lower(board) = lower(%s) AND region = ''",
+        "SELECT id, status, status_reason, company_id FROM boards "
+        "WHERE provider = %s AND lower(board) = lower(%s) AND region = ''",
         (provider, board),
     ).fetchone()
     reason = f"disabled in {source_name}"
@@ -373,16 +374,18 @@ def import_board(
             return "skipped"
         conn.execute("UPDATE boards SET status = 'retired', status_reason = %s WHERE id = %s", (reason, row["id"]))
         return "retired"
-    company_id = _company_id(conn, name)
     if row is None:
         conn.execute(
             "INSERT INTO boards (provider, board, company_id, careers_url, status, provenance, list_tag) "
             "VALUES (%s, %s, %s, %s, 'pending', %s, %s)",
-            (provider, board, company_id, careers_url, provenance, list_tag),
+            (provider, board, _company_id(conn, name), careers_url, provenance, list_tag),
         )
         return "new"
+    # A known board keeps its company. Only a board without one looks the list's name up: looking it up anyway
+    # would mint a company row nothing points at for every spelling the list differs on ("1910" vs "1910 Genetics").
+    company_id = row["company_id"] if row["company_id"] is not None else _company_id(conn, name)
     conn.execute(
-        "UPDATE boards SET company_id = COALESCE(company_id, %s), careers_url = COALESCE(careers_url, %s), "
+        "UPDATE boards SET company_id = %s, careers_url = COALESCE(careers_url, %s), "
         "list_tag = COALESCE(list_tag, %s) WHERE id = %s",
         (company_id, careers_url, list_tag, row["id"]),
     )
