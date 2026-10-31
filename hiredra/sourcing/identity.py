@@ -56,6 +56,13 @@ def _letters(word: str) -> str:
     return "".join(c for c in word.lower() if "a" <= c <= "z")
 
 
+#: India's "Private Limited" (decision D6.5, build slice 2.2). "Pvt"/"Private" is a form only right before
+#: Ltd/Limited, never on its own; written as one word ("Pvt.Ltd") it is one form. Measured on 4,899 companies:
+#: 106 names end this way, and stripping lands none of them on a different existing employer.
+_INDIA_PRIVATE = frozenset({"pvt", "private"})
+_INDIA_JOINED = frozenset({"pvtltd", "privatelimited", "pvtlimited"})
+
+
 def company_slug(name: str) -> str:
     """``slug`` of the name with trailing corporate forms removed, repeatedly ("Acme GmbH & Co. KG" -> ``acme``).
 
@@ -64,8 +71,16 @@ def company_slug(name: str) -> str:
     """
     name = name.replace("'", "").replace("’", "").replace("ʼ", "")
     words = [w for w in re.split(r"[^\w./]+|_", name) if w]
-    while len(words) > 1 and _letters(words[-1]) in _LEGAL_FORMS:
-        words.pop()
+    while len(words) > 1:
+        last = _letters(words[-1])
+        if last in _INDIA_JOINED:
+            words.pop()
+        elif last in _LEGAL_FORMS:
+            words.pop()
+            if last in ("ltd", "limited") and len(words) > 1 and _letters(words[-1]) in _INDIA_PRIVATE:
+                words.pop()
+        else:
+            break
     return slug(" ".join(words))
 
 

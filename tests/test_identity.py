@@ -30,6 +30,14 @@ from hiredra.sourcing.identity import company_slug, content_hash, role_fingerpri
         ("Acme ™", "acme"),
         ("Яндекс ООО", "яндекс-ооо"),  # freehire: "iandeks-ooo" (no unidecode table here, see the module docstring)
         ("", ""),
+        # India's Private Limited (ours, not freehire's; build slice 2.2)
+        ("Razorpay Software Pvt Ltd", "razorpay-software"),
+        ("Razorpay Software Private Limited", "razorpay-software"),
+        ("ALPONENT DIGITAL SOLUTIONS PVT.LTD", "alponent-digital-solutions"),
+        ("Arrise Solutions (India) Pvt. Ltd.", "arrise-solutions-india"),
+        ("TechUnity Software Systems India Pvt.Ltd.", "techunity-software-systems-india"),
+        ("Acme Private Equity", "acme-private-equity"),  # "Private" alone is a word, not a form
+        ("Private Ltd", "private"),  # never strips a name down to nothing
     ],
 )
 def test_company_slug(name, want):
