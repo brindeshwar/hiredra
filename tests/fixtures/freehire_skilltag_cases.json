@@ -1,0 +1,1137 @@
+[
+ {
+  "text": "   ",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": " + form + ",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": " of a haulier, a ",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": " or ",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": " with ",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "%q label %q has a double space",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "%s = %q carries markup whitespace",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": ")); !has(got, ",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": ")); has(got, ",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "); !has(got, ",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "); got[",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "); has(got, ",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": ", a ",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": ", got, ",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": ", got[",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": ", prefix, got[",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "3d suite",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "5y as a C developer",
+  "category": null,
+  "tags": [
+   "c"
+  ]
+ },
+ {
+  "text": ":             ",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "Aliases(%q) = %v, has a duplicate",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "Aliases(%q) is empty",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "Certified Scrum Master (CSM)",
+  "category": null,
+  "tags": [
+   "certified-scrummaster",
+   "scrum"
+  ]
+ },
+ {
+  "text": "Certified Scrum Master (CSM)",
+  "category": "ai_engineering",
+  "tags": [
+   "certified-scrummaster",
+   "scrum"
+  ]
+ },
+ {
+  "text": "Certified ScrumMaster (CSM)",
+  "category": null,
+  "tags": [
+   "certified-scrummaster"
+  ]
+ },
+ {
+  "text": "Certified ScrumMaster (CSM)",
+  "category": "ai_engineering",
+  "tags": [
+   "certified-scrummaster"
+  ]
+ },
+ {
+  "text": "Deploy to Google Cloud.",
+  "category": null,
+  "tags": [
+   "cloud",
+   "gcp"
+  ]
+ },
+ {
+  "text": "Etap rekrutacji: rozmowa z zespołem.",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "GTM strategy",
+  "category": null,
+  "tags": [
+   "go-to-market"
+  ]
+ },
+ {
+  "text": "Google Ads",
+  "category": null,
+  "tags": [
+   "google-ads"
+  ]
+ },
+ {
+  "text": "Je bouwt cases op het Pega Platform als Pega developer",
+  "category": null,
+  "tags": [
+   "pega"
+  ]
+ },
+ {
+  "text": "Pflege der CRM-Systeme",
+  "category": null,
+  "tags": [
+   "crm"
+  ]
+ },
+ {
+  "text": "RAG status",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "RAG status",
+  "category": "ai_engineering",
+  "tags": [
+   "rag"
+  ]
+ },
+ {
+  "text": "REQUIREMENTS: KUBERNETES, POSTGRESQL, TYPESCRIPT.",
+  "category": null,
+  "tags": [
+   "kubernetes",
+   "postgresql",
+   "typescript"
+  ]
+ },
+ {
+  "text": "REST API",
+  "category": null,
+  "tags": [
+   "api",
+   "rest"
+  ]
+ },
+ {
+  "text": "React Native",
+  "category": null,
+  "tags": [
+   "react",
+   "react-native"
+  ]
+ },
+ {
+  "text": "React, Redux, Node.js",
+  "category": null,
+  "tags": [
+   "nodejs",
+   "react",
+   "redux"
+  ]
+ },
+ {
+  "text": "Resolve(%q) = %q, %v",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "SENIOR REACT DEVELOPER, TYPESCRIPT",
+  "category": null,
+  "tags": [
+   "react",
+   "typescript"
+  ]
+ },
+ {
+  "text": "Scale Meta Ads creative.",
+  "category": null,
+  "tags": [
+   "meta-ads"
+  ]
+ },
+ {
+  "text": "Upload files to AWS S3 for storage.",
+  "category": null,
+  "tags": [
+   "aws",
+   "s3"
+  ]
+ },
+ {
+  "text": "We report project health as RAG status weekly.",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "We report project health as RAG status weekly.",
+  "category": "ai_engineering",
+  "tags": [
+   "rag"
+  ]
+ },
+ {
+  "text": "You will bootstrap the retail team from scratch.",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "] != ",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "a burp",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "a druid",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "a flexible workday",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "a key lever",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "a multi-word alias resolves",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "ability to react quickly",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "accessibility corroborated",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "adobe suite",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "aec software",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "after effects",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "agile + jira",
+  "category": null,
+  "tags": [
+   "agile",
+   "jira"
+  ]
+ },
+ {
+  "text": "ai + pytorch",
+  "category": null,
+  "tags": [
+   "ai",
+   "pytorch"
+  ]
+ },
+ {
+  "text": "ai pitch",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "ambiguous via qualifier",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "assembly + c",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "ats footer",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "aws s3 phrase",
+  "category": null,
+  "tags": [
+   "aws",
+   "s3"
+  ]
+ },
+ {
+  "text": "aws services",
+  "category": null,
+  "tags": [
+   "aws"
+  ]
+ },
+ {
+  "text": "azure services",
+  "category": null,
+  "tags": [
+   "azure"
+  ]
+ },
+ {
+  "text": "bare illustrator",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "bare pega is a verb",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "bare sap still gated",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "bedrock word trap",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "bicep the azure dsl",
+  "category": null,
+  "tags": [
+   "azure",
+   "bicep"
+  ]
+ },
+ {
+  "text": "bootstrap a startup",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "bootstrap the framework",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "braze + typescript",
+  "category": null,
+  "tags": [
+   "braze",
+   "typescript"
+  ]
+ },
+ {
+  "text": "c4d the biomarker",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "cad + hardware",
+  "category": null,
+  "tags": [
+   "cad"
+  ]
+ },
+ {
+  "text": "cad phrases",
+  "category": null,
+  "tags": [
+   "cad"
+  ]
+ },
+ {
+  "text": "capital beats a lowercase verb elsewhere",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "chroma db spaced",
+  "category": null,
+  "tags": [
+   "chromadb"
+  ]
+ },
+ {
+  "text": "ci-cd delivery",
+  "category": null,
+  "tags": [
+   "ci-cd"
+  ]
+ },
+ {
+  "text": "ci-cd plural",
+  "category": null,
+  "tags": [
+   "ci-cd"
+  ]
+ },
+ {
+  "text": "claude the model",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "clerk suites",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "cloud + aws",
+  "category": null,
+  "tags": [
+   "aws",
+   "cloud"
+  ]
+ },
+ {
+  "text": "cloud weather",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "code craft",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "covered ci-cd phrase",
+  "category": null,
+  "tags": [
+   "ci-cd"
+  ]
+ },
+ {
+  "text": "covered gcp phrase",
+  "category": null,
+  "tags": [
+   "gcp"
+  ]
+ },
+ {
+  "text": "craft practices",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "creo que",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "culture blurb",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "cv model",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "cyber sector",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "data phrases",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "data platform",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "data stack",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "data stores",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "data viz",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "ddd tdd",
+  "category": null,
+  "tags": [
+   "tdd"
+  ]
+ },
+ {
+  "text": "dedup + sort",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "distributed systems",
+  "category": null,
+  "tags": [
+   "distributed-systems"
+  ]
+ },
+ {
+  "text": "distributed systems everywhere",
+  "category": null,
+  "tags": [
+   "distributed-systems"
+  ]
+ },
+ {
+  "text": "eclipse the ide",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "embedded phrase trap",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "evm + ethers",
+  "category": null,
+  "tags": [
+   "evm"
+  ]
+ },
+ {
+  "text": "fire-code firewall",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "first aid",
+  "category": null,
+  "tags": [
+   "first-aid"
+  ]
+ },
+ {
+  "text": "flux the gitops tool",
+  "category": null,
+  "tags": [
+   "flux",
+   "gitops"
+  ]
+ },
+ {
+  "text": "google ads",
+  "category": null,
+  "tags": [
+   "google-ads"
+  ]
+ },
+ {
+  "text": "gpu with a stack",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "grams of sugar",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "gtm strategy",
+  "category": null,
+  "tags": [
+   "go-to-market"
+  ]
+ },
+ {
+  "text": "haystack idiom trap",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "html stripped",
+  "category": null,
+  "tags": [
+   "html"
+  ]
+ },
+ {
+  "text": "iac ops",
+  "category": null,
+  "tags": [
+   "infrastructure-as-code"
+  ]
+ },
+ {
+  "text": "itil + six sigma",
+  "category": null,
+  "tags": [
+   "itil",
+   "six-sigma"
+  ]
+ },
+ {
+  "text": "jvm server stack",
+  "category": null,
+  "tags": [
+   "jvm"
+  ]
+ },
+ {
+  "text": "kms is kilometres",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "kvm the closet switch",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "kvm the hypervisor",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "llm frameworks",
+  "category": null,
+  "tags": [
+   "llm"
+  ]
+ },
+ {
+  "text": "llms plural to llm",
+  "category": null,
+  "tags": [
+   "llm"
+  ]
+ },
+ {
+  "text": "loki the log store",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "looker studio",
+  "category": null,
+  "tags": [
+   "looker",
+   "looker-studio"
+  ]
+ },
+ {
+  "text": "lowercase elk as a whole word still tags",
+  "category": null,
+  "tags": [
+   "elk"
+  ]
+ },
+ {
+  "text": "maximo the cmms",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "maximo the superlative",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "meta ads",
+  "category": null,
+  "tags": [
+   "meta-ads"
+  ]
+ },
+ {
+  "text": "more cad",
+  "category": null,
+  "tags": [
+   "cad"
+  ]
+ },
+ {
+  "text": "ms low-code",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "ms office",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "ms products",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "olap database duckdb",
+  "category": null,
+  "tags": [
+   "duckdb",
+   "olap"
+  ]
+ },
+ {
+  "text": "paid search is ppc",
+  "category": null,
+  "tags": [
+   "ppc"
+  ]
+ },
+ {
+  "text": "paid social",
+  "category": null,
+  "tags": [
+   "paid-social"
+  ]
+ },
+ {
+  "text": "palo alto the city",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "parquet the format",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "pcb the board",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "phrase aliases",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "phraseAliases ",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "polish stage",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "power bi",
+  "category": null,
+  "tags": [
+   "powerbi"
+  ]
+ },
+ {
+  "text": "prefect the orchestrator",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "prefect the school role",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "primavera the scheduler",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "product still corroborates",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "protocols + formats",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "puppet the show",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "rag phrase",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "rag status trap",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "react + typescript",
+  "category": null,
+  "tags": [
+   "typescript"
+  ]
+ },
+ {
+  "text": "react all caps",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "react list",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "react verb (cook)",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "react verb beside support tools",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "react, React.js, REACT",
+  "category": null,
+  "tags": [
+   "react"
+  ]
+ },
+ {
+  "text": "regulatory frameworks",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "rest api phrase",
+  "category": null,
+  "tags": [
+   "api",
+   "rest"
+  ]
+ },
+ {
+  "text": "rest trap",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "rest via rest api",
+  "category": null,
+  "tags": [
+   "api",
+   "rest"
+  ]
+ },
+ {
+  "text": "rest via restful",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "retail gadgets",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "rugby scrum",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "s3 + lambda",
+  "category": null,
+  "tags": [
+   "lambda",
+   "s3"
+  ]
+ },
+ {
+  "text": "s3 roadmap phase",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "s3 trap",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "saas platforms",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "sap + abap",
+  "category": null,
+  "tags": [
+   "abap",
+   "sap"
+  ]
+ },
+ {
+  "text": "sap modules",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "sap r/3",
+  "category": null,
+  "tags": [
+   "sap"
+  ]
+ },
+ {
+  "text": "scrum + jira",
+  "category": null,
+  "tags": [
+   "jira",
+   "scrum"
+  ]
+ },
+ {
+  "text": "security practice",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "security stack",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "short-form video",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "sketch corroborated",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "sketch out ideas",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "soap api phrase",
+  "category": null,
+  "tags": [
+   "api",
+   "soap"
+  ]
+ },
+ {
+  "text": "space still resolves",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "sprout social",
+  "category": null,
+  "tags": [
+   "sprout-social"
+  ]
+ },
+ {
+  "text": "stripe as a stripe",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "stripe with a stack",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "swift + ios",
+  "category": null,
+  "tags": [
+   "ios"
+  ]
+ },
+ {
+  "text": "swift adjective",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "temporal adjective trap",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "the craft itself",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "tiktok ads",
+  "category": null,
+  "tags": [
+   "tiktok-ads"
+  ]
+ },
+ {
+  "text": "tree sap",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "vector db",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "vector dbs",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "video suite",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "warehouse associate",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "web3 stack",
+  "category": null,
+  "tags": [
+   "web3"
+  ]
+ },
+ {
+  "text": "word aliases",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "workday the hcm suite",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "workplace tools corroborated",
+  "category": null,
+  "tags": []
+ },
+ {
+  "text": "zoom the verb",
+  "category": null,
+  "tags": []
+ }
+]

@@ -247,8 +247,8 @@ def test_set_extraction_stores_all_four_fields(conn):
     )
     row = db.get_job(conn, JID)
     assert row["skills"] == [
-        {"name": "python", "requirement": "required"},
-        {"name": "aws", "requirement": "good_to_have"},
+        {"name": "python", "requirement": "required", "source": "llm"},
+        {"name": "aws", "requirement": "good_to_have", "source": "llm"},
     ]
     assert row["domain_bucket"] == "backend"
     assert row["legitimacy"] == "legitimate"
@@ -259,10 +259,13 @@ def test_set_extraction_keeps_a_repeated_skill_once_and_replaces_on_rewrite(conn
     db.upsert_job(conn, _job())
     skills = [{"name": "go", "requirement": "required"}, {"name": "go", "requirement": "good_to_have"}]
     db.set_extraction(conn, JID, skills=skills, domain_bucket=None, legitimacy=None, extraction_confidence="high")
-    assert db.get_job(conn, JID)["skills"] == [{"name": "go", "requirement": "required"}]
+    assert db.get_job(conn, JID)["skills"] == [{"name": "go", "requirement": "required", "source": "llm"}]
     db.set_skills(conn, JID, [{"name": "rust", "requirement": "required"}], extraction_version="v2")
     row = db.get_job(conn, JID)
-    assert (row["skills"], row["extraction_version"]) == ([{"name": "rust", "requirement": "required"}], "v2")
+    assert (row["skills"], row["extraction_version"]) == (
+        [{"name": "rust", "requirement": "required", "source": "llm"}],
+        "v2",
+    )
     with pytest.raises(ValueError):
         db.set_skills(conn, JID, [], status="scored")  # only extraction columns
 

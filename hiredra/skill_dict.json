@@ -1,0 +1,11125 @@
+{
+"_source": "freehire (github.com/strelov1/freehire, MIT) internal/dict/skilltag at commit 0e715dfc, exported unchanged from its own tables; see THIRD_PARTY_NOTICES.md",
+"word_aliases": {
+"1c": "1c",
+"a11y": "accessibility",
+"abac": "abac",
+"abap": "abap",
+"accessibility": "accessibility",
+"activemq": "activemq",
+"actix": "actix",
+"adas": "adas",
+"aem": "adobe-experience-manager",
+"agentforce": "agentforce",
+"agentic": "agentic-ai",
+"agile": "agile",
+"ai": "ai",
+"airbyte": "airbyte",
+"airflow": "airflow",
+"airtable": "airtable",
+"ajax": "ajax",
+"aks": "aks",
+"alteryx": "alteryx",
+"altium": "altium",
+"amplitude": "amplitude",
+"analytics": "analytics",
+"anaplan": "anaplan",
+"android": "android",
+"angular": "angular",
+"angularjs": "angular",
+"ansible": "ansible",
+"ansys": "ansys",
+"anthropic": "anthropic",
+"apex": "apex",
+"api": "api",
+"apigee": "apigee",
+"apis": "api",
+"appdynamics": "appdynamics",
+"appium": "appium",
+"appsec": "application-security",
+"arcgis": "arcgis",
+"archimate": "archimate",
+"argocd": "argocd",
+"ariba": "ariba",
+"arista": "arista",
+"artifactory": "artifactory",
+"as400": "as400",
+"asana": "asana",
+"assembly": "assembly",
+"astro": "astro",
+"asyncio": "asyncio",
+"athena": "athena",
+"atlassian": "atlassian",
+"aurora": "aurora",
+"auth0": "auth0",
+"authentication": "authentication",
+"autocad": "autocad",
+"autogen": "autogen",
+"automation": "automation",
+"autosar": "autosar",
+"avro": "avro",
+"aws": "aws",
+"azure": "azure",
+"backbone": "backbone",
+"bash": "bash",
+"bazel": "bazel",
+"bdd": "bdd",
+"bentoml": "bentoml",
+"bgp": "bgp",
+"bicep": "bicep",
+"bigquery": "bigquery",
+"bim": "bim",
+"bioinformatics": "bioinformatics",
+"bitbucket": "bitbucket",
+"blazor": "blazor",
+"blender": "blender",
+"blockchain": "blockchain",
+"bluebeam": "bluebeam",
+"bluetooth": "bluetooth",
+"boomi": "boomi",
+"bootstrap": "bootstrap",
+"bpmn": "bpmn",
+"braze": "braze",
+"c4d": "cinema-4d",
+"cad": "cad",
+"calendly": "calendly",
+"camunda": "camunda",
+"canopen": "canopen",
+"canva": "canva",
+"capcut": "capcut",
+"cassandra": "cassandra",
+"catia": "catia",
+"cdk": "cdk",
+"centos": "centos",
+"ceph": "ceph",
+"chatgpt": "chatgpt",
+"chromadb": "chromadb",
+"cicd": "ci-cd",
+"cics": "cics",
+"circleci": "circleci",
+"cisco": "cisco",
+"citrix": "citrix",
+"cli": "cli",
+"clickhouse": "clickhouse",
+"clio": "clio",
+"clojure": "clojure",
+"cloud": "cloud",
+"cloudera": "cloudera",
+"cloudflare": "cloudflare",
+"cloudfront": "cloudfront",
+"cloudtrail": "cloudtrail",
+"cloudwatch": "cloudwatch",
+"cmake": "cmake",
+"cmdb": "cmdb",
+"cmms": "cmms",
+"cmos": "cmos",
+"cobol": "cobol",
+"cockroachdb": "cockroachdb",
+"cognos": "cognos",
+"cohere": "cohere",
+"collibra": "collibra",
+"confluence": "confluence",
+"containerd": "containerd",
+"containerisation": "containerization",
+"containerization": "containerization",
+"conteneurisation": "containerization",
+"cordova": "cordova",
+"cority": "cority",
+"couchdb": "couchdb",
+"coupa": "coupa",
+"cpq": "cpq",
+"cqrs": "cqrs",
+"crewai": "crewai",
+"crm": "crm",
+"crowdstrike": "crowdstrike",
+"cryptocurrencies": "cryptocurrency",
+"cryptocurrency": "cryptocurrency",
+"cryptography": "cryptography",
+"cspm": "cspm",
+"css": "css",
+"cucumber": "cucumber",
+"cuda": "cuda",
+"cyberark": "cyberark",
+"cybersecurite": "cybersecurity",
+"cybersecurity": "cybersecurity",
+"cybersécurité": "cybersecurity",
+"cypress": "cypress",
+"dagster": "dagster",
+"dart": "dart",
+"dask": "dask",
+"dast": "dast",
+"databricks": "databricks",
+"datadog": "datadog",
+"dataform": "dataform",
+"dataops": "dataops",
+"dataproc": "dataproc",
+"dataverse": "dataverse",
+"datavisualisation": "data-visualization",
+"db2": "db2",
+"dbt": "dbt",
+"debezium": "debezium",
+"debian": "debian",
+"deepseek": "deepseek",
+"deepspeed": "deepspeed",
+"defi": "defi",
+"devops": "devops",
+"devsecops": "devsecops",
+"dhcp": "dhcp",
+"django": "django",
+"dlp": "dlp",
+"dns": "dns",
+"docker": "docker",
+"dotnet": "dotnet",
+"dropwizard": "dropwizard",
+"drupal": "drupal",
+"dspy": "dspy",
+"duckdb": "duckdb",
+"dwh": "data-warehousing",
+"dynamodb": "dynamodb",
+"dynatrace": "dynatrace",
+"ec2": "ec2",
+"eclipse": "eclipse",
+"ecommerce": "ecommerce",
+"ecs": "ecs",
+"edi": "edi",
+"edr": "edr",
+"eigrp": "eigrp",
+"eks": "eks",
+"elasticsearch": "elasticsearch",
+"elixir": "elixir",
+"elk": "elk",
+"elt": "elt",
+"embeddings": "embeddings",
+"ember": "ember",
+"enablon": "enablon",
+"enscape": "enscape",
+"envoy": "envoy",
+"epa": "epa",
+"erlang": "erlang",
+"erp": "erp",
+"es6": "javascript",
+"esxi": "vmware",
+"ethercat": "ethercat",
+"ethereum": "ethereum",
+"ethernet": "ethernet",
+"etl": "etl",
+"eventbridge": "eventbridge",
+"evm": "evm",
+"evms": "evm",
+"evpn": "evpn",
+"express": "express",
+"expressjs": "express",
+"faiss": "faiss",
+"fargate": "fargate",
+"fastapi": "fastapi",
+"fastify": "fastify",
+"fastlane": "fastlane",
+"fea": "fea",
+"fhir": "fhir",
+"fiber": "fiber",
+"figjam": "figjam",
+"figma": "figma",
+"finops": "finops",
+"fintech": "fintech",
+"firebase": "firebase",
+"firestore": "firestore",
+"firewall": "firewall",
+"firewalls": "firewall",
+"firmware": "firmware",
+"fivetran": "fivetran",
+"flask": "flask",
+"flink": "flink",
+"flutter": "flutter",
+"flux": "flux",
+"fortigate": "fortinet",
+"fortinet": "fortinet",
+"fortran": "fortran",
+"fpga": "fpga",
+"freertos": "freertos",
+"freshdesk": "freshdesk",
+"fsharp": "fsharp",
+"ga4": "google-analytics",
+"gatling": "gatling",
+"gcp": "gcp",
+"gdb": "gdb",
+"genai": "generative-ai",
+"gin": "gin",
+"gis": "gis",
+"git": "git",
+"gitflow": "gitflow",
+"github": "github",
+"gitlab": "gitlab",
+"gitops": "gitops",
+"gke": "gke",
+"godot": "godot",
+"golang": "go",
+"gorilla": "gorilla",
+"gpu": "gpu",
+"gradle": "gradle",
+"grafana": "grafana",
+"grails": "grails",
+"graphql": "graphql",
+"groovy": "groovy",
+"grpc": "grpc",
+"hadoop": "hadoop",
+"hapi": "hapi",
+"haskell": "haskell",
+"hazop": "hazop",
+"hbase": "hbase",
+"hdfs": "hadoop",
+"helm": "helm",
+"hibernate": "hibernate",
+"hive": "hive",
+"hl7": "hl7",
+"hmi": "hmi",
+"houdini": "houdini",
+"hpc": "hpc",
+"hris": "hris",
+"html": "html",
+"hubspot": "hubspot",
+"huggingface": "huggingface",
+"i2c": "i2c",
+"iaas": "iaas",
+"iac": "infrastructure-as-code",
+"iam": "iam",
+"iis": "iis",
+"illustrator": "illustrator",
+"indesign": "indesign",
+"infiniband": "infiniband",
+"influxdb": "influxdb",
+"intelex": "intelex",
+"intellij": "intellij",
+"intune": "intune",
+"invision": "invision",
+"ionic": "ionic",
+"ios": "ios",
+"iot": "iot",
+"ipsec": "ipsec",
+"ipv6": "ipv6",
+"istio": "istio",
+"itil": "itil",
+"itsm": "itsm",
+"j2ee": "j2ee",
+"jamf": "jamf",
+"java": "java",
+"javascript": "javascript",
+"jax": "jax",
+"jboss": "jboss",
+"jcl": "jcl",
+"jdbc": "jdbc",
+"jenkins": "jenkins",
+"jest": "jest",
+"jetpack": "jetpack",
+"jira": "jira",
+"jmeter": "jmeter",
+"jms": "jms",
+"jpa": "jpa",
+"jquery": "jquery",
+"json": "json",
+"jsp": "jsp",
+"jtag": "jtag",
+"julia": "julia",
+"junit": "junit",
+"jupyter": "jupyter",
+"jvm": "jvm",
+"jwt": "jwt",
+"k6": "k6",
+"k8s": "kubernetes",
+"kafka": "kafka",
+"kanban": "kanban",
+"keras": "keras",
+"keycloak": "keycloak",
+"kibana": "kibana",
+"kicad": "kicad",
+"kinesis": "kinesis",
+"koa": "koa",
+"kontejnerizacija": "containerization",
+"kontejnerizacije": "containerization",
+"kontejnerizaciji": "containerization",
+"kontejnerizacijom": "containerization",
+"kontejnerizaciju": "containerization",
+"konteneryzacja": "containerization",
+"konteneryzacji": "containerization",
+"konteneryzacją": "containerization",
+"konteneryzację": "containerization",
+"kotlin": "kotlin",
+"kql": "kql",
+"ktor": "ktor",
+"kubeflow": "kubeflow",
+"kubernetes": "kubernetes",
+"kustomize": "kustomize",
+"labview": "labview",
+"lakehouse": "lakehouse",
+"lambda": "lambda",
+"langchain": "langchain",
+"langfuse": "langfuse",
+"langgraph": "langgraph",
+"langsmith": "langsmith",
+"laravel": "laravel",
+"ldap": "ldap",
+"lidar": "lidar",
+"lims": "lims",
+"linq": "linq",
+"linux": "linux",
+"liquibase": "liquibase",
+"litellm": "litellm",
+"llamaindex": "llamaindex",
+"llm": "llm",
+"llmops": "llmops",
+"llms": "llm",
+"logstash": "logstash",
+"loki": "loki",
+"looker": "looker",
+"lottie": "lottie",
+"lua": "lua",
+"lwc": "lwc",
+"macos": "macos",
+"mainframe": "mainframe",
+"mariadb": "mariadb",
+"marketo": "marketo",
+"mastra": "mastra",
+"matillion": "matillion",
+"matlab": "matlab",
+"matplotlib": "matplotlib",
+"maven": "maven",
+"maya": "maya",
+"mbse": "mbse",
+"mcp": "mcp",
+"mdm": "mdm",
+"memcached": "memcached",
+"mendix": "mendix",
+"meraki": "cisco-meraki",
+"metabase": "metabase",
+"metasploit": "metasploit",
+"microcontrollers": "microcontrollers",
+"micronaut": "micronaut",
+"microservice": "microservices",
+"microservices": "microservices",
+"microservicio": "microservices",
+"microservicios": "microservices",
+"microsservico": "microservices",
+"microsservicos": "microservices",
+"microsserviço": "microservices",
+"microsserviços": "microservices",
+"microstation": "microstation",
+"microstrategy": "microstrategy",
+"mikroservisa": "microservices",
+"mikroservise": "microservices",
+"mikroservisi": "microservices",
+"mikroservisima": "microservices",
+"mikroserwis": "microservices",
+"mikroserwisach": "microservices",
+"mikroserwisami": "microservices",
+"mikroserwisowa": "microservices",
+"mikroserwisowej": "microservices",
+"mikroserwisowych": "microservices",
+"mikroserwisowym": "microservices",
+"mikroserwisową": "microservices",
+"mikroserwisy": "microservices",
+"mikroserwisów": "microservices",
+"mikrousług": "microservices",
+"mikrousługach": "microservices",
+"mikrousługi": "microservices",
+"mikrousługowej": "microservices",
+"mikrousługową": "microservices",
+"milvus": "milvus",
+"minitab": "minitab",
+"miro": "miro",
+"mistral": "mistral",
+"mixpanel": "mixpanel",
+"mlflow": "mlflow",
+"mlops": "mlops",
+"mobx": "mobx",
+"mocha": "mocha",
+"mockito": "mockito",
+"modbus": "modbus",
+"mongo": "mongodb",
+"mongodb": "mongodb",
+"mpls": "mpls",
+"mqtt": "mqtt",
+"mssql": "sql-server",
+"mtls": "tls",
+"mulesoft": "mulesoft",
+"multithreading": "multithreading",
+"mvc": "mvc",
+"mvvm": "mvvm",
+"mysql": "mysql",
+"n8n": "n8n",
+"nagios": "nagios",
+"nats": "nats",
+"navisworks": "navisworks",
+"neo4j": "neo4j",
+"nessus": "nessus",
+"nestjs": "nestjs",
+"netsuite": "netsuite",
+"networking": "networking",
+"newrelic": "newrelic",
+"nextjs": "nextjs",
+"nfpa": "nfpa",
+"nginx": "nginx",
+"ngrx": "ngrx",
+"nifi": "nifi",
+"nim": "nim",
+"nlp": "nlp",
+"nmap": "nmap",
+"nodejs": "nodejs",
+"nosql": "nosql",
+"notion": "notion",
+"npm": "npm",
+"numpy": "numpy",
+"nunit": "nunit",
+"nutanix": "nutanix",
+"nuxt": "nuxt",
+"oauth": "oauth",
+"oauth2": "oauth",
+"observabilidad": "observability",
+"observabilidade": "observability",
+"observabilite": "observability",
+"observability": "observability",
+"observabilité": "observability",
+"obserwowalności": "observability",
+"obserwowalnością": "observability",
+"obserwowalność": "observability",
+"ocaml": "ocaml",
+"odata": "odata",
+"odoo": "odoo",
+"oidc": "openid",
+"okta": "okta",
+"olap": "olap",
+"ollama": "ollama",
+"onedrive": "onedrive",
+"onelake": "microsoft-fabric",
+"onnx": "onnx",
+"oop": "oop",
+"openai": "openai",
+"openapi": "openapi",
+"opencv": "opencv",
+"openid": "openid",
+"opensearch": "opensearch",
+"openshift": "openshift",
+"openstack": "openstack",
+"opentelemetry": "opentelemetry",
+"opentofu": "opentofu",
+"oracle": "oracle",
+"osha": "osha",
+"osint": "osint",
+"ospf": "ospf",
+"outsystems": "outsystems",
+"owasp": "owasp",
+"pagerduty": "pagerduty",
+"pandas": "pandas",
+"parquet": "parquet",
+"pcie": "pcie",
+"peft": "peft",
+"pegasystems": "pega",
+"pentest": "penetration-testing",
+"pentesting": "penetration-testing",
+"peoplesoft": "peoplesoft",
+"perforce": "perforce",
+"perl": "perl",
+"pgvector": "pgvector",
+"photoshop": "photoshop",
+"php": "php",
+"phpunit": "phpunit",
+"pinecone": "pinecone",
+"pki": "pki",
+"playwright": "playwright",
+"plm": "plm",
+"plotly": "plotly",
+"plsql": "plsql",
+"podman": "podman",
+"polars": "polars",
+"postgres": "postgresql",
+"postgresql": "postgresql",
+"postman": "postman",
+"powerbi": "powerbi",
+"powershell": "powershell",
+"preact": "preact",
+"prefect": "prefect",
+"procore": "procore",
+"profibus": "profibus",
+"profinet": "profinet",
+"prometheus": "prometheus",
+"protobuf": "protobuf",
+"protopie": "protopie",
+"prototyping": "prototyping",
+"proxmox": "proxmox",
+"psql": "postgresql",
+"pulsar": "pulsar",
+"pulumi": "pulumi",
+"puppet": "puppet",
+"puppeteer": "puppeteer",
+"pydantic": "pydantic",
+"pyspark": "pyspark",
+"pytest": "pytest",
+"python": "python",
+"pytorch": "pytorch",
+"qdrant": "qdrant",
+"qgis": "qgis",
+"qlik": "qlik",
+"qnx": "qnx",
+"qos": "qos",
+"qualys": "qualys",
+"quantization": "quantization",
+"quarkus": "quarkus",
+"rabbitmq": "rabbitmq",
+"rails": "rails",
+"rancher": "rancher",
+"rbac": "rbac",
+"rcra": "rcra",
+"rdbms": "rdbms",
+"rdma": "rdma",
+"rds": "rds",
+"react": "react",
+"reactjs": "react",
+"redhat": "rhel",
+"redis": "redis",
+"redshift": "redshift",
+"redux": "redux",
+"remix": "remix",
+"restassured": "rest-assured",
+"restful": "rest",
+"revit": "revit",
+"rhel": "rhel",
+"rlhf": "rlhf",
+"ros2": "ros2",
+"route53": "route53",
+"rpa": "rpa",
+"rspec": "rspec",
+"rtos": "rtos",
+"ruby": "ruby",
+"rust": "rust",
+"rxjs": "rxjs",
+"s3": "s3",
+"saas": "saas",
+"sagemaker": "sagemaker",
+"sailpoint": "sailpoint",
+"salesforce": "salesforce",
+"saml": "saml",
+"sap": "sap",
+"sas": "sas",
+"sase": "sase",
+"sass": "sass",
+"sast": "sast",
+"sbom": "sbom",
+"scada": "scada",
+"scala": "scala",
+"sccm": "sccm",
+"scikit": "scikit-learn",
+"scim": "scim",
+"scipy": "scipy",
+"scrum": "scrum",
+"scss": "scss",
+"scylladb": "scylladb",
+"sdlc": "sdlc",
+"sdn": "sdn",
+"seaborn": "seaborn",
+"selenium": "selenium",
+"sentry": "sentry",
+"seo": "seo",
+"serdes": "serdes",
+"serverless": "serverless",
+"servicenow": "servicenow",
+"sftp": "sftp",
+"sgbdr": "rdbms",
+"sglang": "sglang",
+"sharepoint": "sharepoint",
+"shell": "bash",
+"shopify": "shopify",
+"siem": "siem",
+"simulink": "simulink",
+"sinatra": "sinatra",
+"sketch": "sketch",
+"sketchup": "sketchup",
+"slack": "slack",
+"slurm": "slurm",
+"smartsheet": "smartsheet",
+"smtp": "smtp",
+"snmp": "snmp",
+"snowflake": "snowflake",
+"snowpark": "snowpark",
+"sns": "sns",
+"snyk": "snyk",
+"soa": "soa",
+"soap": "soap",
+"soapui": "soapui",
+"solana": "solana",
+"solarwinds": "solarwinds",
+"solidity": "solidity",
+"solidjs": "solidjs",
+"solidworks": "solidworks",
+"solr": "solr",
+"sonarqube": "sonarqube",
+"soql": "soql",
+"spacy": "spacy",
+"spark": "spark",
+"sphera": "sphera",
+"splunk": "splunk",
+"spring": "spring",
+"springboot": "spring",
+"spss": "spss",
+"sql": "sql",
+"sqlalchemy": "sqlalchemy",
+"sqlite": "sqlite",
+"sqs": "sqs",
+"sre": "sre",
+"ssas": "ssas",
+"ssh": "ssh",
+"ssis": "ssis",
+"ssl": "ssl",
+"sso": "sso",
+"ssrs": "ssrs",
+"stata": "stata",
+"statistics": "statistics",
+"storybook": "storybook",
+"streamlit": "streamlit",
+"stripe": "stripe",
+"supabase": "supabase",
+"superset": "superset",
+"svelte": "svelte",
+"svn": "svn",
+"swagger": "swagger",
+"swift": "swift",
+"swiftui": "swiftui",
+"sybase": "sybase",
+"symfony": "symfony",
+"sysml": "sysml",
+"systemverilog": "systemverilog",
+"tableau": "tableau",
+"tailwind": "tailwind",
+"tailwindcss": "tailwind",
+"talend": "talend",
+"tcl": "tcl",
+"tdd": "tdd",
+"teamcenter": "teamcenter",
+"teamcity": "teamcity",
+"tensorflow": "tensorflow",
+"tensorrt": "tensorrt",
+"teradata": "teradata",
+"terraform": "terraform",
+"terragrunt": "terragrunt",
+"testify": "testify",
+"testng": "testng",
+"testrail": "testrail",
+"thinkwise": "thinkwise",
+"threejs": "threejs",
+"thrift": "thrift",
+"timescaledb": "timescaledb",
+"tls": "tls",
+"togaf": "togaf",
+"tokenomics": "tokenomics",
+"tomcat": "tomcat",
+"transformers": "transformers",
+"travis": "travis",
+"trello": "trello",
+"trino": "trino",
+"triton": "triton",
+"ts": "typescript",
+"tsql": "sql-server",
+"typescript": "typescript",
+"typography": "typography",
+"uart": "uart",
+"ubuntu": "ubuntu",
+"udp": "udp",
+"uikit": "uikit",
+"uipath": "uipath",
+"uml": "uml",
+"unity": "unity",
+"unix": "unix",
+"uscis": "uscis",
+"uvm": "uvm",
+"vault": "vault",
+"vba": "vba",
+"vbnet": "vbnet",
+"veeam": "veeam",
+"velocityehs": "velocityehs",
+"vercel": "vercel",
+"verilog": "verilog",
+"vhdl": "vhdl",
+"virtualisation": "virtualization",
+"virtualizacija": "virtualization",
+"virtualizacije": "virtualization",
+"virtualizaciji": "virtualization",
+"virtualizacijom": "virtualization",
+"virtualizaciju": "virtualization",
+"virtualization": "virtualization",
+"visio": "visio",
+"visualforce": "visualforce",
+"vite": "vite",
+"vitest": "vitest",
+"vlan": "vlan",
+"vlans": "vlan",
+"vllm": "vllm",
+"vmware": "vmware",
+"voip": "voip",
+"vpc": "vpc",
+"vpn": "vpn",
+"vsphere": "vmware",
+"vue": "vue",
+"vuejs": "vue",
+"vxlan": "vxlan",
+"waf": "waf",
+"wan": "wan",
+"wasm": "wasm",
+"wcag": "wcag",
+"wcf": "wcf",
+"weaviate": "weaviate",
+"web3": "web3",
+"webflow": "webflow",
+"webgl": "webgl",
+"webhooks": "webhooks",
+"weblogic": "weblogic",
+"webpack": "webpack",
+"webrtc": "webrtc",
+"websocket": "websockets",
+"websockets": "websockets",
+"websphere": "websphere",
+"wifi": "wifi",
+"wincc": "scada",
+"windchill": "windchill",
+"wireframes": "wireframing",
+"wireframing": "wireframing",
+"wireshark": "wireshark",
+"wlan": "wifi",
+"wordpress": "wordpress",
+"workato": "workato",
+"wpf": "wpf",
+"xamarin": "xamarin",
+"xcode": "xcode",
+"xdr": "xdr",
+"xgboost": "xgboost",
+"xml": "xml",
+"xslt": "xslt",
+"xunit": "xunit",
+"yaml": "yaml",
+"yocto": "yocto",
+"yolo": "yolo",
+"zabbix": "zabbix",
+"zapier": "zapier",
+"zbrush": "zbrush",
+"zendesk": "zendesk",
+"zeplin": "zeplin",
+"zeromq": "zeromq",
+"zig": "zig",
+"zoom": "zoom",
+"zscaler": "zscaler",
+"zustand": "zustand"
+},
+"ambiguous_words": [
+"1c",
+"accessibility",
+"adas",
+"aem",
+"agile",
+"ai",
+"amplitude",
+"analytics",
+"apex",
+"api",
+"apis",
+"arista",
+"asana",
+"assembly",
+"astro",
+"athena",
+"aurora",
+"automation",
+"backbone",
+"bicep",
+"blender",
+"bluetooth",
+"bootstrap",
+"braze",
+"c4d",
+"canva",
+"clio",
+"cloud",
+"cmms",
+"crm",
+"dart",
+"eclipse",
+"ecommerce",
+"elixir",
+"ember",
+"erp",
+"express",
+"fastlane",
+"fiber",
+"fintech",
+"firewall",
+"firewalls",
+"flux",
+"gin",
+"gorilla",
+"gpu",
+"groovy",
+"hibernate",
+"houdini",
+"hris",
+"iaas",
+"illustrator",
+"invision",
+"julia",
+"koa",
+"konteneryzacja",
+"konteneryzacji",
+"konteneryzacją",
+"konteneryzację",
+"lims",
+"loki",
+"lottie",
+"maven",
+"maya",
+"networking",
+"notion",
+"parquet",
+"perforce",
+"plm",
+"postman",
+"prefect",
+"prototyping",
+"puppet",
+"rails",
+"rancher",
+"react",
+"remix",
+"restful",
+"ruby",
+"rust",
+"s3",
+"saas",
+"sap",
+"scrum",
+"sentry",
+"seo",
+"shell",
+"sketch",
+"slack",
+"soap",
+"spring",
+"statistics",
+"stripe",
+"swift",
+"typography",
+"unity",
+"vault",
+"wireframes",
+"zoom"
+],
+"proper_noun_words": [
+"express",
+"react",
+"rust",
+"spring",
+"swift"
+],
+"phrase_aliases": [
+[
+"cpp",
+"c++"
+],
+[
+"cpp",
+"c/c++"
+],
+[
+"csharp",
+"c#"
+],
+[
+"dotnet",
+".net"
+],
+[
+"dotnet",
+"asp.net"
+],
+[
+"nodejs",
+"node.js"
+],
+[
+"nodejs",
+"node js"
+],
+[
+"nextjs",
+"next.js"
+],
+[
+"vue",
+"vue.js"
+],
+[
+"react-native",
+"react native"
+],
+[
+"react",
+"react.js"
+],
+[
+"objective-c",
+"objective-c"
+],
+[
+"ci-cd",
+"ci/cd"
+],
+[
+"ci-cd",
+"ci cd"
+],
+[
+"c",
+"c developer"
+],
+[
+"c",
+"c programming"
+],
+[
+"c",
+"ansi c"
+],
+[
+"1c",
+"1с"
+],
+[
+"machine-learning",
+"machine learning"
+],
+[
+"rest",
+"rest api"
+],
+[
+"rest",
+"rest apis"
+],
+[
+"rest",
+"restful api"
+],
+[
+"rest",
+"restful apis"
+],
+[
+"soap",
+"soap api"
+],
+[
+"soap",
+"soap apis"
+],
+[
+"s3",
+"aws s3"
+],
+[
+"s3",
+"amazon s3"
+],
+[
+"github-actions",
+"github actions"
+],
+[
+"cloudformation",
+"cloudformation"
+],
+[
+"scikit-learn",
+"scikit-learn"
+],
+[
+"powerbi",
+"power bi"
+],
+[
+"newrelic",
+"new relic"
+],
+[
+"opentelemetry",
+"open telemetry"
+],
+[
+"fsharp",
+"f#"
+],
+[
+"vbnet",
+"visual basic"
+],
+[
+"threejs",
+"three.js"
+],
+[
+"wasm",
+"web assembly"
+],
+[
+"r",
+"r language"
+],
+[
+"chromadb",
+"chroma db"
+],
+[
+"llamaindex",
+"llama index"
+],
+[
+"crewai",
+"crew ai"
+],
+[
+"semantic-kernel",
+"semantic kernel"
+],
+[
+"vertex-ai",
+"vertex ai"
+],
+[
+"aws-bedrock",
+"aws bedrock"
+],
+[
+"aws-bedrock",
+"amazon bedrock"
+],
+[
+"sentence-transformers",
+"sentence transformers"
+],
+[
+"rag",
+"retrieval augmented generation"
+],
+[
+"spring",
+"spring boot"
+],
+[
+"spring",
+"spring framework"
+],
+[
+"spring",
+"spring mvc"
+],
+[
+"ruby",
+"ruby on rails"
+],
+[
+"rails",
+"ruby on rails"
+],
+[
+"express",
+"express.js"
+],
+[
+"azure-devops",
+"azure devops"
+],
+[
+"powerapps",
+"power apps"
+],
+[
+"powerapps",
+"powerapps"
+],
+[
+"power-automate",
+"power automate"
+],
+[
+"distributed-systems",
+"distributed systems"
+],
+[
+"data-modeling",
+"data modeling"
+],
+[
+"data-modeling",
+"data modelling"
+],
+[
+"data-visualization",
+"data visualization"
+],
+[
+"data-visualization",
+"data visualisation"
+],
+[
+"prompt-engineering",
+"prompt engineering"
+],
+[
+"generative-ai",
+"generative ai"
+],
+[
+"generative-ai",
+"gen ai"
+],
+[
+"deep-learning",
+"deep learning"
+],
+[
+"six-sigma",
+"six sigma"
+],
+[
+"burp-suite",
+"burp suite"
+],
+[
+"robot-framework",
+"robot framework"
+],
+[
+"druid",
+"apache druid"
+],
+[
+"pinot",
+"apache pinot"
+],
+[
+"presto",
+"prestodb"
+],
+[
+"presto",
+"presto db"
+],
+[
+"delta-lake",
+"delta lake"
+],
+[
+"iceberg",
+"apache iceberg"
+],
+[
+"data-pipelines",
+"data pipeline"
+],
+[
+"data-pipelines",
+"data pipelines"
+],
+[
+"infrastructure-as-code",
+"infrastructure as code"
+],
+[
+"sql-server",
+"sql server"
+],
+[
+"sql-server",
+"t-sql"
+],
+[
+"data-science",
+"data science"
+],
+[
+"data-engineering",
+"data engineering"
+],
+[
+"data-warehousing",
+"data warehouse"
+],
+[
+"data-warehousing",
+"data warehousing"
+],
+[
+"cloud-security",
+"cloud security"
+],
+[
+"network-security",
+"network security"
+],
+[
+"active-directory",
+"active directory"
+],
+[
+"windows-server",
+"windows server"
+],
+[
+"google-analytics",
+"google analytics"
+],
+[
+"gcp",
+"google cloud"
+],
+[
+"gcp",
+"google cloud platform"
+],
+[
+"cloud-native",
+"cloud native"
+],
+[
+"zero-trust",
+"zero trust"
+],
+[
+"penetration-testing",
+"penetration testing"
+],
+[
+"unit-testing",
+"unit testing"
+],
+[
+"unit-testing",
+"unit test"
+],
+[
+"test-automation",
+"test automation"
+],
+[
+"test-automation",
+"automated testing"
+],
+[
+"tdd",
+"test driven development"
+],
+[
+"ab-testing",
+"a/b testing"
+],
+[
+"ab-testing",
+"ab testing"
+],
+[
+"vector-databases",
+"vector database"
+],
+[
+"vector-databases",
+"vector databases"
+],
+[
+"computer-vision",
+"computer vision"
+],
+[
+"api-design",
+"api design"
+],
+[
+"embedded-systems",
+"embedded systems"
+],
+[
+"event-driven-architecture",
+"event driven architecture"
+],
+[
+"event-driven-architecture",
+"event driven"
+],
+[
+"design-patterns",
+"design patterns"
+],
+[
+"design-patterns",
+"design pattern"
+],
+[
+"version-control",
+"version control"
+],
+[
+"oop",
+"object oriented programming"
+],
+[
+"oop",
+"object oriented design"
+],
+[
+"agentic-ai",
+"agentic ai"
+],
+[
+"agentic-ai",
+"ai agents"
+],
+[
+"tcp-ip",
+"tcp/ip"
+],
+[
+"tcp-ip",
+"tcp ip"
+],
+[
+"plsql",
+"pl/sql"
+],
+[
+"ci-cd",
+"continuous integration"
+],
+[
+"ci-cd",
+"continuous delivery"
+],
+[
+"nlp",
+"natural language processing"
+],
+[
+"html",
+"html5"
+],
+[
+"css",
+"css3"
+],
+[
+"smart-contracts",
+"smart contract"
+],
+[
+"smart-contracts",
+"smart contracts"
+],
+[
+"ethersjs",
+"ethers.js"
+],
+[
+"data-lake",
+"data lake"
+],
+[
+"data-mining",
+"data mining"
+],
+[
+"data-lineage",
+"data lineage"
+],
+[
+"data-ingestion",
+"data ingestion"
+],
+[
+"metadata-management",
+"metadata management"
+],
+[
+"master-data-management",
+"master data management"
+],
+[
+"dimensional-modeling",
+"dimensional modeling"
+],
+[
+"dimensional-modeling",
+"dimensional modelling"
+],
+[
+"time-series",
+"time series"
+],
+[
+"feature-engineering",
+"feature engineering"
+],
+[
+"reinforcement-learning",
+"reinforcement learning"
+],
+[
+"neural-networks",
+"neural network"
+],
+[
+"neural-networks",
+"neural networks"
+],
+[
+"predictive-modeling",
+"predictive modeling"
+],
+[
+"predictive-modeling",
+"predictive modelling"
+],
+[
+"predictive-analytics",
+"predictive analytics"
+],
+[
+"anomaly-detection",
+"anomaly detection"
+],
+[
+"recommendation-systems",
+"recommendation systems"
+],
+[
+"recommendation-systems",
+"recommendation system"
+],
+[
+"conversational-ai",
+"conversational ai"
+],
+[
+"causal-inference",
+"causal inference"
+],
+[
+"semantic-search",
+"semantic search"
+],
+[
+"vector-search",
+"vector search"
+],
+[
+"model-deployment",
+"model deployment"
+],
+[
+"model-evaluation",
+"model evaluation"
+],
+[
+"distributed-training",
+"distributed training"
+],
+[
+"distributed-computing",
+"distributed computing"
+],
+[
+"image-processing",
+"image processing"
+],
+[
+"signal-processing",
+"signal processing"
+],
+[
+"workflow-orchestration",
+"workflow orchestration"
+],
+[
+"threat-hunting",
+"threat hunting"
+],
+[
+"intrusion-detection",
+"intrusion detection"
+],
+[
+"vulnerability-scanning",
+"vulnerability scanning"
+],
+[
+"secure-coding",
+"secure coding"
+],
+[
+"secrets-management",
+"secrets management"
+],
+[
+"api-security",
+"api security"
+],
+[
+"container-security",
+"container security"
+],
+[
+"reverse-engineering",
+"reverse engineering"
+],
+[
+"iso-27001",
+"iso 27001"
+],
+[
+"iso-27001",
+"iso27001"
+],
+[
+"soc-2",
+"soc 2"
+],
+[
+"mitre-attack",
+"mitre att&ck"
+],
+[
+"mitre-attack",
+"mitre attack"
+],
+[
+"embedded-linux",
+"embedded linux"
+],
+[
+"embedded-software",
+"embedded software"
+],
+[
+"sensor-fusion",
+"sensor fusion"
+],
+[
+"game-development",
+"game development"
+],
+[
+"visual-studio",
+"visual studio"
+],
+[
+"microsoft-access",
+"microsoft access"
+],
+[
+"microsoft-access",
+"ms access"
+],
+[
+"microsoft-dynamics",
+"microsoft dynamics"
+],
+[
+"microsoft-fabric",
+"microsoft fabric"
+],
+[
+"power-platform",
+"power platform"
+],
+[
+"power-query",
+"power query"
+],
+[
+"azure-ad",
+"azure ad"
+],
+[
+"entra-id",
+"entra id"
+],
+[
+"azure-functions",
+"azure functions"
+],
+[
+"azure-data-factory",
+"azure data factory"
+],
+[
+"sales-cloud",
+"sales cloud"
+],
+[
+"salesforce-marketing-cloud",
+"salesforce marketing cloud"
+],
+[
+"sap-s4hana",
+"s/4hana"
+],
+[
+"sap-mm",
+"sap mm"
+],
+[
+"siemens-nx",
+"siemens nx"
+],
+[
+"premiere-pro",
+"premiere pro"
+],
+[
+"adobe-analytics",
+"adobe analytics"
+],
+[
+"google-tag-manager",
+"google tag manager"
+],
+[
+"monday-com",
+"monday.com"
+],
+[
+"claude-code",
+"claude code"
+],
+[
+"unreal-engine",
+"unreal engine"
+],
+[
+"hyper-v",
+"hyper-v"
+],
+[
+"hyper-v",
+"hyper v"
+],
+[
+"sd-wan",
+"sd-wan"
+],
+[
+"data-analytics",
+"data analytics"
+],
+[
+"data-governance",
+"data governance"
+],
+[
+"data-quality",
+"data quality"
+],
+[
+"ecommerce",
+"e commerce"
+],
+[
+"requirements-gathering",
+"requirements gathering"
+],
+[
+"requirements-elicitation",
+"requirements elicitation"
+],
+[
+"process-modeling",
+"process modeling"
+],
+[
+"gap-analysis",
+"gap analysis"
+],
+[
+"user-stories",
+"user stories"
+],
+[
+"acceptance-criteria",
+"acceptance criteria"
+],
+[
+"pre-sales",
+"pre-sales"
+],
+[
+"pre-sales",
+"presales"
+],
+[
+"sales-engineering",
+"sales engineering"
+],
+[
+"proof-of-concept",
+"proof of concept"
+],
+[
+"technical-discovery",
+"technical discovery"
+],
+[
+"solution-design",
+"solution design"
+],
+[
+"developer-advocacy",
+"developer advocacy"
+],
+[
+"technical-evangelism",
+"technical evangelism"
+],
+[
+"community-management",
+"community management"
+],
+[
+"developer-experience",
+"developer experience"
+],
+[
+"technical-writing",
+"technical writing"
+],
+[
+"api-documentation",
+"api documentation"
+],
+[
+"docs-as-code",
+"docs-as-code"
+],
+[
+"docs-as-code",
+"docs as code"
+],
+[
+"structured-authoring",
+"structured authoring"
+],
+[
+"information-architecture",
+"information architecture"
+],
+[
+"madcap-flare",
+"madcap flare"
+],
+[
+"adobe-xd",
+"adobe xd"
+],
+[
+"after-effects",
+"adobe after effects"
+],
+[
+"design-thinking",
+"design thinking"
+],
+[
+"user-research",
+"user research"
+],
+[
+"user-research",
+"ux research"
+],
+[
+"usability-testing",
+"usability testing"
+],
+[
+"interaction-design",
+"interaction design"
+],
+[
+"motion-design",
+"motion design"
+],
+[
+"motion-graphics",
+"motion graphics"
+],
+[
+"user-flows",
+"user flows"
+],
+[
+"davinci-resolve",
+"davinci resolve"
+],
+[
+"davinci-resolve",
+"da vinci resolve"
+],
+[
+"final-cut-pro",
+"final cut pro"
+],
+[
+"cinema-4d",
+"cinema 4d"
+],
+[
+"substance-painter",
+"substance painter"
+],
+[
+"substance-designer",
+"substance designer"
+],
+[
+"color-grading",
+"color grading"
+],
+[
+"color-grading",
+"colour grading"
+],
+[
+"video-editing",
+"video editing"
+],
+[
+"storyboarding",
+"storyboarding"
+],
+[
+"storyboarding",
+"storyboards"
+],
+[
+"3ds-max",
+"3ds max"
+],
+[
+"fusion-360",
+"fusion 360"
+],
+[
+"civil-3d",
+"civil 3d"
+],
+[
+"autodesk-inventor",
+"autodesk inventor"
+],
+[
+"creo",
+"ptc creo"
+],
+[
+"creo",
+"creo parametric"
+],
+[
+"cadence-virtuoso",
+"cadence virtuoso"
+],
+[
+"dotnet",
+".net core"
+],
+[
+"dotnet",
+"asp.net core"
+],
+[
+"dotnet",
+"entity framework"
+],
+[
+"aws-glue",
+"aws glue"
+],
+[
+"azure-synapse",
+"azure synapse"
+],
+[
+"azure-synapse",
+"synapse analytics"
+],
+[
+"sap-hana",
+"sap hana"
+],
+[
+"sap-s4hana",
+"s4hana"
+],
+[
+"palo-alto-networks",
+"palo alto networks"
+],
+[
+"juniper",
+"juniper networks"
+],
+[
+"juniper",
+"junos"
+],
+[
+"nist",
+"nist"
+],
+[
+"fedramp",
+"fedramp"
+],
+[
+"cmmc",
+"cmmc"
+],
+[
+"cissp",
+"cissp"
+],
+[
+"cism",
+"cism"
+],
+[
+"ccna",
+"ccna"
+],
+[
+"ccnp",
+"ccnp"
+],
+[
+"pci-dss",
+"pci dss"
+],
+[
+"soc-2",
+"soc2"
+],
+[
+"iso-9001",
+"iso 9001"
+],
+[
+"iso-9001",
+"iso9001"
+],
+[
+"iso-13485",
+"iso 13485"
+],
+[
+"iso-26262",
+"iso 26262"
+],
+[
+"as9100",
+"as9100"
+],
+[
+"asic",
+"asic design"
+],
+[
+"asic",
+"asic verification"
+],
+[
+"asic",
+"asic development"
+],
+[
+"rtl",
+"rtl design"
+],
+[
+"rtl",
+"rtl verification"
+],
+[
+"rtl",
+"rtl coding"
+],
+[
+"cfd",
+"computational fluid dynamics"
+],
+[
+"cfd",
+"cfd simulation"
+],
+[
+"cfd",
+"cfd analysis"
+],
+[
+"kvm",
+"kvm hypervisor"
+],
+[
+"kvm",
+"kvm virtualization"
+],
+[
+"kvm",
+"kvm virtualisation"
+],
+[
+"plc",
+"plc programming"
+],
+[
+"plc",
+"ladder logic"
+],
+[
+"plc",
+"allen bradley"
+],
+[
+"can-bus",
+"can bus"
+],
+[
+"pcb",
+"pcb design"
+],
+[
+"pcb",
+"pcb layout"
+],
+[
+"gd-t",
+"gd&t"
+],
+[
+"gd-t",
+"geometric dimensioning and tolerancing"
+],
+[
+"cnc",
+"cnc"
+],
+[
+"soldering",
+"soldering"
+],
+[
+"oscilloscope",
+"oscilloscope"
+],
+[
+"oscilloscope",
+"oscilloscopes"
+],
+[
+"rhino",
+"rhino 3d"
+],
+[
+"rhino",
+"rhinoceros 3d"
+],
+[
+"primavera-p6",
+"primavera p6"
+],
+[
+"maximo",
+"ibm maximo"
+],
+[
+"six-sigma",
+"lean six sigma"
+],
+[
+"huggingface",
+"hugging face"
+],
+[
+"fine-tuning",
+"fine tuning"
+],
+[
+"llm",
+"large language models"
+],
+[
+"llm",
+"large language model"
+],
+[
+"github-copilot",
+"github copilot"
+],
+[
+"microsoft-copilot",
+"microsoft copilot"
+],
+[
+"microsoft-copilot",
+"copilot studio"
+],
+[
+"gemini",
+"google gemini"
+],
+[
+"gemini",
+"gemini api"
+],
+[
+"claude",
+"anthropic claude"
+],
+[
+"claude",
+"claude api"
+],
+[
+"deepseek",
+"deep seek"
+],
+[
+"litellm",
+"lite llm"
+],
+[
+"sglang",
+"sg lang"
+],
+[
+"duckdb",
+"duck db"
+],
+[
+"api-gateway",
+"api gateway"
+],
+[
+"api-testing",
+"api testing"
+],
+[
+"integration-testing",
+"integration testing"
+],
+[
+"react-testing-library",
+"react testing library"
+],
+[
+"threat-modeling",
+"threat modeling"
+],
+[
+"threat-modeling",
+"threat modelling"
+],
+[
+"threat-intelligence",
+"threat intelligence"
+],
+[
+"vulnerability-management",
+"vulnerability management"
+],
+[
+"domain-driven-design",
+"domain-driven design"
+],
+[
+"domain-driven-design",
+"domain driven design"
+],
+[
+"clean-architecture",
+"clean architecture"
+],
+[
+"hexagonal-architecture",
+"hexagonal architecture"
+],
+[
+"medallion-architecture",
+"medallion architecture"
+],
+[
+"data-mesh",
+"data mesh"
+],
+[
+"big-data",
+"big data"
+],
+[
+"unity-catalog",
+"unity catalog"
+],
+[
+"control-m",
+"control-m"
+],
+[
+"signal-integrity",
+"signal integrity"
+],
+[
+"mbse",
+"model-based systems engineering"
+],
+[
+"mbse",
+"model based systems engineering"
+],
+[
+"fea",
+"finite element analysis"
+],
+[
+"azure-monitor",
+"azure monitor"
+],
+[
+"azure-application-insights",
+"application insights"
+],
+[
+"azure-service-bus",
+"azure service bus"
+],
+[
+"azure-logic-apps",
+"azure logic apps"
+],
+[
+"azure-logic-apps",
+"logic apps"
+],
+[
+"arm-templates",
+"arm templates"
+],
+[
+"cosmos-db",
+"cosmos db"
+],
+[
+"cosmos-db",
+"cosmosdb"
+],
+[
+"azure-data-factory",
+"data factory"
+],
+[
+"microsoft-purview",
+"microsoft purview"
+],
+[
+"microsoft-sentinel",
+"microsoft sentinel"
+],
+[
+"microsoft-defender",
+"microsoft defender"
+],
+[
+"microsoft-exchange",
+"exchange online"
+],
+[
+"microsoft-dynamics",
+"dynamics 365"
+],
+[
+"cloud-run",
+"google cloud run"
+],
+[
+"cloud-run",
+"cloud run"
+],
+[
+"cloud-composer",
+"cloud composer"
+],
+[
+"step-functions",
+"aws step functions"
+],
+[
+"ibm-mq",
+"ibm mq"
+],
+[
+"sap-fiori",
+"sap fiori"
+],
+[
+"sap-btp",
+"sap btp"
+],
+[
+"oracle-hyperion",
+"oracle hyperion"
+],
+[
+"adobe-experience-manager",
+"adobe experience manager"
+],
+[
+"cisco-meraki",
+"cisco meraki"
+],
+[
+"rest-assured",
+"rest assured"
+],
+[
+"lwc",
+"lightning web components"
+],
+[
+"argocd",
+"argo cd"
+],
+[
+"vbnet",
+"vb.net"
+],
+[
+"sql-server",
+"ms sql"
+],
+[
+"j2ee",
+"java ee"
+],
+[
+"rdbms",
+"relational database"
+],
+[
+"rdbms",
+"relational databases"
+],
+[
+"data-lake",
+"data lakes"
+],
+[
+"cybersecurity",
+"cyber security"
+],
+[
+"iam",
+"identity and access management"
+],
+[
+"iam",
+"identity management"
+],
+[
+"pcb",
+"pcba"
+],
+[
+"microsoft-project",
+"microsoft project"
+],
+[
+"microsoft-project",
+"ms project"
+],
+[
+"business-intelligence",
+"business intelligence"
+],
+[
+"fmea",
+"fmea"
+],
+[
+"design-of-experiments",
+"design of experiments"
+],
+[
+"design-for-manufacturing",
+"design for manufacturing"
+],
+[
+"design-for-manufacturing",
+"design for manufacturability"
+],
+[
+"adobe-creative-suite",
+"adobe creative suite"
+],
+[
+"clickup",
+"clickup"
+],
+[
+"lucidchart",
+"lucidchart"
+],
+[
+"midjourney",
+"midjourney"
+],
+[
+"help-desk",
+"helpdesk"
+],
+[
+"six-sigma",
+"dmaic"
+],
+[
+"plc",
+"sps programmierung"
+],
+[
+"plc",
+"sps steuerung"
+],
+[
+"plc",
+"sps steuerungen"
+],
+[
+"plc",
+"speicherprogrammierbare steuerung"
+],
+[
+"plc",
+"speicherprogrammierbare steuerungen"
+],
+[
+"plc",
+"tia portal"
+],
+[
+"plc",
+"siemens s7"
+],
+[
+"plc",
+"simatic s7"
+],
+[
+"plc",
+"simatic"
+],
+[
+"cnc",
+"sinumerik"
+],
+[
+"cnc",
+"siemens 840d"
+],
+[
+"cnc",
+"heidenhain steuerung"
+],
+[
+"cnc",
+"heidenhain steuerungen"
+],
+[
+"eplan",
+"eplan"
+],
+[
+"knx",
+"knx"
+],
+[
+"itwo",
+"itwo"
+],
+[
+"archicad",
+"archicad"
+],
+[
+"allplan",
+"allplan"
+],
+[
+"pega",
+"pega platform"
+],
+[
+"pega",
+"pega developer"
+],
+[
+"pega",
+"pega ontwikkelaar"
+],
+[
+"pega",
+"pega csa"
+],
+[
+"pega",
+"pega cssa"
+],
+[
+"pega",
+"pega lsa"
+],
+[
+"pega",
+"pega bpm"
+],
+[
+"tekton",
+"tekton pipelines"
+],
+[
+"tekton",
+"tekton pipeline"
+],
+[
+"microsoft-dynamics",
+"business central"
+],
+[
+"data-vault",
+"data vault"
+],
+[
+"tabular-editor",
+"tabular editor"
+],
+[
+"apache-camel",
+"apache camel"
+],
+[
+"hastus",
+"hastus"
+],
+[
+"topdesk",
+"topdesk"
+],
+[
+"nis2",
+"nis2"
+],
+[
+"nis2",
+"nis 2"
+],
+[
+"nen-7510",
+"nen 7510"
+],
+[
+"nen-7510",
+"nen7510"
+],
+[
+"rest",
+"api rest"
+],
+[
+"rest",
+"apis rest"
+],
+[
+"rest",
+"api restful"
+],
+[
+"rest",
+"apis restful"
+],
+[
+"rest",
+"servicios rest"
+],
+[
+"ci-cd",
+"integración continua"
+],
+[
+"ci-cd",
+"integracion continua"
+],
+[
+"ci-cd",
+"despliegue continuo"
+],
+[
+"infrastructure-as-code",
+"infraestructura como código"
+],
+[
+"infrastructure-as-code",
+"infraestructura como codigo"
+],
+[
+"unit-testing",
+"pruebas unitarias"
+],
+[
+"unit-testing",
+"tests unitarios"
+],
+[
+"unit-testing",
+"test unitarios"
+],
+[
+"test-automation",
+"pruebas automatizadas"
+],
+[
+"test-automation",
+"automatización de pruebas"
+],
+[
+"test-automation",
+"automatizacion de pruebas"
+],
+[
+"version-control",
+"control de versiones"
+],
+[
+"design-patterns",
+"patrones de diseño"
+],
+[
+"design-patterns",
+"patrones de diseno"
+],
+[
+"hexagonal-architecture",
+"arquitectura hexagonal"
+],
+[
+"clean-architecture",
+"arquitectura limpia"
+],
+[
+"domain-driven-design",
+"diseño dirigido por el dominio"
+],
+[
+"domain-driven-design",
+"diseno dirigido por el dominio"
+],
+[
+"tdd",
+"desarrollo dirigido por pruebas"
+],
+[
+"distributed-systems",
+"sistemas distribuidos"
+],
+[
+"data-modeling",
+"modelado de datos"
+],
+[
+"dimensional-modeling",
+"modelado dimensional"
+],
+[
+"data-pipelines",
+"pipelines de datos"
+],
+[
+"data-pipelines",
+"pipeline de datos"
+],
+[
+"data-pipelines",
+"canalizaciones de datos"
+],
+[
+"data-engineering",
+"ingeniería de datos"
+],
+[
+"data-engineering",
+"ingenieria de datos"
+],
+[
+"data-science",
+"ciencia de datos"
+],
+[
+"data-warehousing",
+"almacén de datos"
+],
+[
+"data-warehousing",
+"almacen de datos"
+],
+[
+"data-lake",
+"lago de datos"
+],
+[
+"data-governance",
+"gobierno del dato"
+],
+[
+"data-governance",
+"gobierno de datos"
+],
+[
+"data-governance",
+"gobernanza de datos"
+],
+[
+"data-governance",
+"gobernanza del dato"
+],
+[
+"data-quality",
+"calidad del dato"
+],
+[
+"data-visualization",
+"visualización de datos"
+],
+[
+"data-visualization",
+"visualizacion de datos"
+],
+[
+"machine-learning",
+"aprendizaje automático"
+],
+[
+"machine-learning",
+"aprendizaje automatico"
+],
+[
+"deep-learning",
+"aprendizaje profundo"
+],
+[
+"generative-ai",
+"ia generativa"
+],
+[
+"generative-ai",
+"inteligencia artificial generativa"
+],
+[
+"nlp",
+"procesamiento del lenguaje natural"
+],
+[
+"nlp",
+"procesamiento de lenguaje natural"
+],
+[
+"event-driven-architecture",
+"arquitectura orientada a eventos"
+],
+[
+"event-driven-architecture",
+"arquitecturas orientadas a eventos"
+],
+[
+"event-driven-architecture",
+"arquitectura dirigida por eventos"
+],
+[
+"oop",
+"programación orientada a objetos"
+],
+[
+"oop",
+"programacion orientada a objetos"
+],
+[
+"business-intelligence",
+"inteligencia de negocio"
+],
+[
+"business-intelligence",
+"inteligencia de negocios"
+],
+[
+"embedded-systems",
+"sistemas embebidos"
+],
+[
+"vector-databases",
+"bases de datos vectoriales"
+],
+[
+"computer-vision",
+"visión por computador"
+],
+[
+"computer-vision",
+"vision por computador"
+],
+[
+"computer-vision",
+"visión artificial"
+],
+[
+"computer-vision",
+"vision artificial"
+],
+[
+"penetration-testing",
+"pruebas de penetración"
+],
+[
+"penetration-testing",
+"pruebas de penetracion"
+],
+[
+"rest",
+"serviços rest"
+],
+[
+"rest",
+"servicos rest"
+],
+[
+"ci-cd",
+"integração contínua"
+],
+[
+"ci-cd",
+"integracao continua"
+],
+[
+"ci-cd",
+"implantação contínua"
+],
+[
+"ci-cd",
+"implantacao continua"
+],
+[
+"ci-cd",
+"deploy contínuo"
+],
+[
+"ci-cd",
+"deploy continuo"
+],
+[
+"infrastructure-as-code",
+"infraestrutura como código"
+],
+[
+"infrastructure-as-code",
+"infraestrutura como codigo"
+],
+[
+"unit-testing",
+"testes unitários"
+],
+[
+"unit-testing",
+"testes unitarios"
+],
+[
+"unit-testing",
+"teste unitário"
+],
+[
+"unit-testing",
+"teste unitario"
+],
+[
+"unit-testing",
+"testes de unidade"
+],
+[
+"integration-testing",
+"testes de integração"
+],
+[
+"integration-testing",
+"testes de integracao"
+],
+[
+"test-automation",
+"testes automatizados"
+],
+[
+"test-automation",
+"automação de testes"
+],
+[
+"test-automation",
+"automacao de testes"
+],
+[
+"version-control",
+"controle de versão"
+],
+[
+"version-control",
+"controle de versao"
+],
+[
+"version-control",
+"controlo de versões"
+],
+[
+"version-control",
+"controlo de versoes"
+],
+[
+"version-control",
+"versionamento de código"
+],
+[
+"version-control",
+"versionamento de codigo"
+],
+[
+"design-patterns",
+"padrões de projeto"
+],
+[
+"design-patterns",
+"padroes de projeto"
+],
+[
+"design-patterns",
+"padrões de design"
+],
+[
+"design-patterns",
+"padroes de design"
+],
+[
+"hexagonal-architecture",
+"arquitetura hexagonal"
+],
+[
+"clean-architecture",
+"arquitetura limpa"
+],
+[
+"tdd",
+"desenvolvimento orientado a testes"
+],
+[
+"distributed-systems",
+"sistemas distribuídos"
+],
+[
+"distributed-systems",
+"sistemas distribuidos"
+],
+[
+"data-modeling",
+"modelagem de dados"
+],
+[
+"data-modeling",
+"modelação de dados"
+],
+[
+"data-modeling",
+"modelacao de dados"
+],
+[
+"dimensional-modeling",
+"modelagem dimensional"
+],
+[
+"data-pipelines",
+"pipelines de dados"
+],
+[
+"data-pipelines",
+"pipeline de dados"
+],
+[
+"data-engineering",
+"engenharia de dados"
+],
+[
+"data-science",
+"ciência de dados"
+],
+[
+"data-science",
+"ciencia de dados"
+],
+[
+"data-governance",
+"governança de dados"
+],
+[
+"data-governance",
+"governanca de dados"
+],
+[
+"data-visualization",
+"visualização de dados"
+],
+[
+"data-visualization",
+"visualizacao de dados"
+],
+[
+"machine-learning",
+"aprendizado de máquina"
+],
+[
+"machine-learning",
+"aprendizado de maquina"
+],
+[
+"machine-learning",
+"aprendizagem automática"
+],
+[
+"machine-learning",
+"aprendizagem automatica"
+],
+[
+"deep-learning",
+"aprendizado profundo"
+],
+[
+"deep-learning",
+"aprendizagem profunda"
+],
+[
+"generative-ai",
+"inteligência artificial generativa"
+],
+[
+"nlp",
+"processamento de linguagem natural"
+],
+[
+"event-driven-architecture",
+"arquitetura orientada a eventos"
+],
+[
+"event-driven-architecture",
+"arquiteturas orientadas a eventos"
+],
+[
+"oop",
+"programação orientada a objetos"
+],
+[
+"oop",
+"programacao orientada a objetos"
+],
+[
+"oop",
+"orientação a objetos"
+],
+[
+"oop",
+"orientacao a objetos"
+],
+[
+"business-intelligence",
+"inteligência de negócios"
+],
+[
+"business-intelligence",
+"inteligencia de negocios"
+],
+[
+"business-intelligence",
+"inteligência de negócio"
+],
+[
+"embedded-systems",
+"sistemas embarcados"
+],
+[
+"computer-vision",
+"visão computacional"
+],
+[
+"computer-vision",
+"visao computacional"
+],
+[
+"rdbms",
+"bancos de dados relacionais"
+],
+[
+"rdbms",
+"banco de dados relacional"
+],
+[
+"rdbms",
+"bases de dados relacionais"
+],
+[
+"vector-databases",
+"bancos de dados vetoriais"
+],
+[
+"vector-databases",
+"banco de dados vetorial"
+],
+[
+"penetration-testing",
+"testes de penetração"
+],
+[
+"penetration-testing",
+"testes de penetracao"
+],
+[
+"penetration-testing",
+"testes de intrusão"
+],
+[
+"penetration-testing",
+"testes de intrusao"
+],
+[
+"penetration-testing",
+"teste de intrusão"
+],
+[
+"ci-cd",
+"intégration continue"
+],
+[
+"ci-cd",
+"integration continue"
+],
+[
+"ci-cd",
+"déploiement continu"
+],
+[
+"ci-cd",
+"deploiement continu"
+],
+[
+"ci-cd",
+"intégration et déploiement continus"
+],
+[
+"ci-cd",
+"integration et deploiement continus"
+],
+[
+"ci-cd",
+"intégration et livraison continues"
+],
+[
+"ci-cd",
+"integration et livraison continues"
+],
+[
+"infrastructure-as-code",
+"infrastructure en tant que code"
+],
+[
+"unit-testing",
+"tests unitaires"
+],
+[
+"unit-testing",
+"test unitaire"
+],
+[
+"integration-testing",
+"tests d'intégration"
+],
+[
+"integration-testing",
+"tests d'integration"
+],
+[
+"integration-testing",
+"tests d’intégration"
+],
+[
+"test-automation",
+"tests automatisés"
+],
+[
+"test-automation",
+"tests automatises"
+],
+[
+"test-automation",
+"automatisation des tests"
+],
+[
+"version-control",
+"gestion de versions"
+],
+[
+"version-control",
+"gestionnaire de versions"
+],
+[
+"version-control",
+"contrôle de version"
+],
+[
+"version-control",
+"controle de version"
+],
+[
+"design-patterns",
+"patrons de conception"
+],
+[
+"hexagonal-architecture",
+"architecture hexagonale"
+],
+[
+"domain-driven-design",
+"conception pilotée par le domaine"
+],
+[
+"tdd",
+"développement piloté par les tests"
+],
+[
+"distributed-systems",
+"systèmes distribués"
+],
+[
+"distributed-systems",
+"systemes distribues"
+],
+[
+"data-modeling",
+"modélisation de données"
+],
+[
+"data-modeling",
+"modelisation de donnees"
+],
+[
+"data-modeling",
+"modélisation des données"
+],
+[
+"data-modeling",
+"modelisation des donnees"
+],
+[
+"dimensional-modeling",
+"modélisation dimensionnelle"
+],
+[
+"dimensional-modeling",
+"modelisation dimensionnelle"
+],
+[
+"data-pipelines",
+"pipelines de données"
+],
+[
+"data-pipelines",
+"pipelines de donnees"
+],
+[
+"data-pipelines",
+"pipeline de données"
+],
+[
+"data-pipelines",
+"pipeline de donnees"
+],
+[
+"data-engineering",
+"ingénierie des données"
+],
+[
+"data-engineering",
+"ingenierie des donnees"
+],
+[
+"data-engineering",
+"ingénierie de données"
+],
+[
+"data-engineering",
+"ingenierie de donnees"
+],
+[
+"data-science",
+"science des données"
+],
+[
+"data-science",
+"sciences des données"
+],
+[
+"data-science",
+"science des donnees"
+],
+[
+"data-warehousing",
+"entrepôt de données"
+],
+[
+"data-warehousing",
+"entrepot de donnees"
+],
+[
+"data-warehousing",
+"entrepôts de données"
+],
+[
+"data-lake",
+"lac de données"
+],
+[
+"data-governance",
+"gouvernance des données"
+],
+[
+"data-governance",
+"gouvernance des donnees"
+],
+[
+"data-governance",
+"gouvernance de la donnée"
+],
+[
+"data-governance",
+"gouvernance de la donnee"
+],
+[
+"data-governance",
+"gouvernance de données"
+],
+[
+"data-quality",
+"qualité de la donnée"
+],
+[
+"data-quality",
+"qualite de la donnee"
+],
+[
+"data-visualization",
+"visualisation de données"
+],
+[
+"data-visualization",
+"visualisation de donnees"
+],
+[
+"data-visualization",
+"visualisation des données"
+],
+[
+"machine-learning",
+"apprentissage automatique"
+],
+[
+"deep-learning",
+"apprentissage profond"
+],
+[
+"reinforcement-learning",
+"apprentissage par renforcement"
+],
+[
+"generative-ai",
+"ia générative"
+],
+[
+"generative-ai",
+"ia generative"
+],
+[
+"generative-ai",
+"intelligence artificielle générative"
+],
+[
+"generative-ai",
+"intelligence artificielle generative"
+],
+[
+"nlp",
+"traitement du langage naturel"
+],
+[
+"nlp",
+"traitement automatique du langage"
+],
+[
+"event-driven-architecture",
+"architecture orientée événements"
+],
+[
+"event-driven-architecture",
+"architecture événementielle"
+],
+[
+"event-driven-architecture",
+"architecture evenementielle"
+],
+[
+"oop",
+"programmation orientée objet"
+],
+[
+"oop",
+"programmation orientee objet"
+],
+[
+"oop",
+"conception orientée objet"
+],
+[
+"business-intelligence",
+"informatique décisionnelle"
+],
+[
+"business-intelligence",
+"informatique decisionnelle"
+],
+[
+"embedded-systems",
+"systèmes embarqués"
+],
+[
+"embedded-systems",
+"systemes embarques"
+],
+[
+"embedded-systems",
+"logiciel embarqué"
+],
+[
+"embedded-systems",
+"logiciel embarque"
+],
+[
+"computer-vision",
+"vision par ordinateur"
+],
+[
+"rdbms",
+"bases de données relationnelles"
+],
+[
+"rdbms",
+"bases de donnees relationnelles"
+],
+[
+"rdbms",
+"base de données relationnelle"
+],
+[
+"vector-databases",
+"bases de données vectorielles"
+],
+[
+"vector-databases",
+"bases de donnees vectorielles"
+],
+[
+"penetration-testing",
+"tests d'intrusion"
+],
+[
+"penetration-testing",
+"test d'intrusion"
+],
+[
+"penetration-testing",
+"tests d’intrusion"
+],
+[
+"penetration-testing",
+"tests de pénétration"
+],
+[
+"rest",
+"services rest"
+],
+[
+"unit-testing",
+"testy jednostkowe"
+],
+[
+"unit-testing",
+"testów jednostkowych"
+],
+[
+"unit-testing",
+"testach jednostkowych"
+],
+[
+"unit-testing",
+"testami jednostkowymi"
+],
+[
+"unit-testing",
+"testow jednostkowych"
+],
+[
+"integration-testing",
+"testy integracyjne"
+],
+[
+"integration-testing",
+"testów integracyjnych"
+],
+[
+"integration-testing",
+"testach integracyjnych"
+],
+[
+"integration-testing",
+"testami integracyjnymi"
+],
+[
+"integration-testing",
+"testow integracyjnych"
+],
+[
+"test-automation",
+"testy automatyczne"
+],
+[
+"test-automation",
+"testów automatycznych"
+],
+[
+"test-automation",
+"testach automatycznych"
+],
+[
+"test-automation",
+"testami automatycznymi"
+],
+[
+"test-automation",
+"testow automatycznych"
+],
+[
+"test-automation",
+"automatyzacja testów"
+],
+[
+"test-automation",
+"automatyzacji testów"
+],
+[
+"test-automation",
+"automatyzację testów"
+],
+[
+"test-automation",
+"automatyzacją testów"
+],
+[
+"test-automation",
+"automatyzacji testow"
+],
+[
+"test-automation",
+"testowania automatycznego"
+],
+[
+"penetration-testing",
+"testy penetracyjne"
+],
+[
+"penetration-testing",
+"testów penetracyjnych"
+],
+[
+"penetration-testing",
+"testach penetracyjnych"
+],
+[
+"ci-cd",
+"ciągła integracja"
+],
+[
+"ci-cd",
+"ciągłej integracji"
+],
+[
+"ci-cd",
+"ciaglej integracji"
+],
+[
+"ci-cd",
+"ciągłe wdrażanie"
+],
+[
+"ci-cd",
+"ciągłego wdrażania"
+],
+[
+"ci-cd",
+"ciągłemu wdrażaniu"
+],
+[
+"infrastructure-as-code",
+"infrastruktura jako kod"
+],
+[
+"infrastructure-as-code",
+"infrastruktury jako kodu"
+],
+[
+"infrastructure-as-code",
+"infrastrukturą jako kod"
+],
+[
+"infrastructure-as-code",
+"infrastrukturą jako kodem"
+],
+[
+"version-control",
+"kontroli wersji"
+],
+[
+"design-patterns",
+"wzorce projektowe"
+],
+[
+"design-patterns",
+"wzorców projektowych"
+],
+[
+"design-patterns",
+"wzorcach projektowych"
+],
+[
+"design-patterns",
+"wzorcami projektowymi"
+],
+[
+"design-patterns",
+"wzorcow projektowych"
+],
+[
+"oop",
+"programowanie obiektowe"
+],
+[
+"oop",
+"programowania obiektowego"
+],
+[
+"oop",
+"programowaniu obiektowym"
+],
+[
+"oop",
+"programowaniem obiektowym"
+],
+[
+"distributed-systems",
+"systemy rozproszone"
+],
+[
+"distributed-systems",
+"systemów rozproszonych"
+],
+[
+"distributed-systems",
+"systemach rozproszonych"
+],
+[
+"distributed-systems",
+"systemami rozproszonymi"
+],
+[
+"distributed-systems",
+"systemow rozproszonych"
+],
+[
+"embedded-systems",
+"systemów wbudowanych"
+],
+[
+"embedded-systems",
+"systemach wbudowanych"
+],
+[
+"embedded-systems",
+"systemami wbudowanymi"
+],
+[
+"embedded-systems",
+"systemow wbudowanych"
+],
+[
+"event-driven-architecture",
+"architektura sterowana zdarzeniami"
+],
+[
+"event-driven-architecture",
+"architektury sterowanej zdarzeniami"
+],
+[
+"event-driven-architecture",
+"architekturze sterowanej zdarzeniami"
+],
+[
+"event-driven-architecture",
+"architekturą sterowaną zdarzeniami"
+],
+[
+"rdbms",
+"relacyjne bazy danych"
+],
+[
+"rdbms",
+"relacyjnych baz danych"
+],
+[
+"rdbms",
+"relacyjnymi bazami danych"
+],
+[
+"rdbms",
+"relacyjnych bazach danych"
+],
+[
+"rdbms",
+"relacyjną bazą danych"
+],
+[
+"rdbms",
+"relacyjnej bazy danych"
+],
+[
+"rdbms",
+"relacyjna baza danych"
+],
+[
+"vector-databases",
+"bazy wektorowe"
+],
+[
+"vector-databases",
+"baz wektorowych"
+],
+[
+"vector-databases",
+"bazami wektorowymi"
+],
+[
+"vector-databases",
+"bazach wektorowych"
+],
+[
+"vector-databases",
+"wektorowe bazy danych"
+],
+[
+"vector-databases",
+"wektorowych baz danych"
+],
+[
+"data-warehousing",
+"hurtownia danych"
+],
+[
+"data-warehousing",
+"hurtowni danych"
+],
+[
+"data-warehousing",
+"hurtownie danych"
+],
+[
+"data-warehousing",
+"hurtowniami danych"
+],
+[
+"data-warehousing",
+"hurtowniach danych"
+],
+[
+"data-warehousing",
+"hurtownię danych"
+],
+[
+"data-warehousing",
+"hurtownią danych"
+],
+[
+"data-modeling",
+"modelowanie danych"
+],
+[
+"data-modeling",
+"modelowania danych"
+],
+[
+"data-modeling",
+"modelowaniu danych"
+],
+[
+"data-modeling",
+"modelowaniem danych"
+],
+[
+"data-engineering",
+"inżynieria danych"
+],
+[
+"data-engineering",
+"inżynierii danych"
+],
+[
+"data-engineering",
+"inżynierią danych"
+],
+[
+"data-engineering",
+"inzynierii danych"
+],
+[
+"data-pipelines",
+"potoki danych"
+],
+[
+"data-pipelines",
+"potoków danych"
+],
+[
+"data-pipelines",
+"potokach danych"
+],
+[
+"data-pipelines",
+"potokami danych"
+],
+[
+"data-pipelines",
+"potok danych"
+],
+[
+"data-pipelines",
+"potoku danych"
+],
+[
+"data-visualization",
+"wizualizacja danych"
+],
+[
+"data-visualization",
+"wizualizacji danych"
+],
+[
+"data-visualization",
+"wizualizacją danych"
+],
+[
+"data-visualization",
+"wizualizację danych"
+],
+[
+"machine-learning",
+"uczenie maszynowe"
+],
+[
+"machine-learning",
+"uczenia maszynowego"
+],
+[
+"machine-learning",
+"uczeniem maszynowym"
+],
+[
+"machine-learning",
+"uczeniu maszynowym"
+],
+[
+"deep-learning",
+"uczenie głębokie"
+],
+[
+"deep-learning",
+"uczenia głębokiego"
+],
+[
+"deep-learning",
+"głębokie uczenie"
+],
+[
+"deep-learning",
+"głębokiego uczenia"
+],
+[
+"generative-ai",
+"generatywna sztuczna inteligencja"
+],
+[
+"generative-ai",
+"generatywnej sztucznej inteligencji"
+],
+[
+"generative-ai",
+"generatywną sztuczną inteligencję"
+],
+[
+"generative-ai",
+"generatywna ai"
+],
+[
+"generative-ai",
+"generatywnej ai"
+],
+[
+"generative-ai",
+"generatywną ai"
+],
+[
+"generative-ai",
+"generatywne ai"
+],
+[
+"llm",
+"duże modele językowe"
+],
+[
+"llm",
+"dużych modeli językowych"
+],
+[
+"llm",
+"dużych modelach językowych"
+],
+[
+"llm",
+"dużymi modelami językowymi"
+],
+[
+"nlp",
+"przetwarzanie języka naturalnego"
+],
+[
+"nlp",
+"przetwarzania języka naturalnego"
+],
+[
+"computer-vision",
+"widzenie komputerowe"
+],
+[
+"computer-vision",
+"widzenia komputerowego"
+],
+[
+"application-security",
+"bezpieczeństwo aplikacji"
+],
+[
+"application-security",
+"bezpieczeństwa aplikacji"
+],
+[
+"application-security",
+"bezpieczeństwem aplikacji"
+],
+[
+"networking",
+"sieci komputerowe"
+],
+[
+"networking",
+"sieci komputerowych"
+],
+[
+"networking",
+"sieciach komputerowych"
+],
+[
+"machine-learning",
+"strojno učenje"
+],
+[
+"machine-learning",
+"strojno ucenje"
+],
+[
+"machine-learning",
+"strojnog učenja"
+],
+[
+"machine-learning",
+"strojnog ucenja"
+],
+[
+"machine-learning",
+"strojnom učenju"
+],
+[
+"machine-learning",
+"strojnom ucenju"
+],
+[
+"machine-learning",
+"strojnim učenjem"
+],
+[
+"machine-learning",
+"strojnim ucenjem"
+],
+[
+"machine-learning",
+"mašinsko učenje"
+],
+[
+"machine-learning",
+"masinsko ucenje"
+],
+[
+"machine-learning",
+"mašinskog učenja"
+],
+[
+"machine-learning",
+"masinskog ucenja"
+],
+[
+"machine-learning",
+"mašinskom učenju"
+],
+[
+"machine-learning",
+"masinskom ucenju"
+],
+[
+"machine-learning",
+"mašinskim učenjem"
+],
+[
+"machine-learning",
+"masinskim ucenjem"
+],
+[
+"deep-learning",
+"duboko učenje"
+],
+[
+"deep-learning",
+"duboko ucenje"
+],
+[
+"deep-learning",
+"dubokog učenja"
+],
+[
+"deep-learning",
+"dubokog ucenja"
+],
+[
+"deep-learning",
+"dubokom učenju"
+],
+[
+"deep-learning",
+"dubokom ucenju"
+],
+[
+"deep-learning",
+"dubokim učenjem"
+],
+[
+"deep-learning",
+"dubokim ucenjem"
+],
+[
+"generative-ai",
+"generativna umjetna inteligencija"
+],
+[
+"generative-ai",
+"generativne umjetne inteligencije"
+],
+[
+"generative-ai",
+"generativnu umjetnu inteligenciju"
+],
+[
+"generative-ai",
+"generativnoj umjetnoj inteligenciji"
+],
+[
+"generative-ai",
+"generativna umetna inteligencija"
+],
+[
+"generative-ai",
+"generativne umetne inteligencije"
+],
+[
+"generative-ai",
+"generativna veštačka inteligencija"
+],
+[
+"generative-ai",
+"generativna vestacka inteligencija"
+],
+[
+"generative-ai",
+"generativne veštačke inteligencije"
+],
+[
+"generative-ai",
+"generativne vestacke inteligencije"
+],
+[
+"generative-ai",
+"generativnu veštačku inteligenciju"
+],
+[
+"generative-ai",
+"generativnu vestacku inteligenciju"
+],
+[
+"generative-ai",
+"generativni ai"
+],
+[
+"generative-ai",
+"generativnog ai"
+],
+[
+"nlp",
+"obrada prirodnog jezika"
+],
+[
+"nlp",
+"obrade prirodnog jezika"
+],
+[
+"nlp",
+"obradu prirodnog jezika"
+],
+[
+"nlp",
+"obradi prirodnog jezika"
+],
+[
+"computer-vision",
+"računalni vid"
+],
+[
+"computer-vision",
+"racunalni vid"
+],
+[
+"computer-vision",
+"računalnog vida"
+],
+[
+"computer-vision",
+"racunalnog vida"
+],
+[
+"computer-vision",
+"računalnom vidu"
+],
+[
+"computer-vision",
+"racunalnom vidu"
+],
+[
+"computer-vision",
+"računarski vid"
+],
+[
+"computer-vision",
+"racunarski vid"
+],
+[
+"computer-vision",
+"računarskog vida"
+],
+[
+"computer-vision",
+"racunarskog vida"
+],
+[
+"computer-vision",
+"kompjuterski vid"
+],
+[
+"computer-vision",
+"kompjuterskog vida"
+],
+[
+"cybersecurity",
+"kibernetička sigurnost"
+],
+[
+"cybersecurity",
+"kiberneticka sigurnost"
+],
+[
+"cybersecurity",
+"kibernetičke sigurnosti"
+],
+[
+"cybersecurity",
+"kiberneticke sigurnosti"
+],
+[
+"cybersecurity",
+"kibernetičku sigurnost"
+],
+[
+"cybersecurity",
+"kiberneticku sigurnost"
+],
+[
+"cybersecurity",
+"kibernetičkoj sigurnosti"
+],
+[
+"cybersecurity",
+"kibernetickoj sigurnosti"
+],
+[
+"cybersecurity",
+"sajber bezbednost"
+],
+[
+"cybersecurity",
+"sajber bezbednosti"
+],
+[
+"cybersecurity",
+"cyber sigurnost"
+],
+[
+"cybersecurity",
+"cyber sigurnosti"
+],
+[
+"cybersecurity",
+"kibernetička bezbednost"
+],
+[
+"cybersecurity",
+"kiberneticka bezbednost"
+],
+[
+"cybersecurity",
+"kibernetičke bezbednosti"
+],
+[
+"cybersecurity",
+"kiberneticke bezbednosti"
+],
+[
+"network-security",
+"mrežna sigurnost"
+],
+[
+"network-security",
+"mrezna sigurnost"
+],
+[
+"network-security",
+"mrežne sigurnosti"
+],
+[
+"network-security",
+"mrezne sigurnosti"
+],
+[
+"network-security",
+"mrežnu sigurnost"
+],
+[
+"network-security",
+"mreznu sigurnost"
+],
+[
+"network-security",
+"mrežnoj sigurnosti"
+],
+[
+"network-security",
+"mreznoj sigurnosti"
+],
+[
+"network-security",
+"mrežna bezbednost"
+],
+[
+"network-security",
+"mrezna bezbednost"
+],
+[
+"network-security",
+"mrežne bezbednosti"
+],
+[
+"network-security",
+"mrezne bezbednosti"
+],
+[
+"ci-cd",
+"kontinuirana integracija"
+],
+[
+"ci-cd",
+"kontinuirane integracije"
+],
+[
+"ci-cd",
+"kontinuiranu integraciju"
+],
+[
+"ci-cd",
+"kontinuiranoj integraciji"
+],
+[
+"ci-cd",
+"kontinualna integracija"
+],
+[
+"ci-cd",
+"kontinualne integracije"
+],
+[
+"ci-cd",
+"kontinualnu integraciju"
+],
+[
+"oop",
+"objektno orijentirano programiranje"
+],
+[
+"oop",
+"objektno orijentiranog programiranja"
+],
+[
+"oop",
+"objektno orijentiranom programiranju"
+],
+[
+"oop",
+"objektno orijentisano programiranje"
+],
+[
+"oop",
+"objektno orijentisanog programiranja"
+],
+[
+"oop",
+"objektno orijentisanom programiranju"
+],
+[
+"rdbms",
+"relacijska baza podataka"
+],
+[
+"rdbms",
+"relacijske baze podataka"
+],
+[
+"rdbms",
+"relacijsku bazu podataka"
+],
+[
+"rdbms",
+"relacijskih baza podataka"
+],
+[
+"rdbms",
+"relacijskim bazama podataka"
+],
+[
+"rdbms",
+"relaciona baza podataka"
+],
+[
+"rdbms",
+"relacione baze podataka"
+],
+[
+"rdbms",
+"relacionu bazu podataka"
+],
+[
+"rdbms",
+"relacionih baza podataka"
+],
+[
+"rdbms",
+"relacionim bazama podataka"
+],
+[
+"data-modeling",
+"modeliranje podataka"
+],
+[
+"data-modeling",
+"modeliranja podataka"
+],
+[
+"data-modeling",
+"modeliranju podataka"
+],
+[
+"data-warehousing",
+"skladište podataka"
+],
+[
+"data-warehousing",
+"skladiste podataka"
+],
+[
+"data-warehousing",
+"skladišta podataka"
+],
+[
+"data-warehousing",
+"skladista podataka"
+],
+[
+"data-warehousing",
+"skladištu podataka"
+],
+[
+"data-warehousing",
+"skladistu podataka"
+],
+[
+"data-warehousing",
+"skladištima podataka"
+],
+[
+"data-warehousing",
+"skladistima podataka"
+],
+[
+"data-visualization",
+"vizualizacija podataka"
+],
+[
+"data-visualization",
+"vizualizacije podataka"
+],
+[
+"data-visualization",
+"vizualizaciju podataka"
+],
+[
+"data-visualization",
+"vizualizaciji podataka"
+],
+[
+"data-visualization",
+"vizuelizacija podataka"
+],
+[
+"data-visualization",
+"vizuelizacije podataka"
+],
+[
+"data-visualization",
+"vizuelizaciju podataka"
+],
+[
+"data-science",
+"znanost o podacima"
+],
+[
+"data-science",
+"znanosti o podacima"
+],
+[
+"data-science",
+"nauka o podacima"
+],
+[
+"data-science",
+"nauke o podacima"
+],
+[
+"business-intelligence",
+"poslovna inteligencija"
+],
+[
+"business-intelligence",
+"poslovne inteligencije"
+],
+[
+"business-intelligence",
+"poslovnu inteligenciju"
+],
+[
+"business-intelligence",
+"poslovnoj inteligenciji"
+],
+[
+"embedded-systems",
+"ugrađeni sustavi"
+],
+[
+"embedded-systems",
+"ugradjeni sustavi"
+],
+[
+"embedded-systems",
+"ugradeni sustavi"
+],
+[
+"embedded-systems",
+"ugrađenih sustava"
+],
+[
+"embedded-systems",
+"ugradjenih sustava"
+],
+[
+"embedded-systems",
+"ugradenih sustava"
+],
+[
+"embedded-systems",
+"ugrađenim sustavima"
+],
+[
+"embedded-systems",
+"ugradjenim sustavima"
+],
+[
+"embedded-systems",
+"ugradenim sustavima"
+],
+[
+"embedded-systems",
+"ugrađeni sistemi"
+],
+[
+"embedded-systems",
+"ugradjeni sistemi"
+],
+[
+"embedded-systems",
+"ugradeni sistemi"
+],
+[
+"embedded-systems",
+"ugrađenih sistema"
+],
+[
+"embedded-systems",
+"ugradjenih sistema"
+],
+[
+"embedded-systems",
+"ugradenih sistema"
+],
+[
+"embedded-systems",
+"ugrađenim sistemima"
+],
+[
+"embedded-systems",
+"ugradjenim sistemima"
+],
+[
+"embedded-systems",
+"ugradenim sistemima"
+],
+[
+"distributed-systems",
+"distribuirani sustavi"
+],
+[
+"distributed-systems",
+"distribuiranih sustava"
+],
+[
+"distributed-systems",
+"distribuiranim sustavima"
+],
+[
+"distributed-systems",
+"distribuirani sistemi"
+],
+[
+"distributed-systems",
+"distribuiranih sistema"
+],
+[
+"distributed-systems",
+"distribuiranim sistemima"
+],
+[
+"unit-testing",
+"jedinični testovi"
+],
+[
+"unit-testing",
+"jedinicni testovi"
+],
+[
+"unit-testing",
+"jediničnih testova"
+],
+[
+"unit-testing",
+"jedinicnih testova"
+],
+[
+"unit-testing",
+"jediničnim testovima"
+],
+[
+"unit-testing",
+"jedinicnim testovima"
+],
+[
+"unit-testing",
+"jedinično testiranje"
+],
+[
+"unit-testing",
+"jedinicno testiranje"
+],
+[
+"unit-testing",
+"jediničnog testiranja"
+],
+[
+"unit-testing",
+"jedinicnog testiranja"
+],
+[
+"integration-testing",
+"integracijsko testiranje"
+],
+[
+"integration-testing",
+"integracijskog testiranja"
+],
+[
+"integration-testing",
+"integracijski testovi"
+],
+[
+"integration-testing",
+"integraciono testiranje"
+],
+[
+"integration-testing",
+"integracioni testovi"
+],
+[
+"test-automation",
+"automatizacija testiranja"
+],
+[
+"test-automation",
+"automatizacije testiranja"
+],
+[
+"test-automation",
+"automatizaciju testiranja"
+],
+[
+"test-automation",
+"automatizacijom testiranja"
+],
+[
+"test-automation",
+"automatsko testiranje"
+],
+[
+"test-automation",
+"automatskog testiranja"
+],
+[
+"test-automation",
+"automatizirani testovi"
+],
+[
+"test-automation",
+"automatiziranih testova"
+],
+[
+"test-automation",
+"automatizovani testovi"
+],
+[
+"test-automation",
+"automatizovanih testova"
+],
+[
+"penetration-testing",
+"penetracijsko testiranje"
+],
+[
+"penetration-testing",
+"penetracijskog testiranja"
+],
+[
+"penetration-testing",
+"penetracijski testovi"
+],
+[
+"penetration-testing",
+"penetraciono testiranje"
+],
+[
+"penetration-testing",
+"penetracioni testovi"
+],
+[
+"design-patterns",
+"obrasci dizajna"
+],
+[
+"design-patterns",
+"obrazaca dizajna"
+],
+[
+"design-patterns",
+"dizajnerski obrasci"
+],
+[
+"design-patterns",
+"dizajnerskih obrazaca"
+],
+[
+"infrastructure-as-code",
+"infrastruktura kao kod"
+],
+[
+"infrastructure-as-code",
+"infrastrukture kao koda"
+],
+[
+"microservices",
+"mikroservisna arhitektura"
+],
+[
+"microservices",
+"mikroservisne arhitekture"
+],
+[
+"microservices",
+"mikroservisnu arhitekturu"
+],
+[
+"microservices",
+"mikroservisnoj arhitekturi"
+],
+[
+"ai-enablement",
+"ai enablement"
+],
+[
+"ai-enablement",
+"ai adoption"
+],
+[
+"ai-enablement",
+"ai transformation"
+],
+[
+"boolean-search",
+"boolean search"
+],
+[
+"talent-sourcing",
+"talent sourcing"
+],
+[
+"technical-screening",
+"technical screening"
+],
+[
+"candidate-experience",
+"candidate experience"
+],
+[
+"employer-branding",
+"employer branding"
+],
+[
+"full-cycle-recruiting",
+"full-cycle recruiting"
+],
+[
+"full-cycle-recruiting",
+"full cycle recruiting"
+],
+[
+"linkedin-recruiter",
+"linkedin recruiter"
+],
+[
+"smartrecruiters",
+"smartrecruiters"
+],
+[
+"employee-relations",
+"employee relations"
+],
+[
+"performance-management",
+"performance management"
+],
+[
+"talent-management",
+"talent management"
+],
+[
+"succession-planning",
+"succession planning"
+],
+[
+"people-analytics",
+"people analytics"
+],
+[
+"bamboohr",
+"bamboohr"
+],
+[
+"successfactors",
+"successfactors"
+],
+[
+"financial-modeling",
+"financial modeling"
+],
+[
+"revenue-recognition",
+"revenue recognition"
+],
+[
+"accounts-payable",
+"accounts payable"
+],
+[
+"accounts-receivable",
+"accounts receivable"
+],
+[
+"general-ledger",
+"general ledger"
+],
+[
+"financial-reporting",
+"financial reporting"
+],
+[
+"quickbooks",
+"quickbooks"
+],
+[
+"netsuite",
+"netsuite"
+],
+[
+"xero",
+"xero"
+],
+[
+"contract-negotiation",
+"contract negotiation"
+],
+[
+"contract-drafting",
+"contract drafting"
+],
+[
+"contract-lifecycle-management",
+"contract lifecycle management"
+],
+[
+"legal-research",
+"legal research"
+],
+[
+"regulatory-compliance",
+"regulatory compliance"
+],
+[
+"i-129",
+"i 129"
+],
+[
+"i-130",
+"i 130"
+],
+[
+"process-improvement",
+"process improvement"
+],
+[
+"vendor-management",
+"vendor management"
+],
+[
+"program-management",
+"program management"
+],
+[
+"strategic-planning",
+"strategic planning"
+],
+[
+"stakeholder-management",
+"stakeholder management"
+],
+[
+"certified-scrummaster",
+"certified scrummaster"
+],
+[
+"certified-scrummaster",
+"certified scrum master"
+],
+[
+"professional-scrum-master",
+"professional scrum master"
+],
+[
+"pmp",
+"project management professional"
+],
+[
+"safe-agile",
+"scaled agile framework"
+],
+[
+"account-executive",
+"account executive"
+],
+[
+"business-development",
+"business development"
+],
+[
+"pipeline-management",
+"pipeline management"
+],
+[
+"cold-outreach",
+"cold outreach"
+],
+[
+"sales-enablement",
+"sales enablement"
+],
+[
+"lead-generation",
+"lead generation"
+],
+[
+"customer-onboarding",
+"customer onboarding"
+],
+[
+"customer-retention",
+"customer retention"
+],
+[
+"churn-prevention",
+"churn prevention"
+],
+[
+"customer-health-score",
+"customer health score"
+],
+[
+"renewal-management",
+"renewal management"
+],
+[
+"gainsight",
+"gainsight"
+],
+[
+"churnzero",
+"churnzero"
+],
+[
+"help-desk",
+"help desk"
+],
+[
+"service-desk",
+"service desk"
+],
+[
+"ticket-resolution",
+"ticket resolution"
+],
+[
+"semrush",
+"semrush"
+],
+[
+"ahrefs",
+"ahrefs"
+],
+[
+"screaming-frog",
+"screaming frog"
+],
+[
+"google-search-console",
+"google search console"
+],
+[
+"google-search-console",
+"search console"
+],
+[
+"klaviyo",
+"klaviyo"
+],
+[
+"mailchimp",
+"mailchimp"
+],
+[
+"customer-io",
+"customer.io"
+],
+[
+"google-ads",
+"google ads"
+],
+[
+"google-ads",
+"google adwords"
+],
+[
+"google-ads",
+"adwords"
+],
+[
+"meta-ads",
+"meta ads"
+],
+[
+"meta-ads",
+"facebook ads"
+],
+[
+"meta-ads",
+"meta ads manager"
+],
+[
+"tiktok-ads",
+"tiktok ads"
+],
+[
+"linkedin-ads",
+"linkedin ads"
+],
+[
+"looker-studio",
+"looker studio"
+],
+[
+"looker-studio",
+"data studio"
+],
+[
+"hootsuite",
+"hootsuite"
+],
+[
+"sprout-social",
+"sprout social"
+],
+[
+"contentful",
+"contentful"
+],
+[
+"technical-seo",
+"technical seo"
+],
+[
+"link-building",
+"link building"
+],
+[
+"link-building",
+"linkbuilding"
+],
+[
+"paid-social",
+"paid social"
+],
+[
+"ppc",
+"paid search"
+],
+[
+"ppc",
+"ppc campaigns"
+],
+[
+"ppc",
+"ppc management"
+],
+[
+"ppc",
+"ppc specialist"
+],
+[
+"ppc",
+"ppc manager"
+],
+[
+"ppc",
+"pay-per-click"
+],
+[
+"demand-generation",
+"demand generation"
+],
+[
+"demand-generation",
+"demand gen"
+],
+[
+"lifecycle-marketing",
+"lifecycle marketing"
+],
+[
+"lifecycle-marketing",
+"crm marketing"
+],
+[
+"marketing-automation",
+"marketing automation"
+],
+[
+"generative-engine-optimization",
+"generative engine optimization"
+],
+[
+"generative-engine-optimization",
+"answer engine optimization"
+],
+[
+"generative-engine-optimization",
+"generative search optimization"
+],
+[
+"content-marketing",
+"content marketing"
+],
+[
+"email-marketing",
+"email marketing"
+],
+[
+"influencer-marketing",
+"influencer marketing"
+],
+[
+"copywriting",
+"copywriting"
+],
+[
+"go-to-market",
+"go-to-market"
+],
+[
+"go-to-market",
+"go to market"
+],
+[
+"go-to-market",
+"gtm strategy"
+],
+[
+"go-to-market",
+"gtm motion"
+],
+[
+"go-to-market",
+"gtm plan"
+],
+[
+"go-to-market",
+"gtm execution"
+],
+[
+"google-tag-manager",
+"gtm container"
+],
+[
+"workday",
+"workday hcm"
+],
+[
+"workday",
+"workday financials"
+],
+[
+"workday",
+"workday adaptive"
+],
+[
+"workday",
+"workday integrations"
+],
+[
+"concur",
+"sap concur"
+],
+[
+"adp",
+"adp workforce now"
+],
+[
+"adp",
+"adp payroll"
+],
+[
+"apollo-io",
+"apollo.io"
+],
+[
+"gong",
+"gong.io"
+],
+[
+"linkedin-sales-navigator",
+"linkedin sales navigator"
+],
+[
+"linkedin-sales-navigator",
+"sales navigator"
+],
+[
+"zoominfo",
+"zoominfo"
+],
+[
+"salesloft",
+"salesloft"
+],
+[
+"veeva",
+"veeva"
+],
+[
+"yardi",
+"yardi"
+],
+[
+"hipaa",
+"hipaa"
+],
+[
+"gdpr",
+"gdpr"
+],
+[
+"ccpa",
+"ccpa"
+],
+[
+"lgpd",
+"lgpd"
+],
+[
+"itar",
+"itar"
+],
+[
+"dfars",
+"dfars"
+],
+[
+"sap",
+"sap kenntnisse"
+],
+[
+"sap",
+"sap kenntnissen"
+],
+[
+"sap",
+"sap anwenderkenntnisse"
+],
+[
+"sap",
+"kenntnisse in sap"
+],
+[
+"sap",
+"erfahrung mit sap"
+],
+[
+"sap",
+"umgang mit sap"
+],
+[
+"sap",
+"sap erfahrung"
+],
+[
+"sap",
+"sap umfeld"
+],
+[
+"sap",
+"sap systeme"
+],
+[
+"sap",
+"sap systemen"
+],
+[
+"sap",
+"sap r/3"
+],
+[
+"sap",
+"sap hcm"
+],
+[
+"sap",
+"sap is-u"
+],
+[
+"sap",
+"sap sd"
+],
+[
+"sap-fico",
+"sap fi"
+],
+[
+"sap-fico",
+"sap co"
+],
+[
+"sap-fico",
+"sap fico"
+],
+[
+"datev",
+"datev"
+],
+[
+"datev",
+"lodas"
+],
+[
+"erp",
+"erp systeme"
+],
+[
+"erp",
+"erp systemen"
+],
+[
+"crm",
+"crm systeme"
+],
+[
+"crm",
+"crm systemen"
+],
+[
+"afas",
+"afas"
+],
+[
+"exact-online",
+"exact online"
+],
+[
+"nmbrs",
+"nmbrs"
+],
+[
+"youforce",
+"youforce"
+],
+[
+"iso-45001",
+"iso 45001"
+],
+[
+"iso-45001",
+"iso45001"
+],
+[
+"iso-14001",
+"iso 14001"
+],
+[
+"iso-14001",
+"iso14001"
+],
+[
+"emergency-response",
+"emergency response"
+],
+[
+"emergency-response",
+"emergency preparedness"
+],
+[
+"personal-protective-equipment",
+"personal protective equipment"
+],
+[
+"root-cause-analysis",
+"root cause analysis"
+],
+[
+"environmental-compliance",
+"environmental compliance"
+],
+[
+"risk-assessment",
+"risk assessment"
+],
+[
+"risk-assessment",
+"risk assessments"
+],
+[
+"incident-investigation",
+"incident investigation"
+],
+[
+"incident-investigation",
+"incident investigations"
+],
+[
+"safety-management-system",
+"safety management system"
+],
+[
+"safety-management-system",
+"hse management system"
+],
+[
+"safety-management-system",
+"ehs management system"
+],
+[
+"industrial-hygiene",
+"industrial hygiene"
+],
+[
+"corrective-action",
+"corrective action"
+],
+[
+"corrective-action",
+"corrective actions"
+],
+[
+"corrective-action",
+"corrective and preventive action"
+],
+[
+"waste-management",
+"waste management"
+],
+[
+"first-aid",
+"first aid"
+],
+[
+"hazardous-waste",
+"hazardous waste"
+],
+[
+"toolbox-talks",
+"toolbox talk"
+],
+[
+"toolbox-talks",
+"toolbox talks"
+],
+[
+"safety-audit",
+"safety audit"
+],
+[
+"safety-audit",
+"safety audits"
+],
+[
+"hazard-identification",
+"hazard identification"
+],
+[
+"contractor-safety",
+"contractor safety"
+],
+[
+"lockout-tagout",
+"lockout tagout"
+],
+[
+"lockout-tagout",
+"lockout/tagout"
+],
+[
+"confined-space",
+"confined space"
+],
+[
+"confined-space",
+"confined spaces"
+],
+[
+"fall-protection",
+"fall protection"
+],
+[
+"machine-guarding",
+"machine guarding"
+],
+[
+"hot-work",
+"hot work"
+],
+[
+"near-miss-reporting",
+"near miss"
+],
+[
+"near-miss-reporting",
+"near misses"
+],
+[
+"process-safety-management",
+"process safety management"
+],
+[
+"permit-to-work",
+"permit to work"
+],
+[
+"job-safety-analysis",
+"job safety analysis"
+],
+[
+"job-safety-analysis",
+"job hazard analysis"
+],
+[
+"behavior-based-safety",
+"behavior based safety"
+],
+[
+"behavior-based-safety",
+"behaviour based safety"
+],
+[
+"working-at-height",
+"working at height"
+],
+[
+"working-at-height",
+"work at height"
+]
+],
+"non_corroborating_phrases": [
+"account-executive",
+"adobe-creative-suite",
+"afas",
+"allplan",
+"archicad",
+"as9100",
+"behavior-based-safety",
+"business-development",
+"business-intelligence",
+"ccna",
+"ccnp",
+"ccpa",
+"cism",
+"cissp",
+"clickup",
+"cmmc",
+"cnc",
+"cold-outreach",
+"color-grading",
+"confined-space",
+"content-marketing",
+"contractor-safety",
+"copywriting",
+"corrective-action",
+"crm",
+"datev",
+"demand-generation",
+"design-for-manufacturing",
+"design-of-experiments",
+"dfars",
+"email-marketing",
+"emergency-response",
+"environmental-compliance",
+"eplan",
+"erp",
+"exact-online",
+"fall-protection",
+"fedramp",
+"first-aid",
+"fmea",
+"gdpr",
+"generative-engine-optimization",
+"go-to-market",
+"hastus",
+"hazard-identification",
+"hazardous-waste",
+"help-desk",
+"hipaa",
+"hot-work",
+"incident-investigation",
+"industrial-hygiene",
+"influencer-marketing",
+"iso-13485",
+"iso-14001",
+"iso-26262",
+"iso-45001",
+"iso-9001",
+"itar",
+"itwo",
+"job-safety-analysis",
+"knx",
+"lead-generation",
+"lgpd",
+"lifecycle-marketing",
+"link-building",
+"lockout-tagout",
+"lucidchart",
+"machine-guarding",
+"marketing-automation",
+"microsoft-project",
+"midjourney",
+"near-miss-reporting",
+"nen-7510",
+"networking",
+"nis2",
+"nist",
+"nmbrs",
+"oscilloscope",
+"paid-social",
+"pci-dss",
+"permit-to-work",
+"personal-protective-equipment",
+"pipeline-management",
+"ppc",
+"process-safety-management",
+"risk-assessment",
+"root-cause-analysis",
+"safety-audit",
+"safety-management-system",
+"sales-enablement",
+"sap",
+"sap-fico",
+"service-desk",
+"soc-2",
+"soldering",
+"storyboarding",
+"technical-seo",
+"ticket-resolution",
+"toolbox-talks",
+"topdesk",
+"video-editing",
+"waste-management",
+"working-at-height",
+"youforce"
+],
+"shared_acronyms": {
+"ML": "machine-learning"
+},
+"category_scoped_acronyms": {
+"BBS": {
+"canonical": "behavior-based-safety",
+"categories": [
+"occupational_safety"
+]
+},
+"CSM": {
+"canonical": "certified-scrummaster",
+"categories": [
+"project_management"
+]
+},
+"PMP": {
+"canonical": "pmp",
+"categories": [
+"project_management"
+]
+},
+"PSM": {
+"canonical": "professional-scrum-master",
+"categories": [
+"project_management"
+]
+},
+"RAG": {
+"canonical": "rag",
+"categories": [
+"ai_engineering",
+"ml_ai"
+]
+},
+"SAFE": {
+"canonical": "safe-agile",
+"categories": [
+"project_management"
+]
+},
+"SAFe": {
+"canonical": "safe-agile",
+"categories": [
+"project_management"
+]
+}
+},
+"labels": {
+"1c": "1C",
+"3ds-max": "3ds Max",
+"ab-testing": "A/B Testing",
+"abac": "ABAC",
+"abap": "ABAP",
+"acceptance-criteria": "Acceptance Criteria",
+"accessibility": "Accessibility",
+"account-executive": "Account Executive",
+"accounts-payable": "Accounts Payable",
+"accounts-receivable": "Accounts Receivable",
+"active-directory": "Active Directory",
+"activemq": "ActiveMQ",
+"actix": "Actix",
+"adas": "ADAS",
+"adobe-analytics": "Adobe Analytics",
+"adobe-creative-suite": "Adobe Creative Suite",
+"adobe-experience-manager": "Adobe Experience Manager (AEM)",
+"adobe-xd": "Adobe XD",
+"adp": "Adp",
+"afas": "AFAS",
+"after-effects": "After Effects",
+"agentforce": "Agentforce",
+"agentic-ai": "Agentic AI",
+"agile": "Agile",
+"ahrefs": "Ahrefs",
+"ai": "AI",
+"ai-enablement": "Ai Enablement",
+"airbyte": "Airbyte",
+"airflow": "Airflow",
+"airtable": "Airtable",
+"ajax": "AJAX",
+"aks": "AKS",
+"allplan": "Allplan",
+"alteryx": "Alteryx",
+"altium": "Altium",
+"amplitude": "Amplitude",
+"analytics": "Analytics",
+"anaplan": "Anaplan",
+"android": "Android",
+"angular": "Angular",
+"anomaly-detection": "Anomaly Detection",
+"ansible": "Ansible",
+"ansys": "Ansys",
+"anthropic": "Anthropic",
+"apache-camel": "Apache Camel",
+"apex": "Apex",
+"api": "API",
+"api-design": "Api Design",
+"api-documentation": "Api Documentation",
+"api-gateway": "API Gateway",
+"api-security": "Api Security",
+"api-testing": "API Testing",
+"apigee": "Apigee",
+"apollo-io": "Apollo Io",
+"appdynamics": "AppDynamics",
+"appium": "Appium",
+"application-security": "Application Security",
+"arcgis": "ArcGIS",
+"archicad": "ArchiCAD",
+"archimate": "ArchiMate",
+"argocd": "Argo CD",
+"ariba": "Ariba",
+"arista": "Arista",
+"arm-templates": "ARM Templates",
+"artifactory": "Artifactory",
+"as400": "AS/400",
+"as9100": "As9100",
+"asana": "Asana",
+"asic": "Asic",
+"assembly": "Assembly",
+"astro": "Astro",
+"asyncio": "Asyncio",
+"athena": "Athena",
+"atlassian": "Atlassian",
+"aurora": "Aurora",
+"auth0": "Auth0",
+"authentication": "Authentication",
+"autocad": "AutoCAD",
+"autodesk-inventor": "Autodesk Inventor",
+"autogen": "AutoGen",
+"automation": "Automation",
+"autosar": "AUTOSAR",
+"avro": "Avro",
+"aws": "AWS",
+"aws-bedrock": "AWS Bedrock",
+"aws-glue": "Aws Glue",
+"azure": "Azure",
+"azure-ad": "Azure AD",
+"azure-application-insights": "Azure Application Insights",
+"azure-data-factory": "Azure Data Factory",
+"azure-devops": "Azure DevOps",
+"azure-functions": "Azure Functions",
+"azure-logic-apps": "Azure Logic Apps",
+"azure-monitor": "Azure Monitor",
+"azure-service-bus": "Azure Service Bus",
+"azure-synapse": "Azure Synapse",
+"backbone": "Backbone.js",
+"bamboohr": "BambooHR",
+"bash": "Bash",
+"bazel": "Bazel",
+"bdd": "BDD",
+"behavior-based-safety": "Behavior Based Safety",
+"bentoml": "BentoML",
+"bgp": "BGP",
+"bicep": "Bicep",
+"big-data": "Big Data",
+"bigquery": "BigQuery",
+"bim": "BIM",
+"bioinformatics": "Bioinformatics",
+"bitbucket": "Bitbucket",
+"blazor": "Blazor",
+"blender": "Blender",
+"blockchain": "Blockchain",
+"bluebeam": "Bluebeam",
+"bluetooth": "Bluetooth",
+"boolean-search": "Boolean Search",
+"boomi": "Boomi",
+"bootstrap": "Bootstrap",
+"bpmn": "BPMN",
+"braze": "Braze",
+"burp-suite": "Burp Suite",
+"business-development": "Business Development",
+"business-intelligence": "Business Intelligence",
+"c": "C",
+"cad": "CAD",
+"cadence-virtuoso": "Cadence Virtuoso",
+"calendly": "Calendly",
+"camunda": "Camunda",
+"can-bus": "Can Bus",
+"candidate-experience": "Candidate Experience",
+"canopen": "CANopen",
+"canva": "Canva",
+"capcut": "Capcut",
+"cassandra": "Cassandra",
+"catia": "CATIA",
+"causal-inference": "Causal Inference",
+"ccna": "Ccna",
+"ccnp": "CCNP",
+"ccpa": "Ccpa",
+"cdk": "CDK",
+"centos": "CentOS",
+"ceph": "Ceph",
+"certified-scrummaster": "Certified ScrumMaster",
+"cfd": "Cfd",
+"chatgpt": "ChatGPT",
+"chromadb": "ChromaDB",
+"churn-prevention": "Churn Prevention",
+"churnzero": "ChurnZero",
+"ci-cd": "CI/CD",
+"cics": "CICS",
+"cinema-4d": "Cinema 4d",
+"circleci": "CircleCI",
+"cisco": "Cisco",
+"cisco-meraki": "Cisco Meraki",
+"cism": "Cism",
+"cissp": "Cissp",
+"citrix": "Citrix",
+"civil-3d": "Civil 3D",
+"claude": "Claude",
+"claude-code": "Claude Code",
+"clean-architecture": "Clean Architecture",
+"cli": "CLI",
+"clickhouse": "ClickHouse",
+"clickup": "ClickUp",
+"clio": "Clio",
+"clojure": "Clojure",
+"cloud": "Cloud",
+"cloud-composer": "Cloud Composer",
+"cloud-native": "Cloud Native",
+"cloud-run": "Cloud Run",
+"cloud-security": "Cloud Security",
+"cloudera": "Cloudera",
+"cloudflare": "Cloudflare",
+"cloudformation": "CloudFormation",
+"cloudfront": "CloudFront",
+"cloudtrail": "CloudTrail",
+"cloudwatch": "CloudWatch",
+"cmake": "CMake",
+"cmdb": "CMDB",
+"cmmc": "Cmmc",
+"cmms": "CMMS",
+"cmos": "Cmos",
+"cnc": "Cnc",
+"cobol": "COBOL",
+"cockroachdb": "CockroachDB",
+"cognos": "Cognos",
+"cohere": "Cohere",
+"cold-outreach": "Cold Outreach",
+"collibra": "Collibra",
+"color-grading": "Color Grading",
+"community-management": "Community Management",
+"computer-vision": "Computer Vision",
+"concur": "Concur",
+"confined-space": "Confined Space",
+"confluence": "Confluence",
+"container-security": "Container Security",
+"containerd": "Containerd",
+"containerization": "Containerization",
+"content-marketing": "Content Marketing",
+"contentful": "Contentful",
+"contract-drafting": "Contract Drafting",
+"contract-lifecycle-management": "Contract Lifecycle Management",
+"contract-negotiation": "Contract Negotiation",
+"contractor-safety": "Contractor Safety",
+"control-m": "Control-M",
+"conversational-ai": "Conversational AI",
+"copywriting": "Copywriting",
+"cordova": "Cordova",
+"cority": "Cority",
+"corrective-action": "Corrective Action",
+"cosmos-db": "Cosmos Db",
+"couchdb": "CouchDB",
+"coupa": "Coupa",
+"cpp": "C++",
+"cpq": "CPQ",
+"cqrs": "CQRS",
+"creo": "Creo",
+"crewai": "CrewAI",
+"crm": "CRM",
+"crowdstrike": "Crowdstrike",
+"cryptocurrency": "Cryptocurrency",
+"cryptography": "Cryptography",
+"csharp": "C#",
+"cspm": "CSPM",
+"css": "CSS",
+"cucumber": "Cucumber",
+"cuda": "CUDA",
+"customer-health-score": "Customer Health Score",
+"customer-io": "Customer.io",
+"customer-onboarding": "Customer Onboarding",
+"customer-retention": "Customer Retention",
+"cyberark": "Cyberark",
+"cybersecurity": "Cybersecurity",
+"cypress": "Cypress",
+"dagster": "Dagster",
+"dart": "Dart",
+"dask": "Dask",
+"dast": "DAST",
+"data-analytics": "Data Analytics",
+"data-engineering": "Data Engineering",
+"data-governance": "Data Governance",
+"data-ingestion": "Data Ingestion",
+"data-lake": "Data Lake",
+"data-lineage": "Data Lineage",
+"data-mesh": "Data Mesh",
+"data-mining": "Data Mining",
+"data-modeling": "Data Modeling",
+"data-pipelines": "Data Pipelines",
+"data-quality": "Data Quality",
+"data-science": "Data Science",
+"data-vault": "Data Vault",
+"data-visualization": "Data Visualization",
+"data-warehousing": "Data Warehousing",
+"databricks": "Databricks",
+"datadog": "Datadog",
+"dataform": "Dataform",
+"dataops": "DataOps",
+"dataproc": "Dataproc",
+"dataverse": "Dataverse",
+"datev": "DATEV",
+"davinci-resolve": "Davinci Resolve",
+"db2": "Db2",
+"dbt": "dbt",
+"debezium": "Debezium",
+"debian": "Debian",
+"deep-learning": "Deep Learning",
+"deepseek": "DeepSeek",
+"deepspeed": "DeepSpeed",
+"defi": "DeFi",
+"delta-lake": "Delta Lake",
+"demand-generation": "Demand Generation",
+"design-for-manufacturing": "Design for Manufacturing (DFM)",
+"design-of-experiments": "Design of Experiments (DOE)",
+"design-patterns": "Design Patterns",
+"design-thinking": "Design Thinking",
+"developer-advocacy": "Developer Advocacy",
+"developer-experience": "Developer Experience",
+"devops": "DevOps",
+"devsecops": "DevSecOps",
+"dfars": "Dfars",
+"dhcp": "DHCP",
+"dimensional-modeling": "Dimensional Modeling",
+"distributed-computing": "Distributed Computing",
+"distributed-systems": "Distributed Systems",
+"distributed-training": "Distributed Training",
+"django": "Django",
+"dlp": "DLP",
+"dns": "DNS",
+"docker": "Docker",
+"docs-as-code": "Docs as Code",
+"domain-driven-design": "Domain-Driven Design (DDD)",
+"dotnet": ".NET",
+"dropwizard": "Dropwizard",
+"druid": "Druid",
+"drupal": "Drupal",
+"dspy": "DSPy",
+"duckdb": "DuckDB",
+"dynamodb": "DynamoDB",
+"dynatrace": "Dynatrace",
+"ec2": "EC2",
+"eclipse": "Eclipse",
+"ecommerce": "E-commerce",
+"ecs": "ECS",
+"edi": "EDI",
+"edr": "EDR",
+"eigrp": "EIGRP",
+"eks": "EKS",
+"elasticsearch": "Elasticsearch",
+"elixir": "Elixir",
+"elk": "ELK",
+"elt": "ELT",
+"email-marketing": "Email Marketing",
+"embedded-linux": "Embedded Linux",
+"embedded-software": "Embedded Software",
+"embedded-systems": "Embedded Systems",
+"embeddings": "Embeddings",
+"ember": "Ember.js",
+"emergency-response": "Emergency Response",
+"employee-relations": "Employee Relations",
+"employer-branding": "Employer Branding",
+"enablon": "Enablon",
+"enscape": "Enscape",
+"entra-id": "Entra ID",
+"environmental-compliance": "Environmental Compliance",
+"envoy": "Envoy",
+"epa": "EPA",
+"eplan": "EPLAN",
+"erlang": "Erlang",
+"erp": "ERP",
+"ethercat": "EtherCAT",
+"ethereum": "Ethereum",
+"ethernet": "Ethernet",
+"ethersjs": "ethers.js",
+"etl": "ETL",
+"event-driven-architecture": "Event Driven Architecture",
+"eventbridge": "Eventbridge",
+"evm": "EVM",
+"evpn": "EVPN",
+"exact-online": "Exact Online",
+"express": "Express.js",
+"faiss": "FAISS",
+"fall-protection": "Fall Protection",
+"fargate": "Fargate",
+"fastapi": "FastAPI",
+"fastify": "Fastify",
+"fastlane": "fastlane",
+"fea": "Fea",
+"feature-engineering": "Feature Engineering",
+"fedramp": "Fedramp",
+"fhir": "FHIR",
+"fiber": "Fiber",
+"figjam": "FigJam",
+"figma": "Figma",
+"final-cut-pro": "Final Cut Pro",
+"financial-modeling": "Financial Modeling",
+"financial-reporting": "Financial Reporting",
+"fine-tuning": "Fine Tuning",
+"finops": "FinOps",
+"fintech": "Fintech",
+"firebase": "Firebase",
+"firestore": "Firestore",
+"firewall": "Firewall",
+"firmware": "Firmware",
+"first-aid": "First Aid",
+"fivetran": "Fivetran",
+"flask": "Flask",
+"flink": "Flink",
+"flutter": "Flutter",
+"flux": "Flux",
+"fmea": "FMEA",
+"fortinet": "Fortinet",
+"fortran": "Fortran",
+"fpga": "FPGA",
+"freertos": "FreeRTOS",
+"freshdesk": "Freshdesk",
+"fsharp": "Fsharp",
+"full-cycle-recruiting": "Full Cycle Recruiting",
+"fusion-360": "Fusion 360",
+"gainsight": "Gainsight",
+"game-development": "Game Development",
+"gap-analysis": "Gap Analysis",
+"gatling": "Gatling",
+"gcp": "GCP",
+"gd-t": "Gd T",
+"gdb": "GDB",
+"gdpr": "Gdpr",
+"gemini": "Gemini",
+"general-ledger": "General Ledger",
+"generative-ai": "Generative AI",
+"generative-engine-optimization": "Generative Engine Optimization",
+"gin": "Gin",
+"gis": "GIS",
+"git": "Git",
+"gitflow": "Gitflow",
+"github": "GitHub",
+"github-actions": "GitHub Actions",
+"github-copilot": "Github Copilot",
+"gitlab": "GitLab",
+"gitops": "GitOps",
+"gke": "GKE",
+"go": "Go",
+"go-to-market": "Go-to-Market",
+"godot": "Godot",
+"gong": "Gong",
+"google-ads": "Google Ads",
+"google-analytics": "Google Analytics",
+"google-search-console": "Google Search Console",
+"google-tag-manager": "Google Tag Manager",
+"gorilla": "Gorilla",
+"gpu": "GPU",
+"gradle": "Gradle",
+"grafana": "Grafana",
+"grails": "Grails",
+"graphql": "GraphQL",
+"groovy": "Groovy",
+"grpc": "gRPC",
+"hadoop": "Hadoop",
+"hapi": "hapi",
+"haskell": "Haskell",
+"hastus": "HASTUS",
+"hazard-identification": "Hazard Identification",
+"hazardous-waste": "Hazardous Waste",
+"hazop": "HAZOP",
+"hbase": "HBase",
+"helm": "Helm",
+"help-desk": "Help Desk",
+"hexagonal-architecture": "Hexagonal Architecture",
+"hibernate": "Hibernate",
+"hipaa": "Hipaa",
+"hive": "Hive",
+"hl7": "HL7",
+"hmi": "Hmi",
+"hootsuite": "Hootsuite",
+"hot-work": "Hot Work",
+"houdini": "Houdini",
+"hpc": "HPC",
+"hris": "HRIS",
+"html": "HTML",
+"hubspot": "HubSpot",
+"huggingface": "Hugging Face",
+"hyper-v": "Hyper-V",
+"i-129": "I-129",
+"i-130": "I-130",
+"i2c": "I2c",
+"iaas": "IaaS",
+"iam": "IAM",
+"ibm-mq": "IBM MQ",
+"iceberg": "Iceberg",
+"iis": "Iis",
+"illustrator": "Illustrator",
+"image-processing": "Image Processing",
+"incident-investigation": "Incident Investigation",
+"indesign": "InDesign",
+"industrial-hygiene": "Industrial Hygiene",
+"infiniband": "InfiniBand",
+"influencer-marketing": "Influencer Marketing",
+"influxdb": "InfluxDB",
+"information-architecture": "Information Architecture",
+"infrastructure-as-code": "Infrastructure as Code",
+"integration-testing": "Integration Testing",
+"intelex": "Intelex",
+"intellij": "IntelliJ IDEA",
+"interaction-design": "Interaction Design",
+"intrusion-detection": "Intrusion Detection",
+"intune": "Intune",
+"invision": "InVision",
+"ionic": "Ionic",
+"ios": "iOS",
+"iot": "IoT",
+"ipsec": "IPsec",
+"ipv6": "IPv6",
+"iso-13485": "Iso 13485",
+"iso-14001": "ISO 14001",
+"iso-26262": "Iso 26262",
+"iso-27001": "ISO 27001",
+"iso-45001": "ISO 45001",
+"iso-9001": "Iso 9001",
+"istio": "Istio",
+"itar": "Itar",
+"itil": "ITIL",
+"itsm": "ITSM",
+"itwo": "iTWO",
+"j2ee": "J2EE",
+"jamf": "Jamf",
+"java": "Java",
+"javascript": "JavaScript",
+"jax": "JAX",
+"jboss": "Jboss",
+"jcl": "Jcl",
+"jdbc": "Jdbc",
+"jenkins": "Jenkins",
+"jest": "Jest",
+"jetpack": "Jetpack",
+"jira": "Jira",
+"jmeter": "JMeter",
+"jms": "Jms",
+"job-safety-analysis": "Job Safety Analysis (JSA)",
+"jpa": "JPA",
+"jquery": "jQuery",
+"json": "JSON",
+"jsp": "Jsp",
+"jtag": "JTAG",
+"julia": "Julia",
+"juniper": "Juniper",
+"junit": "JUnit",
+"jupyter": "Jupyter",
+"jvm": "JVM",
+"jwt": "JWT",
+"k6": "k6",
+"kafka": "Kafka",
+"kanban": "Kanban",
+"keras": "Keras",
+"keycloak": "Keycloak",
+"kibana": "Kibana",
+"kicad": "KiCad",
+"kinesis": "Kinesis",
+"klaviyo": "Klaviyo",
+"knx": "KNX",
+"koa": "Koa",
+"kotlin": "Kotlin",
+"kql": "KQL",
+"ktor": "Ktor",
+"kubeflow": "Kubeflow",
+"kubernetes": "Kubernetes",
+"kustomize": "Kustomize",
+"kvm": "Kvm",
+"labview": "LabVIEW",
+"lakehouse": "Lakehouse",
+"lambda": "Lambda",
+"langchain": "LangChain",
+"langfuse": "Langfuse",
+"langgraph": "LangGraph",
+"langsmith": "LangSmith",
+"laravel": "Laravel",
+"ldap": "LDAP",
+"lead-generation": "Lead Generation",
+"legal-research": "Legal Research",
+"lgpd": "Lgpd",
+"lidar": "LiDAR",
+"lifecycle-marketing": "Lifecycle Marketing",
+"lims": "LIMS",
+"link-building": "Link Building",
+"linkedin-ads": "LinkedIn Ads",
+"linkedin-recruiter": "LinkedIn Recruiter",
+"linkedin-sales-navigator": "Linkedin Sales Navigator",
+"linq": "LINQ",
+"linux": "Linux",
+"liquibase": "Liquibase",
+"litellm": "LiteLLM",
+"llamaindex": "LlamaIndex",
+"llm": "LLM",
+"llmops": "LLMOps",
+"lockout-tagout": "Lockout/Tagout",
+"logstash": "Logstash",
+"loki": "Loki",
+"looker": "Looker",
+"looker-studio": "Looker Studio",
+"lottie": "Lottie",
+"lua": "Lua",
+"lucidchart": "Lucidchart",
+"lwc": "LWC",
+"machine-guarding": "Machine Guarding",
+"machine-learning": "Machine Learning",
+"macos": "macOS",
+"madcap-flare": "MadCap Flare",
+"mailchimp": "Mailchimp",
+"mainframe": "Mainframe",
+"mariadb": "MariaDB",
+"marketing-automation": "Marketing Automation",
+"marketo": "Marketo",
+"master-data-management": "Master Data Management",
+"mastra": "Mastra",
+"matillion": "Matillion",
+"matlab": "MATLAB",
+"matplotlib": "Matplotlib",
+"maven": "Maven",
+"maximo": "Maximo",
+"maya": "Maya",
+"mbse": "MBSE",
+"mcp": "MCP",
+"mdm": "MDM",
+"medallion-architecture": "Medallion Architecture",
+"memcached": "Memcached",
+"mendix": "Mendix",
+"meta-ads": "Meta Ads",
+"metabase": "Metabase",
+"metadata-management": "Metadata Management",
+"metasploit": "Metasploit",
+"microcontrollers": "Microcontrollers",
+"micronaut": "Micronaut",
+"microservices": "Microservices",
+"microsoft-access": "Microsoft Access",
+"microsoft-copilot": "Microsoft Copilot",
+"microsoft-defender": "Microsoft Defender",
+"microsoft-dynamics": "Microsoft Dynamics",
+"microsoft-exchange": "Microsoft Exchange",
+"microsoft-fabric": "Microsoft Fabric",
+"microsoft-project": "Microsoft Project",
+"microsoft-purview": "Microsoft Purview",
+"microsoft-sentinel": "Microsoft Sentinel",
+"microstation": "Microstation",
+"microstrategy": "MicroStrategy",
+"midjourney": "Midjourney",
+"milvus": "Milvus",
+"minitab": "Minitab",
+"miro": "Miro",
+"mistral": "Mistral",
+"mitre-attack": "MITRE ATT&CK",
+"mixpanel": "Mixpanel",
+"mlflow": "MLflow",
+"mlops": "MLOps",
+"mobx": "MobX",
+"mocha": "Mocha",
+"mockito": "Mockito",
+"modbus": "Modbus",
+"model-deployment": "Model Deployment",
+"model-evaluation": "Model Evaluation",
+"monday-com": "Monday.com",
+"mongodb": "MongoDB",
+"motion-design": "Motion Design",
+"motion-graphics": "Motion Graphics",
+"mpls": "MPLS",
+"mqtt": "MQTT",
+"mulesoft": "Mulesoft",
+"multithreading": "Multithreading",
+"mvc": "MVC",
+"mvvm": "MVVM",
+"mysql": "MySQL",
+"n8n": "n8n",
+"nagios": "Nagios",
+"nats": "NATS",
+"navisworks": "Navisworks",
+"near-miss-reporting": "Near Miss Reporting",
+"nen-7510": "NEN 7510",
+"neo4j": "Neo4j",
+"nessus": "Nessus",
+"nestjs": "NestJS",
+"netsuite": "NetSuite",
+"network-security": "Network Security",
+"networking": "Networking",
+"neural-networks": "Neural Networks",
+"newrelic": "New Relic",
+"nextjs": "Next.js",
+"nfpa": "NFPA",
+"nginx": "Nginx",
+"ngrx": "NgRx",
+"nifi": "NiFi",
+"nim": "Nim",
+"nis2": "NIS2",
+"nist": "Nist",
+"nlp": "NLP",
+"nmap": "Nmap",
+"nmbrs": "Nmbrs",
+"nodejs": "Node.js",
+"nosql": "NoSQL",
+"notion": "Notion",
+"npm": "Npm",
+"numpy": "NumPy",
+"nunit": "NUnit",
+"nutanix": "Nutanix",
+"nuxt": "Nuxt",
+"oauth": "OAuth",
+"objective-c": "Objective-C",
+"observability": "Observability",
+"ocaml": "OCaml",
+"odata": "OData",
+"odoo": "Odoo",
+"okta": "Okta",
+"olap": "OLAP",
+"ollama": "Ollama",
+"onedrive": "Onedrive",
+"onnx": "ONNX",
+"oop": "OOP",
+"openai": "OpenAI",
+"openapi": "OpenAPI",
+"opencv": "OpenCV",
+"openid": "OpenID",
+"opensearch": "OpenSearch",
+"openshift": "OpenShift",
+"openstack": "OpenStack",
+"opentelemetry": "OpenTelemetry",
+"opentofu": "OpenTofu",
+"oracle": "Oracle",
+"oracle-hyperion": "Oracle Hyperion",
+"oscilloscope": "Oscilloscope",
+"osha": "OSHA",
+"osint": "Osint",
+"ospf": "OSPF",
+"outsystems": "OutSystems",
+"owasp": "OWASP",
+"pagerduty": "PagerDuty",
+"paid-social": "Paid Social",
+"palo-alto-networks": "Palo Alto Networks",
+"pandas": "pandas",
+"parquet": "Parquet",
+"pcb": "Pcb",
+"pci-dss": "Pci Dss",
+"pcie": "PCIe",
+"peft": "PEFT",
+"pega": "Pega",
+"penetration-testing": "Penetration Testing",
+"people-analytics": "People Analytics",
+"peoplesoft": "PeopleSoft",
+"perforce": "Perforce",
+"performance-management": "Performance Management",
+"perl": "Perl",
+"permit-to-work": "Permit To Work",
+"personal-protective-equipment": "Personal Protective Equipment (PPE)",
+"pgvector": "pgvector",
+"photoshop": "Photoshop",
+"php": "PHP",
+"phpunit": "PHPUnit",
+"pinecone": "Pinecone",
+"pinot": "Pinot",
+"pipeline-management": "Pipeline Management",
+"pki": "PKI",
+"playwright": "Playwright",
+"plc": "Plc",
+"plm": "PLM",
+"plotly": "Plotly",
+"plsql": "PL/SQL",
+"pmp": "PMP",
+"podman": "Podman",
+"polars": "Polars",
+"postgresql": "PostgreSQL",
+"postman": "Postman",
+"power-automate": "Power Automate",
+"power-platform": "Power Platform",
+"power-query": "Power Query",
+"powerapps": "Power Apps",
+"powerbi": "Power BI",
+"powershell": "PowerShell",
+"ppc": "PPC",
+"pre-sales": "Pre-sales",
+"preact": "Preact",
+"predictive-analytics": "Predictive Analytics",
+"predictive-modeling": "Predictive Modeling",
+"prefect": "Prefect",
+"premiere-pro": "Premiere Pro",
+"presto": "Presto",
+"primavera-p6": "Primavera P6",
+"process-improvement": "Process Improvement",
+"process-modeling": "Process Modeling",
+"process-safety-management": "Process Safety Management (PSM)",
+"procore": "Procore",
+"professional-scrum-master": "Professional Scrum Master",
+"profibus": "PROFIBUS",
+"profinet": "PROFINET",
+"program-management": "Program Management",
+"prometheus": "Prometheus",
+"prompt-engineering": "Prompt Engineering",
+"proof-of-concept": "Proof of Concept",
+"protobuf": "Protobuf",
+"protopie": "ProtoPie",
+"prototyping": "Prototyping",
+"proxmox": "Proxmox",
+"pulsar": "Pulsar",
+"pulumi": "Pulumi",
+"puppet": "Puppet",
+"puppeteer": "Puppeteer",
+"pydantic": "Pydantic",
+"pyspark": "PySpark",
+"pytest": "pytest",
+"python": "Python",
+"pytorch": "PyTorch",
+"qdrant": "Qdrant",
+"qgis": "QGIS",
+"qlik": "Qlik",
+"qnx": "QNX",
+"qos": "QoS",
+"qualys": "Qualys",
+"quantization": "Quantization",
+"quarkus": "Quarkus",
+"quickbooks": "QuickBooks",
+"r": "R",
+"rabbitmq": "RabbitMQ",
+"rag": "RAG",
+"rails": "Rails",
+"rancher": "Rancher",
+"rbac": "RBAC",
+"rcra": "RCRA",
+"rdbms": "RDBMS",
+"rdma": "RDMA",
+"rds": "RDS",
+"react": "React",
+"react-native": "React Native",
+"react-testing-library": "React Testing Library",
+"recommendation-systems": "Recommendation Systems",
+"redis": "Redis",
+"redshift": "Redshift",
+"redux": "Redux",
+"regulatory-compliance": "Regulatory Compliance",
+"reinforcement-learning": "Reinforcement Learning",
+"remix": "Remix",
+"renewal-management": "Renewal Management",
+"requirements-elicitation": "Requirements Elicitation",
+"requirements-gathering": "Requirements Gathering",
+"rest": "REST",
+"rest-assured": "REST Assured",
+"revenue-recognition": "Revenue Recognition",
+"reverse-engineering": "Reverse Engineering",
+"revit": "Revit",
+"rhel": "RHEL",
+"rhino": "Rhino",
+"risk-assessment": "Risk Assessment",
+"rlhf": "RLHF",
+"robot-framework": "Robot Framework",
+"root-cause-analysis": "Root Cause Analysis",
+"ros2": "ROS 2",
+"route53": "Route 53",
+"rpa": "RPA",
+"rspec": "RSpec",
+"rtl": "Rtl",
+"rtos": "RTOS",
+"ruby": "Ruby",
+"rust": "Rust",
+"rxjs": "RxJS",
+"s3": "S3",
+"saas": "SaaS",
+"safe-agile": "SAFe Agile",
+"safety-audit": "Safety Audit",
+"safety-management-system": "Safety Management System",
+"sagemaker": "SageMaker",
+"sailpoint": "SailPoint",
+"sales-cloud": "Sales Cloud",
+"sales-enablement": "Sales Enablement",
+"sales-engineering": "Sales Engineering",
+"salesforce": "Salesforce",
+"salesforce-marketing-cloud": "Salesforce Marketing Cloud",
+"salesloft": "Salesloft",
+"saml": "SAML",
+"sap": "SAP",
+"sap-btp": "SAP BTP",
+"sap-fico": "SAP FICO",
+"sap-fiori": "SAP Fiori",
+"sap-hana": "Sap Hana",
+"sap-mm": "SAP MM",
+"sap-s4hana": "SAP S/4HANA",
+"sas": "SAS",
+"sase": "Sase",
+"sass": "Sass",
+"sast": "SAST",
+"sbom": "SBOM",
+"scada": "SCADA",
+"scala": "Scala",
+"sccm": "SCCM",
+"scikit-learn": "scikit-learn",
+"scim": "SCIM",
+"scipy": "SciPy",
+"screaming-frog": "Screaming Frog",
+"scrum": "Scrum",
+"scss": "Scss",
+"scylladb": "ScyllaDB",
+"sd-wan": "SD-WAN",
+"sdlc": "SDLC",
+"sdn": "Sdn",
+"seaborn": "Seaborn",
+"secrets-management": "Secrets Management",
+"secure-coding": "Secure Coding",
+"selenium": "Selenium",
+"semantic-kernel": "Semantic Kernel",
+"semantic-search": "Semantic Search",
+"semrush": "Semrush",
+"sensor-fusion": "Sensor Fusion",
+"sentence-transformers": "Sentence Transformers",
+"sentry": "Sentry",
+"seo": "SEO",
+"serdes": "SerDes",
+"serverless": "Serverless",
+"service-desk": "Service Desk",
+"servicenow": "ServiceNow",
+"sftp": "SFTP",
+"sglang": "SGLang",
+"sharepoint": "SharePoint",
+"shopify": "Shopify",
+"siem": "SIEM",
+"siemens-nx": "Siemens NX",
+"signal-integrity": "Signal Integrity",
+"signal-processing": "Signal Processing",
+"simulink": "Simulink",
+"sinatra": "Sinatra",
+"six-sigma": "Six Sigma",
+"sketch": "Sketch",
+"sketchup": "SketchUp",
+"slack": "Slack",
+"slurm": "Slurm",
+"smart-contracts": "Smart Contracts",
+"smartrecruiters": "SmartRecruiters",
+"smartsheet": "Smartsheet",
+"smtp": "SMTP",
+"snmp": "SNMP",
+"snowflake": "Snowflake",
+"snowpark": "Snowpark",
+"sns": "SNS",
+"snyk": "Snyk",
+"soa": "SOA",
+"soap": "SOAP",
+"soapui": "SoapUI",
+"soc-2": "SOC 2",
+"solana": "Solana",
+"solarwinds": "Solarwinds",
+"soldering": "Soldering",
+"solidity": "Solidity",
+"solidjs": "SolidJS",
+"solidworks": "SolidWorks",
+"solr": "Solr",
+"solution-design": "Solution Design",
+"sonarqube": "SonarQube",
+"soql": "SOQL",
+"spacy": "spaCy",
+"spark": "Spark",
+"sphera": "Sphera",
+"splunk": "Splunk",
+"spring": "Spring",
+"sprout-social": "Sprout Social",
+"spss": "SPSS",
+"sql": "SQL",
+"sql-server": "SQL Server",
+"sqlalchemy": "SQLAlchemy",
+"sqlite": "SQLite",
+"sqs": "SQS",
+"sre": "SRE",
+"ssas": "SSAS",
+"ssh": "SSH",
+"ssis": "SSIS",
+"ssl": "SSL",
+"sso": "SSO",
+"ssrs": "SSRS",
+"stakeholder-management": "Stakeholder Management",
+"stata": "Stata",
+"statistics": "Statistics",
+"step-functions": "AWS Step Functions",
+"storyboarding": "Storyboarding",
+"storybook": "Storybook",
+"strategic-planning": "Strategic Planning",
+"streamlit": "Streamlit",
+"stripe": "Stripe",
+"structured-authoring": "Structured Authoring",
+"substance-designer": "Substance Designer",
+"substance-painter": "Substance Painter",
+"successfactors": "SuccessFactors",
+"succession-planning": "Succession Planning",
+"supabase": "Supabase",
+"superset": "Superset",
+"svelte": "Svelte",
+"svn": "SVN",
+"swagger": "Swagger",
+"swift": "Swift",
+"swiftui": "SwiftUI",
+"sybase": "Sybase",
+"symfony": "Symfony",
+"sysml": "SysML",
+"systemverilog": "SystemVerilog",
+"tableau": "Tableau",
+"tabular-editor": "Tabular Editor",
+"tailwind": "Tailwind",
+"talend": "Talend",
+"talent-management": "Talent Management",
+"talent-sourcing": "Talent Sourcing",
+"tcl": "Tcl",
+"tcp-ip": "TCP/IP",
+"tdd": "TDD",
+"teamcenter": "Teamcenter",
+"teamcity": "Teamcity",
+"technical-discovery": "Technical Discovery",
+"technical-evangelism": "Technical Evangelism",
+"technical-screening": "Technical Screening",
+"technical-seo": "Technical SEO",
+"technical-writing": "Technical Writing",
+"tekton": "Tekton",
+"tensorflow": "TensorFlow",
+"tensorrt": "TensorRT",
+"teradata": "Teradata",
+"terraform": "Terraform",
+"terragrunt": "Terragrunt",
+"test-automation": "Test Automation",
+"testify": "Testify",
+"testng": "TestNG",
+"testrail": "Testrail",
+"thinkwise": "Thinkwise",
+"threat-hunting": "Threat Hunting",
+"threat-intelligence": "Threat Intelligence",
+"threat-modeling": "Threat Modeling",
+"threejs": "Three.js",
+"thrift": "Thrift",
+"ticket-resolution": "Ticket Resolution",
+"tiktok-ads": "TikTok Ads",
+"time-series": "Time Series",
+"timescaledb": "TimescaleDB",
+"tls": "TLS",
+"togaf": "TOGAF",
+"tokenomics": "Tokenomics",
+"tomcat": "Tomcat",
+"toolbox-talks": "Toolbox Talks",
+"topdesk": "TOPdesk",
+"transformers": "Transformers",
+"travis": "Travis CI",
+"trello": "Trello",
+"trino": "Trino",
+"triton": "Triton",
+"typescript": "TypeScript",
+"typography": "Typography",
+"uart": "UART",
+"ubuntu": "Ubuntu",
+"udp": "UDP",
+"uikit": "Uikit",
+"uipath": "UiPath",
+"uml": "UML",
+"unit-testing": "Unit Testing",
+"unity": "Unity",
+"unity-catalog": "Unity Catalog",
+"unix": "Unix",
+"unreal-engine": "Unreal Engine",
+"usability-testing": "Usability Testing",
+"uscis": "USCIS",
+"user-flows": "User Flows",
+"user-research": "User Research",
+"user-stories": "User Stories",
+"uvm": "Uvm",
+"vault": "Vault",
+"vba": "VBA",
+"vbnet": "VB.NET",
+"vector-databases": "Vector Databases",
+"vector-search": "Vector Search",
+"veeam": "Veeam",
+"veeva": "Veeva",
+"velocityehs": "VelocityEHS",
+"vendor-management": "Vendor Management",
+"vercel": "Vercel",
+"verilog": "Verilog",
+"version-control": "Version Control",
+"vertex-ai": "Vertex AI",
+"vhdl": "VHDL",
+"video-editing": "Video Editing",
+"virtualization": "Virtualization",
+"visio": "Visio",
+"visual-studio": "Visual Studio",
+"visualforce": "Visualforce",
+"vite": "Vite",
+"vitest": "Vitest",
+"vlan": "VLAN",
+"vllm": "vLLM",
+"vmware": "VMware",
+"voip": "VoIP",
+"vpc": "VPC",
+"vpn": "VPN",
+"vue": "Vue",
+"vulnerability-management": "Vulnerability Management",
+"vulnerability-scanning": "Vulnerability Scanning",
+"vxlan": "Vxlan",
+"waf": "WAF",
+"wan": "WAN",
+"wasm": "WebAssembly",
+"waste-management": "Waste Management",
+"wcag": "WCAG",
+"wcf": "WCF",
+"weaviate": "Weaviate",
+"web3": "Web3",
+"webflow": "Webflow",
+"webgl": "WebGL",
+"webhooks": "Webhooks",
+"weblogic": "Weblogic",
+"webpack": "Webpack",
+"webrtc": "WebRTC",
+"websockets": "Websockets",
+"websphere": "WebSphere",
+"wifi": "Wi-Fi",
+"windchill": "Windchill",
+"windows-server": "Windows Server",
+"wireframing": "Wireframing",
+"wireshark": "Wireshark",
+"wordpress": "WordPress",
+"workato": "Workato",
+"workday": "Workday",
+"workflow-orchestration": "Workflow Orchestration",
+"working-at-height": "Working At Height",
+"wpf": "Wpf",
+"xamarin": "Xamarin",
+"xcode": "Xcode",
+"xdr": "XDR",
+"xero": "Xero",
+"xgboost": "XGBoost",
+"xml": "XML",
+"xslt": "Xslt",
+"xunit": "xUnit",
+"yaml": "YAML",
+"yardi": "Yardi",
+"yocto": "Yocto",
+"yolo": "YOLO",
+"youforce": "Youforce",
+"zabbix": "Zabbix",
+"zapier": "Zapier",
+"zbrush": "Zbrush",
+"zendesk": "Zendesk",
+"zeplin": "Zeplin",
+"zero-trust": "Zero Trust",
+"zeromq": "ZeroMQ",
+"zig": "Zig",
+"zoom": "Zoom",
+"zoominfo": "Zoominfo",
+"zscaler": "Zscaler",
+"zustand": "Zustand"
+},
+"aliases": {
+"1c": [
+"1c",
+"1с"
+],
+"3ds-max": [
+"3ds max"
+],
+"ab-testing": [
+"a/b testing",
+"ab testing"
+],
+"abac": [
+"abac"
+],
+"abap": [
+"abap"
+],
+"acceptance-criteria": [
+"acceptance criteria"
+],
+"accessibility": [
+"a11y",
+"accessibility"
+],
+"account-executive": [
+"account executive"
+],
+"accounts-payable": [
+"accounts payable"
+],
+"accounts-receivable": [
+"accounts receivable"
+],
+"active-directory": [
+"active directory"
+],
+"activemq": [
+"activemq"
+],
+"actix": [
+"actix"
+],
+"adas": [
+"adas"
+],
+"adobe-analytics": [
+"adobe analytics"
+],
+"adobe-creative-suite": [
+"adobe creative suite"
+],
+"adobe-experience-manager": [
+"adobe experience manager",
+"aem"
+],
+"adobe-xd": [
+"adobe xd"
+],
+"adp": [
+"adp payroll",
+"adp workforce now"
+],
+"afas": [
+"afas"
+],
+"after-effects": [
+"adobe after effects"
+],
+"agentforce": [
+"agentforce"
+],
+"agentic-ai": [
+"agentic",
+"agentic ai",
+"ai agents"
+],
+"agile": [
+"agile"
+],
+"ahrefs": [
+"ahrefs"
+],
+"ai": [
+"ai"
+],
+"ai-enablement": [
+"ai adoption",
+"ai enablement",
+"ai transformation"
+],
+"airbyte": [
+"airbyte"
+],
+"airflow": [
+"airflow"
+],
+"airtable": [
+"airtable"
+],
+"ajax": [
+"ajax"
+],
+"aks": [
+"aks"
+],
+"allplan": [
+"allplan"
+],
+"alteryx": [
+"alteryx"
+],
+"altium": [
+"altium"
+],
+"amplitude": [
+"amplitude"
+],
+"analytics": [
+"analytics"
+],
+"anaplan": [
+"anaplan"
+],
+"android": [
+"android"
+],
+"angular": [
+"angular",
+"angularjs"
+],
+"anomaly-detection": [
+"anomaly detection"
+],
+"ansible": [
+"ansible"
+],
+"ansys": [
+"ansys"
+],
+"anthropic": [
+"anthropic"
+],
+"apache-camel": [
+"apache camel"
+],
+"apex": [
+"apex"
+],
+"api": [
+"api",
+"apis"
+],
+"api-design": [
+"api design"
+],
+"api-documentation": [
+"api documentation"
+],
+"api-gateway": [
+"api gateway"
+],
+"api-security": [
+"api security"
+],
+"api-testing": [
+"api testing"
+],
+"apigee": [
+"apigee"
+],
+"apollo-io": [
+"apollo.io"
+],
+"appdynamics": [
+"appdynamics"
+],
+"appium": [
+"appium"
+],
+"application-security": [
+"appsec",
+"bezpieczeństwa aplikacji",
+"bezpieczeństwem aplikacji",
+"bezpieczeństwo aplikacji"
+],
+"arcgis": [
+"arcgis"
+],
+"archicad": [
+"archicad"
+],
+"archimate": [
+"archimate"
+],
+"argocd": [
+"argo cd",
+"argocd"
+],
+"ariba": [
+"ariba"
+],
+"arista": [
+"arista"
+],
+"arm-templates": [
+"arm templates"
+],
+"artifactory": [
+"artifactory"
+],
+"as400": [
+"as400"
+],
+"as9100": [
+"as9100"
+],
+"asana": [
+"asana"
+],
+"asic": [
+"asic design",
+"asic development",
+"asic verification"
+],
+"assembly": [
+"assembly"
+],
+"astro": [
+"astro"
+],
+"asyncio": [
+"asyncio"
+],
+"athena": [
+"athena"
+],
+"atlassian": [
+"atlassian"
+],
+"aurora": [
+"aurora"
+],
+"auth0": [
+"auth0"
+],
+"authentication": [
+"authentication"
+],
+"autocad": [
+"autocad"
+],
+"autodesk-inventor": [
+"autodesk inventor"
+],
+"autogen": [
+"autogen"
+],
+"automation": [
+"automation"
+],
+"autosar": [
+"autosar"
+],
+"avro": [
+"avro"
+],
+"aws": [
+"aws"
+],
+"aws-bedrock": [
+"amazon bedrock",
+"aws bedrock"
+],
+"aws-glue": [
+"aws glue"
+],
+"azure": [
+"azure"
+],
+"azure-ad": [
+"azure ad"
+],
+"azure-application-insights": [
+"application insights"
+],
+"azure-data-factory": [
+"azure data factory",
+"data factory"
+],
+"azure-devops": [
+"azure devops"
+],
+"azure-functions": [
+"azure functions"
+],
+"azure-logic-apps": [
+"azure logic apps",
+"logic apps"
+],
+"azure-monitor": [
+"azure monitor"
+],
+"azure-service-bus": [
+"azure service bus"
+],
+"azure-synapse": [
+"azure synapse",
+"synapse analytics"
+],
+"backbone": [
+"backbone"
+],
+"bamboohr": [
+"bamboohr"
+],
+"bash": [
+"bash",
+"shell"
+],
+"bazel": [
+"bazel"
+],
+"bdd": [
+"bdd"
+],
+"behavior-based-safety": [
+"BBS",
+"behavior based safety",
+"behaviour based safety"
+],
+"bentoml": [
+"bentoml"
+],
+"bgp": [
+"bgp"
+],
+"bicep": [
+"bicep"
+],
+"big-data": [
+"big data"
+],
+"bigquery": [
+"bigquery"
+],
+"bim": [
+"bim"
+],
+"bioinformatics": [
+"bioinformatics"
+],
+"bitbucket": [
+"bitbucket"
+],
+"blazor": [
+"blazor"
+],
+"blender": [
+"blender"
+],
+"blockchain": [
+"blockchain"
+],
+"bluebeam": [
+"bluebeam"
+],
+"bluetooth": [
+"bluetooth"
+],
+"boolean-search": [
+"boolean search"
+],
+"boomi": [
+"boomi"
+],
+"bootstrap": [
+"bootstrap"
+],
+"bpmn": [
+"bpmn"
+],
+"braze": [
+"braze"
+],
+"burp-suite": [
+"burp suite"
+],
+"business-development": [
+"business development"
+],
+"business-intelligence": [
+"business intelligence",
+"informatique decisionnelle",
+"informatique décisionnelle",
+"inteligencia de negocio",
+"inteligencia de negocios",
+"inteligência de negócio",
+"inteligência de negócios",
+"poslovna inteligencija",
+"poslovne inteligencije",
+"poslovnoj inteligenciji",
+"poslovnu inteligenciju"
+],
+"c": [
+"ansi c",
+"c developer",
+"c programming"
+],
+"cad": [
+"cad"
+],
+"cadence-virtuoso": [
+"cadence virtuoso"
+],
+"calendly": [
+"calendly"
+],
+"camunda": [
+"camunda"
+],
+"can-bus": [
+"can bus"
+],
+"candidate-experience": [
+"candidate experience"
+],
+"canopen": [
+"canopen"
+],
+"canva": [
+"canva"
+],
+"capcut": [
+"capcut"
+],
+"cassandra": [
+"cassandra"
+],
+"catia": [
+"catia"
+],
+"causal-inference": [
+"causal inference"
+],
+"ccna": [
+"ccna"
+],
+"ccnp": [
+"ccnp"
+],
+"ccpa": [
+"ccpa"
+],
+"cdk": [
+"cdk"
+],
+"centos": [
+"centos"
+],
+"ceph": [
+"ceph"
+],
+"certified-scrummaster": [
+"CSM",
+"certified scrum master",
+"certified scrummaster"
+],
+"cfd": [
+"cfd analysis",
+"cfd simulation",
+"computational fluid dynamics"
+],
+"chatgpt": [
+"chatgpt"
+],
+"chromadb": [
+"chroma db",
+"chromadb"
+],
+"churn-prevention": [
+"churn prevention"
+],
+"churnzero": [
+"churnzero"
+],
+"ci-cd": [
+"ci cd",
+"ci/cd",
+"ciaglej integracji",
+"cicd",
+"ciągła integracja",
+"ciągłe wdrażanie",
+"ciągłego wdrażania",
+"ciągłej integracji",
+"ciągłemu wdrażaniu",
+"continuous delivery",
+"continuous integration",
+"deploiement continu",
+"deploy continuo",
+"deploy contínuo",
+"despliegue continuo",
+"déploiement continu",
+"implantacao continua",
+"implantação contínua",
+"integracao continua",
+"integracion continua",
+"integración continua",
+"integration continue",
+"integration et deploiement continus",
+"integration et livraison continues",
+"integração contínua",
+"intégration continue",
+"intégration et déploiement continus",
+"intégration et livraison continues",
+"kontinualna integracija",
+"kontinualne integracije",
+"kontinualnu integraciju",
+"kontinuirana integracija",
+"kontinuirane integracije",
+"kontinuiranoj integraciji",
+"kontinuiranu integraciju"
+],
+"cics": [
+"cics"
+],
+"cinema-4d": [
+"c4d",
+"cinema 4d"
+],
+"circleci": [
+"circleci"
+],
+"cisco": [
+"cisco"
+],
+"cisco-meraki": [
+"cisco meraki",
+"meraki"
+],
+"cism": [
+"cism"
+],
+"cissp": [
+"cissp"
+],
+"citrix": [
+"citrix"
+],
+"civil-3d": [
+"civil 3d"
+],
+"claude": [
+"anthropic claude",
+"claude api"
+],
+"claude-code": [
+"claude code"
+],
+"clean-architecture": [
+"arquitectura limpia",
+"arquitetura limpa",
+"clean architecture"
+],
+"cli": [
+"cli"
+],
+"clickhouse": [
+"clickhouse"
+],
+"clickup": [
+"clickup"
+],
+"clio": [
+"clio"
+],
+"clojure": [
+"clojure"
+],
+"cloud": [
+"cloud"
+],
+"cloud-composer": [
+"cloud composer"
+],
+"cloud-native": [
+"cloud native"
+],
+"cloud-run": [
+"cloud run",
+"google cloud run"
+],
+"cloud-security": [
+"cloud security"
+],
+"cloudera": [
+"cloudera"
+],
+"cloudflare": [
+"cloudflare"
+],
+"cloudformation": [
+"cloudformation"
+],
+"cloudfront": [
+"cloudfront"
+],
+"cloudtrail": [
+"cloudtrail"
+],
+"cloudwatch": [
+"cloudwatch"
+],
+"cmake": [
+"cmake"
+],
+"cmdb": [
+"cmdb"
+],
+"cmmc": [
+"cmmc"
+],
+"cmms": [
+"cmms"
+],
+"cmos": [
+"cmos"
+],
+"cnc": [
+"cnc",
+"heidenhain steuerung",
+"heidenhain steuerungen",
+"siemens 840d",
+"sinumerik"
+],
+"cobol": [
+"cobol"
+],
+"cockroachdb": [
+"cockroachdb"
+],
+"cognos": [
+"cognos"
+],
+"cohere": [
+"cohere"
+],
+"cold-outreach": [
+"cold outreach"
+],
+"collibra": [
+"collibra"
+],
+"color-grading": [
+"color grading",
+"colour grading"
+],
+"community-management": [
+"community management"
+],
+"computer-vision": [
+"computer vision",
+"kompjuterski vid",
+"kompjuterskog vida",
+"racunalni vid",
+"racunalnog vida",
+"racunalnom vidu",
+"racunarski vid",
+"racunarskog vida",
+"računalni vid",
+"računalnog vida",
+"računalnom vidu",
+"računarski vid",
+"računarskog vida",
+"visao computacional",
+"vision artificial",
+"vision par ordinateur",
+"vision por computador",
+"visión artificial",
+"visión por computador",
+"visão computacional",
+"widzenia komputerowego",
+"widzenie komputerowe"
+],
+"concur": [
+"sap concur"
+],
+"confined-space": [
+"confined space",
+"confined spaces"
+],
+"confluence": [
+"confluence"
+],
+"container-security": [
+"container security"
+],
+"containerd": [
+"containerd"
+],
+"containerization": [
+"containerisation",
+"containerization",
+"conteneurisation",
+"kontejnerizacija",
+"kontejnerizacije",
+"kontejnerizaciji",
+"kontejnerizacijom",
+"kontejnerizaciju",
+"konteneryzacja",
+"konteneryzacji",
+"konteneryzacją",
+"konteneryzację"
+],
+"content-marketing": [
+"content marketing"
+],
+"contentful": [
+"contentful"
+],
+"contract-drafting": [
+"contract drafting"
+],
+"contract-lifecycle-management": [
+"contract lifecycle management"
+],
+"contract-negotiation": [
+"contract negotiation"
+],
+"contractor-safety": [
+"contractor safety"
+],
+"control-m": [
+"control-m"
+],
+"conversational-ai": [
+"conversational ai"
+],
+"copywriting": [
+"copywriting"
+],
+"cordova": [
+"cordova"
+],
+"cority": [
+"cority"
+],
+"corrective-action": [
+"corrective action",
+"corrective actions",
+"corrective and preventive action"
+],
+"cosmos-db": [
+"cosmos db",
+"cosmosdb"
+],
+"couchdb": [
+"couchdb"
+],
+"coupa": [
+"coupa"
+],
+"cpp": [
+"c++",
+"c/c++"
+],
+"cpq": [
+"cpq"
+],
+"cqrs": [
+"cqrs"
+],
+"creo": [
+"creo parametric",
+"ptc creo"
+],
+"crewai": [
+"crew ai",
+"crewai"
+],
+"crm": [
+"crm",
+"crm systeme",
+"crm systemen"
+],
+"crowdstrike": [
+"crowdstrike"
+],
+"cryptocurrency": [
+"cryptocurrencies",
+"cryptocurrency"
+],
+"cryptography": [
+"cryptography"
+],
+"csharp": [
+"c#"
+],
+"cspm": [
+"cspm"
+],
+"css": [
+"css",
+"css3"
+],
+"cucumber": [
+"cucumber"
+],
+"cuda": [
+"cuda"
+],
+"customer-health-score": [
+"customer health score"
+],
+"customer-io": [
+"customer.io"
+],
+"customer-onboarding": [
+"customer onboarding"
+],
+"customer-retention": [
+"customer retention"
+],
+"cyberark": [
+"cyberark"
+],
+"cybersecurity": [
+"cyber security",
+"cyber sigurnost",
+"cyber sigurnosti",
+"cybersecurite",
+"cybersecurity",
+"cybersécurité",
+"kiberneticka bezbednost",
+"kiberneticka sigurnost",
+"kiberneticke bezbednosti",
+"kiberneticke sigurnosti",
+"kibernetickoj sigurnosti",
+"kiberneticku sigurnost",
+"kibernetička bezbednost",
+"kibernetička sigurnost",
+"kibernetičke bezbednosti",
+"kibernetičke sigurnosti",
+"kibernetičkoj sigurnosti",
+"kibernetičku sigurnost",
+"sajber bezbednost",
+"sajber bezbednosti"
+],
+"cypress": [
+"cypress"
+],
+"dagster": [
+"dagster"
+],
+"dart": [
+"dart"
+],
+"dask": [
+"dask"
+],
+"dast": [
+"dast"
+],
+"data-analytics": [
+"data analytics"
+],
+"data-engineering": [
+"data engineering",
+"engenharia de dados",
+"ingenieria de datos",
+"ingenierie de donnees",
+"ingenierie des donnees",
+"ingeniería de datos",
+"ingénierie de données",
+"ingénierie des données",
+"inzynierii danych",
+"inżynieria danych",
+"inżynierii danych",
+"inżynierią danych"
+],
+"data-governance": [
+"data governance",
+"gobernanza de datos",
+"gobernanza del dato",
+"gobierno de datos",
+"gobierno del dato",
+"gouvernance de données",
+"gouvernance de la donnee",
+"gouvernance de la donnée",
+"gouvernance des donnees",
+"gouvernance des données",
+"governanca de dados",
+"governança de dados"
+],
+"data-ingestion": [
+"data ingestion"
+],
+"data-lake": [
+"data lake",
+"data lakes",
+"lac de données",
+"lago de datos"
+],
+"data-lineage": [
+"data lineage"
+],
+"data-mesh": [
+"data mesh"
+],
+"data-mining": [
+"data mining"
+],
+"data-modeling": [
+"data modeling",
+"data modelling",
+"modelacao de dados",
+"modelado de datos",
+"modelagem de dados",
+"modelação de dados",
+"modeliranja podataka",
+"modeliranje podataka",
+"modeliranju podataka",
+"modelisation de donnees",
+"modelisation des donnees",
+"modelowania danych",
+"modelowanie danych",
+"modelowaniem danych",
+"modelowaniu danych",
+"modélisation de données",
+"modélisation des données"
+],
+"data-pipelines": [
+"canalizaciones de datos",
+"data pipeline",
+"data pipelines",
+"pipeline de dados",
+"pipeline de datos",
+"pipeline de donnees",
+"pipeline de données",
+"pipelines de dados",
+"pipelines de datos",
+"pipelines de donnees",
+"pipelines de données",
+"potok danych",
+"potokach danych",
+"potokami danych",
+"potoki danych",
+"potoku danych",
+"potoków danych"
+],
+"data-quality": [
+"calidad del dato",
+"data quality",
+"qualite de la donnee",
+"qualité de la donnée"
+],
+"data-science": [
+"ciencia de dados",
+"ciencia de datos",
+"ciência de dados",
+"data science",
+"nauka o podacima",
+"nauke o podacima",
+"science des donnees",
+"science des données",
+"sciences des données",
+"znanost o podacima",
+"znanosti o podacima"
+],
+"data-vault": [
+"data vault"
+],
+"data-visualization": [
+"data visualisation",
+"data visualization",
+"datavisualisation",
+"visualisation de donnees",
+"visualisation de données",
+"visualisation des données",
+"visualizacao de dados",
+"visualizacion de datos",
+"visualización de datos",
+"visualização de dados",
+"vizualizacija podataka",
+"vizualizacije podataka",
+"vizualizaciji podataka",
+"vizualizaciju podataka",
+"vizuelizacija podataka",
+"vizuelizacije podataka",
+"vizuelizaciju podataka",
+"wizualizacja danych",
+"wizualizacji danych",
+"wizualizacją danych",
+"wizualizację danych"
+],
+"data-warehousing": [
+"almacen de datos",
+"almacén de datos",
+"data warehouse",
+"data warehousing",
+"dwh",
+"entrepot de donnees",
+"entrepôt de données",
+"entrepôts de données",
+"hurtowni danych",
+"hurtownia danych",
+"hurtowniach danych",
+"hurtowniami danych",
+"hurtownie danych",
+"hurtownią danych",
+"hurtownię danych",
+"skladista podataka",
+"skladiste podataka",
+"skladistima podataka",
+"skladistu podataka",
+"skladišta podataka",
+"skladište podataka",
+"skladištima podataka",
+"skladištu podataka"
+],
+"databricks": [
+"databricks"
+],
+"datadog": [
+"datadog"
+],
+"dataform": [
+"dataform"
+],
+"dataops": [
+"dataops"
+],
+"dataproc": [
+"dataproc"
+],
+"dataverse": [
+"dataverse"
+],
+"datev": [
+"datev",
+"lodas"
+],
+"davinci-resolve": [
+"da vinci resolve",
+"davinci resolve"
+],
+"db2": [
+"db2"
+],
+"dbt": [
+"dbt"
+],
+"debezium": [
+"debezium"
+],
+"debian": [
+"debian"
+],
+"deep-learning": [
+"apprentissage profond",
+"aprendizado profundo",
+"aprendizagem profunda",
+"aprendizaje profundo",
+"deep learning",
+"dubokim ucenjem",
+"dubokim učenjem",
+"duboko ucenje",
+"duboko učenje",
+"dubokog ucenja",
+"dubokog učenja",
+"dubokom ucenju",
+"dubokom učenju",
+"głębokie uczenie",
+"głębokiego uczenia",
+"uczenia głębokiego",
+"uczenie głębokie"
+],
+"deepseek": [
+"deep seek",
+"deepseek"
+],
+"deepspeed": [
+"deepspeed"
+],
+"defi": [
+"defi"
+],
+"delta-lake": [
+"delta lake"
+],
+"demand-generation": [
+"demand gen",
+"demand generation"
+],
+"design-for-manufacturing": [
+"design for manufacturability",
+"design for manufacturing"
+],
+"design-of-experiments": [
+"design of experiments"
+],
+"design-patterns": [
+"design pattern",
+"design patterns",
+"dizajnerski obrasci",
+"dizajnerskih obrazaca",
+"obrasci dizajna",
+"obrazaca dizajna",
+"padroes de design",
+"padroes de projeto",
+"padrões de design",
+"padrões de projeto",
+"patrones de diseno",
+"patrones de diseño",
+"patrons de conception",
+"wzorcach projektowych",
+"wzorcami projektowymi",
+"wzorce projektowe",
+"wzorcow projektowych",
+"wzorców projektowych"
+],
+"design-thinking": [
+"design thinking"
+],
+"developer-advocacy": [
+"developer advocacy"
+],
+"developer-experience": [
+"developer experience"
+],
+"devops": [
+"devops"
+],
+"devsecops": [
+"devsecops"
+],
+"dfars": [
+"dfars"
+],
+"dhcp": [
+"dhcp"
+],
+"dimensional-modeling": [
+"dimensional modeling",
+"dimensional modelling",
+"modelado dimensional",
+"modelagem dimensional",
+"modelisation dimensionnelle",
+"modélisation dimensionnelle"
+],
+"distributed-computing": [
+"distributed computing"
+],
+"distributed-systems": [
+"distribuirani sistemi",
+"distribuirani sustavi",
+"distribuiranih sistema",
+"distribuiranih sustava",
+"distribuiranim sistemima",
+"distribuiranim sustavima",
+"distributed systems",
+"sistemas distribuidos",
+"sistemas distribuídos",
+"systemach rozproszonych",
+"systemami rozproszonymi",
+"systemes distribues",
+"systemow rozproszonych",
+"systemy rozproszone",
+"systemów rozproszonych",
+"systèmes distribués"
+],
+"distributed-training": [
+"distributed training"
+],
+"django": [
+"django"
+],
+"dlp": [
+"dlp"
+],
+"dns": [
+"dns"
+],
+"docker": [
+"docker"
+],
+"docs-as-code": [
+"docs as code",
+"docs-as-code"
+],
+"domain-driven-design": [
+"conception pilotée par le domaine",
+"diseno dirigido por el dominio",
+"diseño dirigido por el dominio",
+"domain driven design",
+"domain-driven design"
+],
+"dotnet": [
+".net",
+".net core",
+"asp.net",
+"asp.net core",
+"dotnet",
+"entity framework"
+],
+"dropwizard": [
+"dropwizard"
+],
+"druid": [
+"apache druid"
+],
+"drupal": [
+"drupal"
+],
+"dspy": [
+"dspy"
+],
+"duckdb": [
+"duck db",
+"duckdb"
+],
+"dynamodb": [
+"dynamodb"
+],
+"dynatrace": [
+"dynatrace"
+],
+"ec2": [
+"ec2"
+],
+"eclipse": [
+"eclipse"
+],
+"ecommerce": [
+"e commerce",
+"ecommerce"
+],
+"ecs": [
+"ecs"
+],
+"edi": [
+"edi"
+],
+"edr": [
+"edr"
+],
+"eigrp": [
+"eigrp"
+],
+"eks": [
+"eks"
+],
+"elasticsearch": [
+"elasticsearch"
+],
+"elixir": [
+"elixir"
+],
+"elk": [
+"elk"
+],
+"elt": [
+"elt"
+],
+"email-marketing": [
+"email marketing"
+],
+"embedded-linux": [
+"embedded linux"
+],
+"embedded-software": [
+"embedded software"
+],
+"embedded-systems": [
+"embedded systems",
+"logiciel embarque",
+"logiciel embarqué",
+"sistemas embarcados",
+"sistemas embebidos",
+"systemach wbudowanych",
+"systemami wbudowanymi",
+"systemes embarques",
+"systemow wbudowanych",
+"systemów wbudowanych",
+"systèmes embarqués",
+"ugradeni sistemi",
+"ugradeni sustavi",
+"ugradenih sistema",
+"ugradenih sustava",
+"ugradenim sistemima",
+"ugradenim sustavima",
+"ugradjeni sistemi",
+"ugradjeni sustavi",
+"ugradjenih sistema",
+"ugradjenih sustava",
+"ugradjenim sistemima",
+"ugradjenim sustavima",
+"ugrađeni sistemi",
+"ugrađeni sustavi",
+"ugrađenih sistema",
+"ugrađenih sustava",
+"ugrađenim sistemima",
+"ugrađenim sustavima"
+],
+"embeddings": [
+"embeddings"
+],
+"ember": [
+"ember"
+],
+"emergency-response": [
+"emergency preparedness",
+"emergency response"
+],
+"employee-relations": [
+"employee relations"
+],
+"employer-branding": [
+"employer branding"
+],
+"enablon": [
+"enablon"
+],
+"enscape": [
+"enscape"
+],
+"entra-id": [
+"entra id"
+],
+"environmental-compliance": [
+"environmental compliance"
+],
+"envoy": [
+"envoy"
+],
+"epa": [
+"epa"
+],
+"eplan": [
+"eplan"
+],
+"erlang": [
+"erlang"
+],
+"erp": [
+"erp",
+"erp systeme",
+"erp systemen"
+],
+"ethercat": [
+"ethercat"
+],
+"ethereum": [
+"ethereum"
+],
+"ethernet": [
+"ethernet"
+],
+"ethersjs": [
+"ethers.js"
+],
+"etl": [
+"etl"
+],
+"event-driven-architecture": [
+"architecture evenementielle",
+"architecture orientée événements",
+"architecture événementielle",
+"architektura sterowana zdarzeniami",
+"architektury sterowanej zdarzeniami",
+"architekturze sterowanej zdarzeniami",
+"architekturą sterowaną zdarzeniami",
+"arquitectura dirigida por eventos",
+"arquitectura orientada a eventos",
+"arquitecturas orientadas a eventos",
+"arquitetura orientada a eventos",
+"arquiteturas orientadas a eventos",
+"event driven",
+"event driven architecture"
+],
+"eventbridge": [
+"eventbridge"
+],
+"evm": [
+"evm",
+"evms"
+],
+"evpn": [
+"evpn"
+],
+"exact-online": [
+"exact online"
+],
+"express": [
+"express",
+"express.js",
+"expressjs"
+],
+"faiss": [
+"faiss"
+],
+"fall-protection": [
+"fall protection"
+],
+"fargate": [
+"fargate"
+],
+"fastapi": [
+"fastapi"
+],
+"fastify": [
+"fastify"
+],
+"fastlane": [
+"fastlane"
+],
+"fea": [
+"fea",
+"finite element analysis"
+],
+"feature-engineering": [
+"feature engineering"
+],
+"fedramp": [
+"fedramp"
+],
+"fhir": [
+"fhir"
+],
+"fiber": [
+"fiber"
+],
+"figjam": [
+"figjam"
+],
+"figma": [
+"figma"
+],
+"final-cut-pro": [
+"final cut pro"
+],
+"financial-modeling": [
+"financial modeling"
+],
+"financial-reporting": [
+"financial reporting"
+],
+"fine-tuning": [
+"fine tuning"
+],
+"finops": [
+"finops"
+],
+"fintech": [
+"fintech"
+],
+"firebase": [
+"firebase"
+],
+"firestore": [
+"firestore"
+],
+"firewall": [
+"firewall",
+"firewalls"
+],
+"firmware": [
+"firmware"
+],
+"first-aid": [
+"first aid"
+],
+"fivetran": [
+"fivetran"
+],
+"flask": [
+"flask"
+],
+"flink": [
+"flink"
+],
+"flutter": [
+"flutter"
+],
+"flux": [
+"flux"
+],
+"fmea": [
+"fmea"
+],
+"fortinet": [
+"fortigate",
+"fortinet"
+],
+"fortran": [
+"fortran"
+],
+"fpga": [
+"fpga"
+],
+"freertos": [
+"freertos"
+],
+"freshdesk": [
+"freshdesk"
+],
+"fsharp": [
+"f#",
+"fsharp"
+],
+"full-cycle-recruiting": [
+"full cycle recruiting",
+"full-cycle recruiting"
+],
+"fusion-360": [
+"fusion 360"
+],
+"gainsight": [
+"gainsight"
+],
+"game-development": [
+"game development"
+],
+"gap-analysis": [
+"gap analysis"
+],
+"gatling": [
+"gatling"
+],
+"gcp": [
+"gcp",
+"google cloud",
+"google cloud platform"
+],
+"gd-t": [
+"gd&t",
+"geometric dimensioning and tolerancing"
+],
+"gdb": [
+"gdb"
+],
+"gdpr": [
+"gdpr"
+],
+"gemini": [
+"gemini api",
+"google gemini"
+],
+"general-ledger": [
+"general ledger"
+],
+"generative-ai": [
+"gen ai",
+"genai",
+"generative ai",
+"generativna umetna inteligencija",
+"generativna umjetna inteligencija",
+"generativna vestacka inteligencija",
+"generativna veštačka inteligencija",
+"generativne umetne inteligencije",
+"generativne umjetne inteligencije",
+"generativne vestacke inteligencije",
+"generativne veštačke inteligencije",
+"generativni ai",
+"generativnog ai",
+"generativnoj umjetnoj inteligenciji",
+"generativnu umjetnu inteligenciju",
+"generativnu vestacku inteligenciju",
+"generativnu veštačku inteligenciju",
+"generatywna ai",
+"generatywna sztuczna inteligencja",
+"generatywne ai",
+"generatywnej ai",
+"generatywnej sztucznej inteligencji",
+"generatywną ai",
+"generatywną sztuczną inteligencję",
+"ia generativa",
+"ia generative",
+"ia générative",
+"inteligencia artificial generativa",
+"inteligência artificial generativa",
+"intelligence artificielle generative",
+"intelligence artificielle générative"
+],
+"generative-engine-optimization": [
+"answer engine optimization",
+"generative engine optimization",
+"generative search optimization"
+],
+"gin": [
+"gin"
+],
+"gis": [
+"gis"
+],
+"git": [
+"git"
+],
+"gitflow": [
+"gitflow"
+],
+"github": [
+"github"
+],
+"github-actions": [
+"github actions"
+],
+"github-copilot": [
+"github copilot"
+],
+"gitlab": [
+"gitlab"
+],
+"gitops": [
+"gitops"
+],
+"gke": [
+"gke"
+],
+"go": [
+"golang"
+],
+"go-to-market": [
+"go to market",
+"go-to-market",
+"gtm execution",
+"gtm motion",
+"gtm plan",
+"gtm strategy"
+],
+"godot": [
+"godot"
+],
+"gong": [
+"gong.io"
+],
+"google-ads": [
+"adwords",
+"google ads",
+"google adwords"
+],
+"google-analytics": [
+"ga4",
+"google analytics"
+],
+"google-search-console": [
+"google search console",
+"search console"
+],
+"google-tag-manager": [
+"google tag manager",
+"gtm container"
+],
+"gorilla": [
+"gorilla"
+],
+"gpu": [
+"gpu"
+],
+"gradle": [
+"gradle"
+],
+"grafana": [
+"grafana"
+],
+"grails": [
+"grails"
+],
+"graphql": [
+"graphql"
+],
+"groovy": [
+"groovy"
+],
+"grpc": [
+"grpc"
+],
+"hadoop": [
+"hadoop",
+"hdfs"
+],
+"hapi": [
+"hapi"
+],
+"haskell": [
+"haskell"
+],
+"hastus": [
+"hastus"
+],
+"hazard-identification": [
+"hazard identification"
+],
+"hazardous-waste": [
+"hazardous waste"
+],
+"hazop": [
+"hazop"
+],
+"hbase": [
+"hbase"
+],
+"helm": [
+"helm"
+],
+"help-desk": [
+"help desk",
+"helpdesk"
+],
+"hexagonal-architecture": [
+"architecture hexagonale",
+"arquitectura hexagonal",
+"arquitetura hexagonal",
+"hexagonal architecture"
+],
+"hibernate": [
+"hibernate"
+],
+"hipaa": [
+"hipaa"
+],
+"hive": [
+"hive"
+],
+"hl7": [
+"hl7"
+],
+"hmi": [
+"hmi"
+],
+"hootsuite": [
+"hootsuite"
+],
+"hot-work": [
+"hot work"
+],
+"houdini": [
+"houdini"
+],
+"hpc": [
+"hpc"
+],
+"hris": [
+"hris"
+],
+"html": [
+"html",
+"html5"
+],
+"hubspot": [
+"hubspot"
+],
+"huggingface": [
+"hugging face",
+"huggingface"
+],
+"hyper-v": [
+"hyper v",
+"hyper-v"
+],
+"i-129": [
+"i 129"
+],
+"i-130": [
+"i 130"
+],
+"i2c": [
+"i2c"
+],
+"iaas": [
+"iaas"
+],
+"iam": [
+"iam",
+"identity and access management",
+"identity management"
+],
+"ibm-mq": [
+"ibm mq"
+],
+"iceberg": [
+"apache iceberg"
+],
+"iis": [
+"iis"
+],
+"illustrator": [
+"illustrator"
+],
+"image-processing": [
+"image processing"
+],
+"incident-investigation": [
+"incident investigation",
+"incident investigations"
+],
+"indesign": [
+"indesign"
+],
+"industrial-hygiene": [
+"industrial hygiene"
+],
+"infiniband": [
+"infiniband"
+],
+"influencer-marketing": [
+"influencer marketing"
+],
+"influxdb": [
+"influxdb"
+],
+"information-architecture": [
+"information architecture"
+],
+"infrastructure-as-code": [
+"iac",
+"infraestructura como codigo",
+"infraestructura como código",
+"infraestrutura como codigo",
+"infraestrutura como código",
+"infrastructure as code",
+"infrastructure en tant que code",
+"infrastruktura jako kod",
+"infrastruktura kao kod",
+"infrastrukture kao koda",
+"infrastruktury jako kodu",
+"infrastrukturą jako kod",
+"infrastrukturą jako kodem"
+],
+"integration-testing": [
+"integracijski testovi",
+"integracijsko testiranje",
+"integracijskog testiranja",
+"integracioni testovi",
+"integraciono testiranje",
+"integration testing",
+"testach integracyjnych",
+"testami integracyjnymi",
+"testes de integracao",
+"testes de integração",
+"testow integracyjnych",
+"tests d'integration",
+"tests d'intégration",
+"tests d’intégration",
+"testy integracyjne",
+"testów integracyjnych"
+],
+"intelex": [
+"intelex"
+],
+"intellij": [
+"intellij"
+],
+"interaction-design": [
+"interaction design"
+],
+"intrusion-detection": [
+"intrusion detection"
+],
+"intune": [
+"intune"
+],
+"invision": [
+"invision"
+],
+"ionic": [
+"ionic"
+],
+"ios": [
+"ios"
+],
+"iot": [
+"iot"
+],
+"ipsec": [
+"ipsec"
+],
+"ipv6": [
+"ipv6"
+],
+"iso-13485": [
+"iso 13485"
+],
+"iso-14001": [
+"iso 14001",
+"iso14001"
+],
+"iso-26262": [
+"iso 26262"
+],
+"iso-27001": [
+"iso 27001",
+"iso27001"
+],
+"iso-45001": [
+"iso 45001",
+"iso45001"
+],
+"iso-9001": [
+"iso 9001",
+"iso9001"
+],
+"istio": [
+"istio"
+],
+"itar": [
+"itar"
+],
+"itil": [
+"itil"
+],
+"itsm": [
+"itsm"
+],
+"itwo": [
+"itwo"
+],
+"j2ee": [
+"j2ee",
+"java ee"
+],
+"jamf": [
+"jamf"
+],
+"java": [
+"java"
+],
+"javascript": [
+"es6",
+"javascript"
+],
+"jax": [
+"jax"
+],
+"jboss": [
+"jboss"
+],
+"jcl": [
+"jcl"
+],
+"jdbc": [
+"jdbc"
+],
+"jenkins": [
+"jenkins"
+],
+"jest": [
+"jest"
+],
+"jetpack": [
+"jetpack"
+],
+"jira": [
+"jira"
+],
+"jmeter": [
+"jmeter"
+],
+"jms": [
+"jms"
+],
+"job-safety-analysis": [
+"job hazard analysis",
+"job safety analysis"
+],
+"jpa": [
+"jpa"
+],
+"jquery": [
+"jquery"
+],
+"json": [
+"json"
+],
+"jsp": [
+"jsp"
+],
+"jtag": [
+"jtag"
+],
+"julia": [
+"julia"
+],
+"juniper": [
+"juniper networks",
+"junos"
+],
+"junit": [
+"junit"
+],
+"jupyter": [
+"jupyter"
+],
+"jvm": [
+"jvm"
+],
+"jwt": [
+"jwt"
+],
+"k6": [
+"k6"
+],
+"kafka": [
+"kafka"
+],
+"kanban": [
+"kanban"
+],
+"keras": [
+"keras"
+],
+"keycloak": [
+"keycloak"
+],
+"kibana": [
+"kibana"
+],
+"kicad": [
+"kicad"
+],
+"kinesis": [
+"kinesis"
+],
+"klaviyo": [
+"klaviyo"
+],
+"knx": [
+"knx"
+],
+"koa": [
+"koa"
+],
+"kotlin": [
+"kotlin"
+],
+"kql": [
+"kql"
+],
+"ktor": [
+"ktor"
+],
+"kubeflow": [
+"kubeflow"
+],
+"kubernetes": [
+"k8s",
+"kubernetes"
+],
+"kustomize": [
+"kustomize"
+],
+"kvm": [
+"kvm hypervisor",
+"kvm virtualisation",
+"kvm virtualization"
+],
+"labview": [
+"labview"
+],
+"lakehouse": [
+"lakehouse"
+],
+"lambda": [
+"lambda"
+],
+"langchain": [
+"langchain"
+],
+"langfuse": [
+"langfuse"
+],
+"langgraph": [
+"langgraph"
+],
+"langsmith": [
+"langsmith"
+],
+"laravel": [
+"laravel"
+],
+"ldap": [
+"ldap"
+],
+"lead-generation": [
+"lead generation"
+],
+"legal-research": [
+"legal research"
+],
+"lgpd": [
+"lgpd"
+],
+"lidar": [
+"lidar"
+],
+"lifecycle-marketing": [
+"crm marketing",
+"lifecycle marketing"
+],
+"lims": [
+"lims"
+],
+"link-building": [
+"link building",
+"linkbuilding"
+],
+"linkedin-ads": [
+"linkedin ads"
+],
+"linkedin-recruiter": [
+"linkedin recruiter"
+],
+"linkedin-sales-navigator": [
+"linkedin sales navigator",
+"sales navigator"
+],
+"linq": [
+"linq"
+],
+"linux": [
+"linux"
+],
+"liquibase": [
+"liquibase"
+],
+"litellm": [
+"lite llm",
+"litellm"
+],
+"llamaindex": [
+"llama index",
+"llamaindex"
+],
+"llm": [
+"duże modele językowe",
+"dużych modelach językowych",
+"dużych modeli językowych",
+"dużymi modelami językowymi",
+"large language model",
+"large language models",
+"llm",
+"llms"
+],
+"llmops": [
+"llmops"
+],
+"lockout-tagout": [
+"lockout tagout",
+"lockout/tagout"
+],
+"logstash": [
+"logstash"
+],
+"loki": [
+"loki"
+],
+"looker": [
+"looker"
+],
+"looker-studio": [
+"data studio",
+"looker studio"
+],
+"lottie": [
+"lottie"
+],
+"lua": [
+"lua"
+],
+"lucidchart": [
+"lucidchart"
+],
+"lwc": [
+"lightning web components",
+"lwc"
+],
+"machine-guarding": [
+"machine guarding"
+],
+"machine-learning": [
+"ML",
+"apprentissage automatique",
+"aprendizado de maquina",
+"aprendizado de máquina",
+"aprendizagem automatica",
+"aprendizagem automática",
+"aprendizaje automatico",
+"aprendizaje automático",
+"machine learning",
+"masinskim ucenjem",
+"masinsko ucenje",
+"masinskog ucenja",
+"masinskom ucenju",
+"mašinskim učenjem",
+"mašinsko učenje",
+"mašinskog učenja",
+"mašinskom učenju",
+"strojnim ucenjem",
+"strojnim učenjem",
+"strojno ucenje",
+"strojno učenje",
+"strojnog ucenja",
+"strojnog učenja",
+"strojnom ucenju",
+"strojnom učenju",
+"uczenia maszynowego",
+"uczenie maszynowe",
+"uczeniem maszynowym",
+"uczeniu maszynowym"
+],
+"macos": [
+"macos"
+],
+"madcap-flare": [
+"madcap flare"
+],
+"mailchimp": [
+"mailchimp"
+],
+"mainframe": [
+"mainframe"
+],
+"mariadb": [
+"mariadb"
+],
+"marketing-automation": [
+"marketing automation"
+],
+"marketo": [
+"marketo"
+],
+"master-data-management": [
+"master data management"
+],
+"mastra": [
+"mastra"
+],
+"matillion": [
+"matillion"
+],
+"matlab": [
+"matlab"
+],
+"matplotlib": [
+"matplotlib"
+],
+"maven": [
+"maven"
+],
+"maximo": [
+"ibm maximo"
+],
+"maya": [
+"maya"
+],
+"mbse": [
+"mbse",
+"model based systems engineering",
+"model-based systems engineering"
+],
+"mcp": [
+"mcp"
+],
+"mdm": [
+"mdm"
+],
+"medallion-architecture": [
+"medallion architecture"
+],
+"memcached": [
+"memcached"
+],
+"mendix": [
+"mendix"
+],
+"meta-ads": [
+"facebook ads",
+"meta ads",
+"meta ads manager"
+],
+"metabase": [
+"metabase"
+],
+"metadata-management": [
+"metadata management"
+],
+"metasploit": [
+"metasploit"
+],
+"microcontrollers": [
+"microcontrollers"
+],
+"micronaut": [
+"micronaut"
+],
+"microservices": [
+"microservice",
+"microservices",
+"microservicio",
+"microservicios",
+"microsservico",
+"microsservicos",
+"microsserviço",
+"microsserviços",
+"mikroservisa",
+"mikroservise",
+"mikroservisi",
+"mikroservisima",
+"mikroservisna arhitektura",
+"mikroservisne arhitekture",
+"mikroservisnoj arhitekturi",
+"mikroservisnu arhitekturu",
+"mikroserwis",
+"mikroserwisach",
+"mikroserwisami",
+"mikroserwisowa",
+"mikroserwisowej",
+"mikroserwisowych",
+"mikroserwisowym",
+"mikroserwisową",
+"mikroserwisy",
+"mikroserwisów",
+"mikrousług",
+"mikrousługach",
+"mikrousługi",
+"mikrousługowej",
+"mikrousługową"
+],
+"microsoft-access": [
+"microsoft access",
+"ms access"
+],
+"microsoft-copilot": [
+"copilot studio",
+"microsoft copilot"
+],
+"microsoft-defender": [
+"microsoft defender"
+],
+"microsoft-dynamics": [
+"business central",
+"dynamics 365",
+"microsoft dynamics"
+],
+"microsoft-exchange": [
+"exchange online"
+],
+"microsoft-fabric": [
+"microsoft fabric",
+"onelake"
+],
+"microsoft-project": [
+"microsoft project",
+"ms project"
+],
+"microsoft-purview": [
+"microsoft purview"
+],
+"microsoft-sentinel": [
+"microsoft sentinel"
+],
+"microstation": [
+"microstation"
+],
+"microstrategy": [
+"microstrategy"
+],
+"midjourney": [
+"midjourney"
+],
+"milvus": [
+"milvus"
+],
+"minitab": [
+"minitab"
+],
+"miro": [
+"miro"
+],
+"mistral": [
+"mistral"
+],
+"mitre-attack": [
+"mitre att&ck",
+"mitre attack"
+],
+"mixpanel": [
+"mixpanel"
+],
+"mlflow": [
+"mlflow"
+],
+"mlops": [
+"mlops"
+],
+"mobx": [
+"mobx"
+],
+"mocha": [
+"mocha"
+],
+"mockito": [
+"mockito"
+],
+"modbus": [
+"modbus"
+],
+"model-deployment": [
+"model deployment"
+],
+"model-evaluation": [
+"model evaluation"
+],
+"monday-com": [
+"monday.com"
+],
+"mongodb": [
+"mongo",
+"mongodb"
+],
+"motion-design": [
+"motion design"
+],
+"motion-graphics": [
+"motion graphics"
+],
+"mpls": [
+"mpls"
+],
+"mqtt": [
+"mqtt"
+],
+"mulesoft": [
+"mulesoft"
+],
+"multithreading": [
+"multithreading"
+],
+"mvc": [
+"mvc"
+],
+"mvvm": [
+"mvvm"
+],
+"mysql": [
+"mysql"
+],
+"n8n": [
+"n8n"
+],
+"nagios": [
+"nagios"
+],
+"nats": [
+"nats"
+],
+"navisworks": [
+"navisworks"
+],
+"near-miss-reporting": [
+"near miss",
+"near misses"
+],
+"nen-7510": [
+"nen 7510",
+"nen7510"
+],
+"neo4j": [
+"neo4j"
+],
+"nessus": [
+"nessus"
+],
+"nestjs": [
+"nestjs"
+],
+"netsuite": [
+"netsuite"
+],
+"network-security": [
+"mrezna bezbednost",
+"mrezna sigurnost",
+"mrezne bezbednosti",
+"mrezne sigurnosti",
+"mreznoj sigurnosti",
+"mreznu sigurnost",
+"mrežna bezbednost",
+"mrežna sigurnost",
+"mrežne bezbednosti",
+"mrežne sigurnosti",
+"mrežnoj sigurnosti",
+"mrežnu sigurnost",
+"network security"
+],
+"networking": [
+"networking",
+"sieci komputerowe",
+"sieci komputerowych",
+"sieciach komputerowych"
+],
+"neural-networks": [
+"neural network",
+"neural networks"
+],
+"newrelic": [
+"new relic",
+"newrelic"
+],
+"nextjs": [
+"next.js",
+"nextjs"
+],
+"nfpa": [
+"nfpa"
+],
+"nginx": [
+"nginx"
+],
+"ngrx": [
+"ngrx"
+],
+"nifi": [
+"nifi"
+],
+"nim": [
+"nim"
+],
+"nis2": [
+"nis 2",
+"nis2"
+],
+"nist": [
+"nist"
+],
+"nlp": [
+"natural language processing",
+"nlp",
+"obrada prirodnog jezika",
+"obrade prirodnog jezika",
+"obradi prirodnog jezika",
+"obradu prirodnog jezika",
+"procesamiento de lenguaje natural",
+"procesamiento del lenguaje natural",
+"processamento de linguagem natural",
+"przetwarzania języka naturalnego",
+"przetwarzanie języka naturalnego",
+"traitement automatique du langage",
+"traitement du langage naturel"
+],
+"nmap": [
+"nmap"
+],
+"nmbrs": [
+"nmbrs"
+],
+"nodejs": [
+"node js",
+"node.js",
+"nodejs"
+],
+"nosql": [
+"nosql"
+],
+"notion": [
+"notion"
+],
+"npm": [
+"npm"
+],
+"numpy": [
+"numpy"
+],
+"nunit": [
+"nunit"
+],
+"nutanix": [
+"nutanix"
+],
+"nuxt": [
+"nuxt"
+],
+"oauth": [
+"oauth",
+"oauth2"
+],
+"objective-c": [
+"objective-c"
+],
+"observability": [
+"observabilidad",
+"observabilidade",
+"observabilite",
+"observability",
+"observabilité",
+"obserwowalności",
+"obserwowalnością",
+"obserwowalność"
+],
+"ocaml": [
+"ocaml"
+],
+"odata": [
+"odata"
+],
+"odoo": [
+"odoo"
+],
+"okta": [
+"okta"
+],
+"olap": [
+"olap"
+],
+"ollama": [
+"ollama"
+],
+"onedrive": [
+"onedrive"
+],
+"onnx": [
+"onnx"
+],
+"oop": [
+"conception orientée objet",
+"object oriented design",
+"object oriented programming",
+"objektno orijentirano programiranje",
+"objektno orijentiranog programiranja",
+"objektno orijentiranom programiranju",
+"objektno orijentisano programiranje",
+"objektno orijentisanog programiranja",
+"objektno orijentisanom programiranju",
+"oop",
+"orientacao a objetos",
+"orientação a objetos",
+"programacao orientada a objetos",
+"programacion orientada a objetos",
+"programación orientada a objetos",
+"programação orientada a objetos",
+"programmation orientee objet",
+"programmation orientée objet",
+"programowania obiektowego",
+"programowanie obiektowe",
+"programowaniem obiektowym",
+"programowaniu obiektowym"
+],
+"openai": [
+"openai"
+],
+"openapi": [
+"openapi"
+],
+"opencv": [
+"opencv"
+],
+"openid": [
+"oidc",
+"openid"
+],
+"opensearch": [
+"opensearch"
+],
+"openshift": [
+"openshift"
+],
+"openstack": [
+"openstack"
+],
+"opentelemetry": [
+"open telemetry",
+"opentelemetry"
+],
+"opentofu": [
+"opentofu"
+],
+"oracle": [
+"oracle"
+],
+"oracle-hyperion": [
+"oracle hyperion"
+],
+"oscilloscope": [
+"oscilloscope",
+"oscilloscopes"
+],
+"osha": [
+"osha"
+],
+"osint": [
+"osint"
+],
+"ospf": [
+"ospf"
+],
+"outsystems": [
+"outsystems"
+],
+"owasp": [
+"owasp"
+],
+"pagerduty": [
+"pagerduty"
+],
+"paid-social": [
+"paid social"
+],
+"palo-alto-networks": [
+"palo alto networks"
+],
+"pandas": [
+"pandas"
+],
+"parquet": [
+"parquet"
+],
+"pcb": [
+"pcb design",
+"pcb layout",
+"pcba"
+],
+"pci-dss": [
+"pci dss"
+],
+"pcie": [
+"pcie"
+],
+"peft": [
+"peft"
+],
+"pega": [
+"pega bpm",
+"pega csa",
+"pega cssa",
+"pega developer",
+"pega lsa",
+"pega ontwikkelaar",
+"pega platform",
+"pegasystems"
+],
+"penetration-testing": [
+"penetracijski testovi",
+"penetracijsko testiranje",
+"penetracijskog testiranja",
+"penetracioni testovi",
+"penetraciono testiranje",
+"penetration testing",
+"pentest",
+"pentesting",
+"pruebas de penetracion",
+"pruebas de penetración",
+"test d'intrusion",
+"testach penetracyjnych",
+"teste de intrusão",
+"testes de intrusao",
+"testes de intrusão",
+"testes de penetracao",
+"testes de penetração",
+"tests d'intrusion",
+"tests de pénétration",
+"tests d’intrusion",
+"testy penetracyjne",
+"testów penetracyjnych"
+],
+"people-analytics": [
+"people analytics"
+],
+"peoplesoft": [
+"peoplesoft"
+],
+"perforce": [
+"perforce"
+],
+"performance-management": [
+"performance management"
+],
+"perl": [
+"perl"
+],
+"permit-to-work": [
+"permit to work"
+],
+"personal-protective-equipment": [
+"personal protective equipment"
+],
+"pgvector": [
+"pgvector"
+],
+"photoshop": [
+"photoshop"
+],
+"php": [
+"php"
+],
+"phpunit": [
+"phpunit"
+],
+"pinecone": [
+"pinecone"
+],
+"pinot": [
+"apache pinot"
+],
+"pipeline-management": [
+"pipeline management"
+],
+"pki": [
+"pki"
+],
+"playwright": [
+"playwright"
+],
+"plc": [
+"allen bradley",
+"ladder logic",
+"plc programming",
+"siemens s7",
+"simatic",
+"simatic s7",
+"speicherprogrammierbare steuerung",
+"speicherprogrammierbare steuerungen",
+"sps programmierung",
+"sps steuerung",
+"sps steuerungen",
+"tia portal"
+],
+"plm": [
+"plm"
+],
+"plotly": [
+"plotly"
+],
+"plsql": [
+"pl/sql",
+"plsql"
+],
+"pmp": [
+"PMP",
+"project management professional"
+],
+"podman": [
+"podman"
+],
+"polars": [
+"polars"
+],
+"postgresql": [
+"postgres",
+"postgresql",
+"psql"
+],
+"postman": [
+"postman"
+],
+"power-automate": [
+"power automate"
+],
+"power-platform": [
+"power platform"
+],
+"power-query": [
+"power query"
+],
+"powerapps": [
+"power apps",
+"powerapps"
+],
+"powerbi": [
+"power bi",
+"powerbi"
+],
+"powershell": [
+"powershell"
+],
+"ppc": [
+"paid search",
+"pay-per-click",
+"ppc campaigns",
+"ppc management",
+"ppc manager",
+"ppc specialist"
+],
+"pre-sales": [
+"pre-sales",
+"presales"
+],
+"preact": [
+"preact"
+],
+"predictive-analytics": [
+"predictive analytics"
+],
+"predictive-modeling": [
+"predictive modeling",
+"predictive modelling"
+],
+"prefect": [
+"prefect"
+],
+"premiere-pro": [
+"premiere pro"
+],
+"presto": [
+"presto db",
+"prestodb"
+],
+"primavera-p6": [
+"primavera p6"
+],
+"process-improvement": [
+"process improvement"
+],
+"process-modeling": [
+"process modeling"
+],
+"process-safety-management": [
+"process safety management"
+],
+"procore": [
+"procore"
+],
+"professional-scrum-master": [
+"PSM",
+"professional scrum master"
+],
+"profibus": [
+"profibus"
+],
+"profinet": [
+"profinet"
+],
+"program-management": [
+"program management"
+],
+"prometheus": [
+"prometheus"
+],
+"prompt-engineering": [
+"prompt engineering"
+],
+"proof-of-concept": [
+"proof of concept"
+],
+"protobuf": [
+"protobuf"
+],
+"protopie": [
+"protopie"
+],
+"prototyping": [
+"prototyping"
+],
+"proxmox": [
+"proxmox"
+],
+"pulsar": [
+"pulsar"
+],
+"pulumi": [
+"pulumi"
+],
+"puppet": [
+"puppet"
+],
+"puppeteer": [
+"puppeteer"
+],
+"pydantic": [
+"pydantic"
+],
+"pyspark": [
+"pyspark"
+],
+"pytest": [
+"pytest"
+],
+"python": [
+"python"
+],
+"pytorch": [
+"pytorch"
+],
+"qdrant": [
+"qdrant"
+],
+"qgis": [
+"qgis"
+],
+"qlik": [
+"qlik"
+],
+"qnx": [
+"qnx"
+],
+"qos": [
+"qos"
+],
+"qualys": [
+"qualys"
+],
+"quantization": [
+"quantization"
+],
+"quarkus": [
+"quarkus"
+],
+"quickbooks": [
+"quickbooks"
+],
+"r": [
+"r language"
+],
+"rabbitmq": [
+"rabbitmq"
+],
+"rag": [
+"RAG",
+"retrieval augmented generation"
+],
+"rails": [
+"rails",
+"ruby on rails"
+],
+"rancher": [
+"rancher"
+],
+"rbac": [
+"rbac"
+],
+"rcra": [
+"rcra"
+],
+"rdbms": [
+"banco de dados relacional",
+"bancos de dados relacionais",
+"base de données relationnelle",
+"bases de dados relacionais",
+"bases de donnees relationnelles",
+"bases de données relationnelles",
+"rdbms",
+"relacijska baza podataka",
+"relacijske baze podataka",
+"relacijskih baza podataka",
+"relacijskim bazama podataka",
+"relacijsku bazu podataka",
+"relaciona baza podataka",
+"relacione baze podataka",
+"relacionih baza podataka",
+"relacionim bazama podataka",
+"relacionu bazu podataka",
+"relacyjna baza danych",
+"relacyjne bazy danych",
+"relacyjnej bazy danych",
+"relacyjnych baz danych",
+"relacyjnych bazach danych",
+"relacyjnymi bazami danych",
+"relacyjną bazą danych",
+"relational database",
+"relational databases",
+"sgbdr"
+],
+"rdma": [
+"rdma"
+],
+"rds": [
+"rds"
+],
+"react": [
+"react",
+"react.js",
+"reactjs"
+],
+"react-native": [
+"react native"
+],
+"react-testing-library": [
+"react testing library"
+],
+"recommendation-systems": [
+"recommendation system",
+"recommendation systems"
+],
+"redis": [
+"redis"
+],
+"redshift": [
+"redshift"
+],
+"redux": [
+"redux"
+],
+"regulatory-compliance": [
+"regulatory compliance"
+],
+"reinforcement-learning": [
+"apprentissage par renforcement",
+"reinforcement learning"
+],
+"remix": [
+"remix"
+],
+"renewal-management": [
+"renewal management"
+],
+"requirements-elicitation": [
+"requirements elicitation"
+],
+"requirements-gathering": [
+"requirements gathering"
+],
+"rest": [
+"api rest",
+"api restful",
+"apis rest",
+"apis restful",
+"rest api",
+"rest apis",
+"restful",
+"restful api",
+"restful apis",
+"services rest",
+"servicios rest",
+"servicos rest",
+"serviços rest"
+],
+"rest-assured": [
+"rest assured",
+"restassured"
+],
+"revenue-recognition": [
+"revenue recognition"
+],
+"reverse-engineering": [
+"reverse engineering"
+],
+"revit": [
+"revit"
+],
+"rhel": [
+"redhat",
+"rhel"
+],
+"rhino": [
+"rhino 3d",
+"rhinoceros 3d"
+],
+"risk-assessment": [
+"risk assessment",
+"risk assessments"
+],
+"rlhf": [
+"rlhf"
+],
+"robot-framework": [
+"robot framework"
+],
+"root-cause-analysis": [
+"root cause analysis"
+],
+"ros2": [
+"ros2"
+],
+"route53": [
+"route53"
+],
+"rpa": [
+"rpa"
+],
+"rspec": [
+"rspec"
+],
+"rtl": [
+"rtl coding",
+"rtl design",
+"rtl verification"
+],
+"rtos": [
+"rtos"
+],
+"ruby": [
+"ruby",
+"ruby on rails"
+],
+"rust": [
+"rust"
+],
+"rxjs": [
+"rxjs"
+],
+"s3": [
+"amazon s3",
+"aws s3",
+"s3"
+],
+"saas": [
+"saas"
+],
+"safe-agile": [
+"SAFE",
+"SAFe",
+"scaled agile framework"
+],
+"safety-audit": [
+"safety audit",
+"safety audits"
+],
+"safety-management-system": [
+"ehs management system",
+"hse management system",
+"safety management system"
+],
+"sagemaker": [
+"sagemaker"
+],
+"sailpoint": [
+"sailpoint"
+],
+"sales-cloud": [
+"sales cloud"
+],
+"sales-enablement": [
+"sales enablement"
+],
+"sales-engineering": [
+"sales engineering"
+],
+"salesforce": [
+"salesforce"
+],
+"salesforce-marketing-cloud": [
+"salesforce marketing cloud"
+],
+"salesloft": [
+"salesloft"
+],
+"saml": [
+"saml"
+],
+"sap": [
+"erfahrung mit sap",
+"kenntnisse in sap",
+"sap",
+"sap anwenderkenntnisse",
+"sap erfahrung",
+"sap hcm",
+"sap is-u",
+"sap kenntnisse",
+"sap kenntnissen",
+"sap r/3",
+"sap sd",
+"sap systeme",
+"sap systemen",
+"sap umfeld",
+"umgang mit sap"
+],
+"sap-btp": [
+"sap btp"
+],
+"sap-fico": [
+"sap co",
+"sap fi",
+"sap fico"
+],
+"sap-fiori": [
+"sap fiori"
+],
+"sap-hana": [
+"sap hana"
+],
+"sap-mm": [
+"sap mm"
+],
+"sap-s4hana": [
+"s/4hana",
+"s4hana"
+],
+"sas": [
+"sas"
+],
+"sase": [
+"sase"
+],
+"sass": [
+"sass"
+],
+"sast": [
+"sast"
+],
+"sbom": [
+"sbom"
+],
+"scada": [
+"scada",
+"wincc"
+],
+"scala": [
+"scala"
+],
+"sccm": [
+"sccm"
+],
+"scikit-learn": [
+"scikit",
+"scikit-learn"
+],
+"scim": [
+"scim"
+],
+"scipy": [
+"scipy"
+],
+"screaming-frog": [
+"screaming frog"
+],
+"scrum": [
+"scrum"
+],
+"scss": [
+"scss"
+],
+"scylladb": [
+"scylladb"
+],
+"sd-wan": [
+"sd-wan"
+],
+"sdlc": [
+"sdlc"
+],
+"sdn": [
+"sdn"
+],
+"seaborn": [
+"seaborn"
+],
+"secrets-management": [
+"secrets management"
+],
+"secure-coding": [
+"secure coding"
+],
+"selenium": [
+"selenium"
+],
+"semantic-kernel": [
+"semantic kernel"
+],
+"semantic-search": [
+"semantic search"
+],
+"semrush": [
+"semrush"
+],
+"sensor-fusion": [
+"sensor fusion"
+],
+"sentence-transformers": [
+"sentence transformers"
+],
+"sentry": [
+"sentry"
+],
+"seo": [
+"seo"
+],
+"serdes": [
+"serdes"
+],
+"serverless": [
+"serverless"
+],
+"service-desk": [
+"service desk"
+],
+"servicenow": [
+"servicenow"
+],
+"sftp": [
+"sftp"
+],
+"sglang": [
+"sg lang",
+"sglang"
+],
+"sharepoint": [
+"sharepoint"
+],
+"shopify": [
+"shopify"
+],
+"siem": [
+"siem"
+],
+"siemens-nx": [
+"siemens nx"
+],
+"signal-integrity": [
+"signal integrity"
+],
+"signal-processing": [
+"signal processing"
+],
+"simulink": [
+"simulink"
+],
+"sinatra": [
+"sinatra"
+],
+"six-sigma": [
+"dmaic",
+"lean six sigma",
+"six sigma"
+],
+"sketch": [
+"sketch"
+],
+"sketchup": [
+"sketchup"
+],
+"slack": [
+"slack"
+],
+"slurm": [
+"slurm"
+],
+"smart-contracts": [
+"smart contract",
+"smart contracts"
+],
+"smartrecruiters": [
+"smartrecruiters"
+],
+"smartsheet": [
+"smartsheet"
+],
+"smtp": [
+"smtp"
+],
+"snmp": [
+"snmp"
+],
+"snowflake": [
+"snowflake"
+],
+"snowpark": [
+"snowpark"
+],
+"sns": [
+"sns"
+],
+"snyk": [
+"snyk"
+],
+"soa": [
+"soa"
+],
+"soap": [
+"soap",
+"soap api",
+"soap apis"
+],
+"soapui": [
+"soapui"
+],
+"soc-2": [
+"soc 2",
+"soc2"
+],
+"solana": [
+"solana"
+],
+"solarwinds": [
+"solarwinds"
+],
+"soldering": [
+"soldering"
+],
+"solidity": [
+"solidity"
+],
+"solidjs": [
+"solidjs"
+],
+"solidworks": [
+"solidworks"
+],
+"solr": [
+"solr"
+],
+"solution-design": [
+"solution design"
+],
+"sonarqube": [
+"sonarqube"
+],
+"soql": [
+"soql"
+],
+"spacy": [
+"spacy"
+],
+"spark": [
+"spark"
+],
+"sphera": [
+"sphera"
+],
+"splunk": [
+"splunk"
+],
+"spring": [
+"spring",
+"spring boot",
+"spring framework",
+"spring mvc",
+"springboot"
+],
+"sprout-social": [
+"sprout social"
+],
+"spss": [
+"spss"
+],
+"sql": [
+"sql"
+],
+"sql-server": [
+"ms sql",
+"mssql",
+"sql server",
+"t-sql",
+"tsql"
+],
+"sqlalchemy": [
+"sqlalchemy"
+],
+"sqlite": [
+"sqlite"
+],
+"sqs": [
+"sqs"
+],
+"sre": [
+"sre"
+],
+"ssas": [
+"ssas"
+],
+"ssh": [
+"ssh"
+],
+"ssis": [
+"ssis"
+],
+"ssl": [
+"ssl"
+],
+"sso": [
+"sso"
+],
+"ssrs": [
+"ssrs"
+],
+"stakeholder-management": [
+"stakeholder management"
+],
+"stata": [
+"stata"
+],
+"statistics": [
+"statistics"
+],
+"step-functions": [
+"aws step functions"
+],
+"storyboarding": [
+"storyboarding",
+"storyboards"
+],
+"storybook": [
+"storybook"
+],
+"strategic-planning": [
+"strategic planning"
+],
+"streamlit": [
+"streamlit"
+],
+"stripe": [
+"stripe"
+],
+"structured-authoring": [
+"structured authoring"
+],
+"substance-designer": [
+"substance designer"
+],
+"substance-painter": [
+"substance painter"
+],
+"successfactors": [
+"successfactors"
+],
+"succession-planning": [
+"succession planning"
+],
+"supabase": [
+"supabase"
+],
+"superset": [
+"superset"
+],
+"svelte": [
+"svelte"
+],
+"svn": [
+"svn"
+],
+"swagger": [
+"swagger"
+],
+"swift": [
+"swift"
+],
+"swiftui": [
+"swiftui"
+],
+"sybase": [
+"sybase"
+],
+"symfony": [
+"symfony"
+],
+"sysml": [
+"sysml"
+],
+"systemverilog": [
+"systemverilog"
+],
+"tableau": [
+"tableau"
+],
+"tabular-editor": [
+"tabular editor"
+],
+"tailwind": [
+"tailwind",
+"tailwindcss"
+],
+"talend": [
+"talend"
+],
+"talent-management": [
+"talent management"
+],
+"talent-sourcing": [
+"talent sourcing"
+],
+"tcl": [
+"tcl"
+],
+"tcp-ip": [
+"tcp ip",
+"tcp/ip"
+],
+"tdd": [
+"desarrollo dirigido por pruebas",
+"desenvolvimento orientado a testes",
+"développement piloté par les tests",
+"tdd",
+"test driven development"
+],
+"teamcenter": [
+"teamcenter"
+],
+"teamcity": [
+"teamcity"
+],
+"technical-discovery": [
+"technical discovery"
+],
+"technical-evangelism": [
+"technical evangelism"
+],
+"technical-screening": [
+"technical screening"
+],
+"technical-seo": [
+"technical seo"
+],
+"technical-writing": [
+"technical writing"
+],
+"tekton": [
+"tekton pipeline",
+"tekton pipelines"
+],
+"tensorflow": [
+"tensorflow"
+],
+"tensorrt": [
+"tensorrt"
+],
+"teradata": [
+"teradata"
+],
+"terraform": [
+"terraform"
+],
+"terragrunt": [
+"terragrunt"
+],
+"test-automation": [
+"automacao de testes",
+"automated testing",
+"automatisation des tests",
+"automatizacija testiranja",
+"automatizacije testiranja",
+"automatizacijom testiranja",
+"automatizaciju testiranja",
+"automatizacion de pruebas",
+"automatización de pruebas",
+"automatizirani testovi",
+"automatiziranih testova",
+"automatizovani testovi",
+"automatizovanih testova",
+"automatsko testiranje",
+"automatskog testiranja",
+"automatyzacja testów",
+"automatyzacji testow",
+"automatyzacji testów",
+"automatyzacją testów",
+"automatyzację testów",
+"automação de testes",
+"pruebas automatizadas",
+"test automation",
+"testach automatycznych",
+"testami automatycznymi",
+"testes automatizados",
+"testow automatycznych",
+"testowania automatycznego",
+"tests automatises",
+"tests automatisés",
+"testy automatyczne",
+"testów automatycznych"
+],
+"testify": [
+"testify"
+],
+"testng": [
+"testng"
+],
+"testrail": [
+"testrail"
+],
+"thinkwise": [
+"thinkwise"
+],
+"threat-hunting": [
+"threat hunting"
+],
+"threat-intelligence": [
+"threat intelligence"
+],
+"threat-modeling": [
+"threat modeling",
+"threat modelling"
+],
+"threejs": [
+"three.js",
+"threejs"
+],
+"thrift": [
+"thrift"
+],
+"ticket-resolution": [
+"ticket resolution"
+],
+"tiktok-ads": [
+"tiktok ads"
+],
+"time-series": [
+"time series"
+],
+"timescaledb": [
+"timescaledb"
+],
+"tls": [
+"mtls",
+"tls"
+],
+"togaf": [
+"togaf"
+],
+"tokenomics": [
+"tokenomics"
+],
+"tomcat": [
+"tomcat"
+],
+"toolbox-talks": [
+"toolbox talk",
+"toolbox talks"
+],
+"topdesk": [
+"topdesk"
+],
+"transformers": [
+"transformers"
+],
+"travis": [
+"travis"
+],
+"trello": [
+"trello"
+],
+"trino": [
+"trino"
+],
+"triton": [
+"triton"
+],
+"typescript": [
+"ts",
+"typescript"
+],
+"typography": [
+"typography"
+],
+"uart": [
+"uart"
+],
+"ubuntu": [
+"ubuntu"
+],
+"udp": [
+"udp"
+],
+"uikit": [
+"uikit"
+],
+"uipath": [
+"uipath"
+],
+"uml": [
+"uml"
+],
+"unit-testing": [
+"jedinicni testovi",
+"jedinicnih testova",
+"jedinicnim testovima",
+"jedinicno testiranje",
+"jedinicnog testiranja",
+"jedinični testovi",
+"jediničnih testova",
+"jediničnim testovima",
+"jedinično testiranje",
+"jediničnog testiranja",
+"pruebas unitarias",
+"test unitaire",
+"test unitarios",
+"testach jednostkowych",
+"testami jednostkowymi",
+"teste unitario",
+"teste unitário",
+"testes de unidade",
+"testes unitarios",
+"testes unitários",
+"testow jednostkowych",
+"tests unitaires",
+"tests unitarios",
+"testy jednostkowe",
+"testów jednostkowych",
+"unit test",
+"unit testing"
+],
+"unity": [
+"unity"
+],
+"unity-catalog": [
+"unity catalog"
+],
+"unix": [
+"unix"
+],
+"unreal-engine": [
+"unreal engine"
+],
+"usability-testing": [
+"usability testing"
+],
+"uscis": [
+"uscis"
+],
+"user-flows": [
+"user flows"
+],
+"user-research": [
+"user research",
+"ux research"
+],
+"user-stories": [
+"user stories"
+],
+"uvm": [
+"uvm"
+],
+"vault": [
+"vault"
+],
+"vba": [
+"vba"
+],
+"vbnet": [
+"vb.net",
+"vbnet",
+"visual basic"
+],
+"vector-databases": [
+"banco de dados vetorial",
+"bancos de dados vetoriais",
+"bases de datos vectoriales",
+"bases de donnees vectorielles",
+"bases de données vectorielles",
+"baz wektorowych",
+"bazach wektorowych",
+"bazami wektorowymi",
+"bazy wektorowe",
+"vector database",
+"vector databases",
+"wektorowe bazy danych",
+"wektorowych baz danych"
+],
+"vector-search": [
+"vector search"
+],
+"veeam": [
+"veeam"
+],
+"veeva": [
+"veeva"
+],
+"velocityehs": [
+"velocityehs"
+],
+"vendor-management": [
+"vendor management"
+],
+"vercel": [
+"vercel"
+],
+"verilog": [
+"verilog"
+],
+"version-control": [
+"control de versiones",
+"controle de versao",
+"controle de version",
+"controle de versão",
+"controlo de versoes",
+"controlo de versões",
+"contrôle de version",
+"gestion de versions",
+"gestionnaire de versions",
+"kontroli wersji",
+"version control",
+"versionamento de codigo",
+"versionamento de código"
+],
+"vertex-ai": [
+"vertex ai"
+],
+"vhdl": [
+"vhdl"
+],
+"video-editing": [
+"video editing"
+],
+"virtualization": [
+"virtualisation",
+"virtualizacija",
+"virtualizacije",
+"virtualizaciji",
+"virtualizacijom",
+"virtualizaciju",
+"virtualization"
+],
+"visio": [
+"visio"
+],
+"visual-studio": [
+"visual studio"
+],
+"visualforce": [
+"visualforce"
+],
+"vite": [
+"vite"
+],
+"vitest": [
+"vitest"
+],
+"vlan": [
+"vlan",
+"vlans"
+],
+"vllm": [
+"vllm"
+],
+"vmware": [
+"esxi",
+"vmware",
+"vsphere"
+],
+"voip": [
+"voip"
+],
+"vpc": [
+"vpc"
+],
+"vpn": [
+"vpn"
+],
+"vue": [
+"vue",
+"vue.js",
+"vuejs"
+],
+"vulnerability-management": [
+"vulnerability management"
+],
+"vulnerability-scanning": [
+"vulnerability scanning"
+],
+"vxlan": [
+"vxlan"
+],
+"waf": [
+"waf"
+],
+"wan": [
+"wan"
+],
+"wasm": [
+"wasm",
+"web assembly"
+],
+"waste-management": [
+"waste management"
+],
+"wcag": [
+"wcag"
+],
+"wcf": [
+"wcf"
+],
+"weaviate": [
+"weaviate"
+],
+"web3": [
+"web3"
+],
+"webflow": [
+"webflow"
+],
+"webgl": [
+"webgl"
+],
+"webhooks": [
+"webhooks"
+],
+"weblogic": [
+"weblogic"
+],
+"webpack": [
+"webpack"
+],
+"webrtc": [
+"webrtc"
+],
+"websockets": [
+"websocket",
+"websockets"
+],
+"websphere": [
+"websphere"
+],
+"wifi": [
+"wifi",
+"wlan"
+],
+"windchill": [
+"windchill"
+],
+"windows-server": [
+"windows server"
+],
+"wireframing": [
+"wireframes",
+"wireframing"
+],
+"wireshark": [
+"wireshark"
+],
+"wordpress": [
+"wordpress"
+],
+"workato": [
+"workato"
+],
+"workday": [
+"workday adaptive",
+"workday financials",
+"workday hcm",
+"workday integrations"
+],
+"workflow-orchestration": [
+"workflow orchestration"
+],
+"working-at-height": [
+"work at height",
+"working at height"
+],
+"wpf": [
+"wpf"
+],
+"xamarin": [
+"xamarin"
+],
+"xcode": [
+"xcode"
+],
+"xdr": [
+"xdr"
+],
+"xero": [
+"xero"
+],
+"xgboost": [
+"xgboost"
+],
+"xml": [
+"xml"
+],
+"xslt": [
+"xslt"
+],
+"xunit": [
+"xunit"
+],
+"yaml": [
+"yaml"
+],
+"yardi": [
+"yardi"
+],
+"yocto": [
+"yocto"
+],
+"yolo": [
+"yolo"
+],
+"youforce": [
+"youforce"
+],
+"zabbix": [
+"zabbix"
+],
+"zapier": [
+"zapier"
+],
+"zbrush": [
+"zbrush"
+],
+"zendesk": [
+"zendesk"
+],
+"zeplin": [
+"zeplin"
+],
+"zero-trust": [
+"zero trust"
+],
+"zeromq": [
+"zeromq"
+],
+"zig": [
+"zig"
+],
+"zoom": [
+"zoom"
+],
+"zoominfo": [
+"zoominfo"
+],
+"zscaler": [
+"zscaler"
+],
+"zustand": [
+"zustand"
+]
+}
+}
