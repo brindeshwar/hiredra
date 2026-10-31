@@ -22,7 +22,7 @@ def test_config_thresholds_match_the_calibration_snapshot():
     assert cal.DEFAULT_COSINES_PATH.exists(), "calibrated config but calibration/step5_cosines.csv is missing"
 
     pairs = cal.load_pairs(cal.DEFAULT_PAIRS_PATH)
-    cosines = cal._read_cached(cal.DEFAULT_COSINES_PATH, cfg.embed_tag)
+    cosines = cal.read_cosines(cal.DEFAULT_COSINES_PATH, cfg.embed_tag)
     missing = [p for p in pairs if p.key not in cosines]
     assert not missing, f"{len(missing)} pair(s) have no cosine in the snapshot under {cfg.embed_tag}"
 

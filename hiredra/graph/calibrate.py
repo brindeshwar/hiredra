@@ -10,10 +10,11 @@ The pieces, in the order a calibration uses them:
    with its nearest ``mine`` node and pairs are drawn evenly across cosine bands. The labelers
    see only ``a,b`` (sorted, so band order doesn't leak); the cosines and bands go to a private
    sidecar they never open.
-3. ``pair_cosines``: one cosine per pair. A name resolves fold -> alias -> node vector; only
-   names that are not nodes are embedded (real pairs are always nodes, so they cost 0). Every
-   cosine is stored in ``calibration/step5_cosines.csv``, which is both the resume cache and
-   the regression snapshot.
+3. ``pair_cosines``: one cosine per pair, from today's graph on every run (decision D11.5: a
+   cache went stale when an alias merge moved a name onto another node). A name resolves fold ->
+   alias -> node vector; only names that are not nodes are embedded, locally and free. ``calibrate
+   --write`` saves the cosines to ``calibration/step5_cosines.csv``, the regression snapshot of
+   the calibration in force; a dry run writes nothing.
 4. ``calibrate``: sweep thresholds 0.30-0.99 on the TUNE split for each boundary, pick the
    centre of the max-F1 plateau, then score both thresholds once on the HOLDOUT split.
 
@@ -226,15 +227,16 @@ def suggest_pairs(
 # ─────────────────────────────────────────────────────────────────────────────
 # 3. cosines
 # ─────────────────────────────────────────────────────────────────────────────
-def _read_cached(path: Path, embed_tag: str) -> dict[tuple[str, str], float]:
+def read_cosines(path: Path, embed_tag: str) -> dict[tuple[str, str], float]:
+    """The snapshot's cosines for ``embed_tag`` (the regression guard reads these)."""
     if not path.exists():
         return {}
-    cached: dict[tuple[str, str], float] = {}
+    cosines: dict[tuple[str, str], float] = {}
     with path.open(encoding="utf-8", newline="") as fh:
         for row in csv.DictReader(fh):
             if row.get("embed_tag") == embed_tag:
-                cached[(row["a"], row["b"])] = float(row["cosine"])
-    return cached
+                cosines[(row["a"], row["b"])] = float(row["cosine"])
+    return cosines
 
 
 def write_cosines(path: Path, pairs: Sequence[Pair], cosines: dict[tuple[str, str], float], embed_tag: str) -> None:
@@ -252,42 +254,25 @@ def pair_cosines(
     cfg: GraphConfig,
     pairs: Sequence[Pair],
     embed_factory: Callable[[], Embedder] | None = None,
-    *,
-    cache_path: Path | str = DEFAULT_COSINES_PATH,
 ) -> dict[tuple[str, str], float]:
-    """Cosine of every pair, keyed by ``Pair.key``. Cached rows (same ``embed_tag``) are
-    reused; node vectors are used as stored; only the leftover names are embedded, in one call.
-    The node-based cosines are written to the cache BEFORE that call, so a budget stop loses
-    nothing. ``embed_factory`` builds the embedder only when a name actually needs one."""
-    cache_path = Path(cache_path)
-    cosines = {k: v for k, v in _read_cached(cache_path, cfg.embed_tag).items() if k in {p.key for p in pairs}}
+    """Cosine of every pair, keyed by ``Pair.key``, from today's node vectors. Only names that are
+    not nodes are embedded, in one call; ``embed_factory`` builds the embedder only then."""
     nodes = {s.name: s for s in load_skills(conn, cfg) if s.vector is not None}
-
-    def vector(name: str) -> np.ndarray | None:
+    vectors: dict[str, np.ndarray] = {}
+    for name in {n for p in pairs for n in p.key}:
         node = nodes.get(resolve_alias(conn, name) or name)
-        return node.vector if node is not None else None
-
-    todo = [p for p in pairs if p.key not in cosines]
-    missing = sorted({n for p in todo for n in p.key if vector(n) is None})
-    for p in todo:
-        va, vb = vector(p.a), vector(p.b)
-        if va is not None and vb is not None:
-            cosines[p.key] = round(float(va @ vb), 6)  # 6 places: a cached re-run gives the same value
-    write_cosines(cache_path, pairs, cosines, cfg.embed_tag)
-
+        if node is not None:
+            vectors[name] = node.vector
+    missing = sorted({n for p in pairs for n in p.key} - vectors.keys())
     if missing:
         if embed_factory is None:
             raise ValueError(f"{len(missing)} name(s) are not graph nodes and need embedding: {', '.join(missing)}")
-        matrix = embed_factory()(missing)
-        fresh = {name: matrix[i] for i, name in enumerate(missing)}
-        for p in todo:
-            if p.key in cosines:
-                continue
-            va = vector(p.a) if p.a not in fresh else fresh[p.a]
-            vb = vector(p.b) if p.b not in fresh else fresh[p.b]
-            cosines[p.key] = round(float(np.asarray(va, dtype=np.float32) @ np.asarray(vb, dtype=np.float32)), 6)
-        write_cosines(cache_path, pairs, cosines, cfg.embed_tag)
-    return cosines
+        vectors.update(zip(missing, embed_factory()(missing)))
+    return {
+        # 6 places: the value the snapshot stores, so the regression guard sweeps the same numbers
+        p.key: round(float(np.asarray(vectors[p.a], np.float32) @ np.asarray(vectors[p.b], np.float32)), 6)
+        for p in pairs
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -358,12 +358,12 @@ def _cmd_calibrate(conn, cfg, args) -> int:
         return build_embedder(cfg)
 
     try:
-        cosines = cal.pair_cosines(conn, cfg, pairs, embedder, cache_path=args.cosines_path)
+        cosines = cal.pair_cosines(conn, cfg, pairs, embedder)
     except Exception as exc:
         kind = classify_failure(exc)
         if kind is None:
             raise
-        _log(f"STOPPED ({kind}): {exc} -- cosines computed so far are cached; re-run later")
+        _log(f"STOPPED ({kind}): {exc} -- nothing written; re-run later")
         return 2
 
     result = cal.calibrate(pairs, cosines)
@@ -383,8 +383,12 @@ def _cmd_calibrate(conn, cfg, args) -> int:
     reports = Path(args.reports_dir)
     reports.mkdir(parents=True, exist_ok=True)
     (reports / f"{cid}.md").write_text(report, encoding="utf-8")
+    cal.write_cosines(Path(args.cosines_path), pairs, cosines, cfg.embed_tag)
     cal.write_fit_config(args.config, result.have, result.adj, cid)
-    _log(f"wrote fit.have / fit.adj / fit.calibration_id={cid} to {args.config}, report {reports / f'{cid}.md'}")
+    _log(
+        f"wrote fit.have / fit.adj / fit.calibration_id={cid} to {args.config}, report {reports / f'{cid}.md'}, "
+        f"snapshot {args.cosines_path}"
+    )
     return 0
 
 
@@ -449,7 +453,7 @@ def main(argv: list[str] | None = None) -> int:
     k.add_argument("--seed", type=int, default=0)
     k.add_argument("--pairs", default=None, help="the labeled pair file (default calibration/skill_pairs.csv)")
     k.add_argument("--write", action="store_true", help="update config/graph.yml and save the report")
-    k.add_argument("--cosines-path", default=None, help="cosine cache + regression snapshot")
+    k.add_argument("--cosines-path", default=None, help="regression snapshot of the cosines, written with --write")
     k.add_argument("--sidecar-path", default=None, help="private suggest sidecar (cosine bands)")
     k.add_argument("--reports-dir", default=None)
     args = ap.parse_args(argv)

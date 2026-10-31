@@ -17,7 +17,6 @@ from hiredra.graph import calibrate as cal
 from hiredra.graph.__main__ import main as graph_main
 from hiredra.graph.config import GraphConfig, load_graph_config
 from hiredra.graph.index import save_vectors
-from hiredra.quota import DailyQuotaExceeded
 from hiredra.storage import add_market_skill, connect, init_db, set_extraction, set_status, upsert_job
 
 DIM = 128
@@ -266,36 +265,23 @@ def test_pair_cosines_from_nodes_aliases_and_fresh_embeddings(conn, tmp_path):
 
         return embed
 
-    cache = tmp_path / "cos.csv"
-    cos = cal.pair_cosines(conn, cfg, pairs, factory, cache_path=cache)
+    cos = cal.pair_cosines(conn, cfg, pairs, factory)
     assert cos[("docker", "k8s")] == pytest.approx(0.755, abs=1e-6)
     assert cos[("helm chart", "kubernetes")] == pytest.approx(0.6, abs=1e-6)
     assert asked == [["helm chart"]]  # only the name that is not a node
 
-    # a re-run reuses the snapshot: no node and no embedder needed
-    conn.execute("DELETE FROM skill_vocab")
-    conn.commit()
-    assert cal.pair_cosines(conn, cfg, pairs, None, cache_path=cache) == cos
-    assert cache.read_text(encoding="utf-8").splitlines()[0] == "a,b,cosine,embed_tag"
 
-
-def test_node_cosines_are_saved_before_a_budget_stop(conn, tmp_path):
+def test_an_alias_merge_after_a_run_is_picked_up(conn, tmp_path):
+    # D11.5: html5 was its own node, then merged into html; the next run must use html's vector
     cfg = _cfg()
-    _node(conn, cfg, "kafka", _basis(2))
-    _node(conn, cfg, "fastapi", _tilted(2, 0.616))
-    p = _write(tmp_path, "kafka,fastapi,unrelated,tune,real,\nkafka,flink sql,related,tune,trap,\n")
-    pairs = cal.load_pairs(p, enforce_counts=False)
-
-    def factory():
-        def embed(names):
-            raise DailyQuotaExceeded("PerDay")
-
-        return embed
-
-    cache = tmp_path / "cos.csv"
-    with pytest.raises(DailyQuotaExceeded):
-        cal.pair_cosines(conn, cfg, pairs, factory, cache_path=cache)
-    assert "fastapi,kafka,0.616000" in cache.read_text(encoding="utf-8")
+    _node(conn, cfg, "html", _basis(0))
+    _node(conn, cfg, "html5", _tilted(0, 0.705))
+    pairs = cal.load_pairs(_write(tmp_path, "html,html5,same,tune,real,\n"), enforce_counts=False)
+    assert cal.pair_cosines(conn, cfg, pairs)[("html", "html5")] == pytest.approx(0.705, abs=1e-6)
+    conn.execute("DELETE FROM skill_vocab WHERE name = 'html5'")
+    conn.execute("INSERT INTO skill_alias (alias, canonical, created_at) VALUES ('html5', 'html', now())")
+    conn.commit()
+    assert cal.pair_cosines(conn, cfg, pairs)[("html", "html5")] == pytest.approx(1.0, abs=1e-6)
 
 
 def test_no_embedder_is_built_when_every_name_is_a_node(conn, tmp_path):
@@ -303,7 +289,16 @@ def test_no_embedder_is_built_when_every_name_is_a_node(conn, tmp_path):
     _node(conn, cfg, "kafka", _basis(2))
     _node(conn, cfg, "fastapi", _tilted(2, 0.616))
     pairs = cal.load_pairs(_write(tmp_path, "kafka,fastapi,unrelated,tune,real,\n"), enforce_counts=False)
-    cal.pair_cosines(conn, cfg, pairs, lambda: pytest.fail("embedder built"), cache_path=tmp_path / "c.csv")
+    cal.pair_cosines(conn, cfg, pairs, lambda: pytest.fail("embedder built"))
+
+
+def test_snapshot_round_trip(tmp_path):
+    pairs = cal.load_pairs(_write(tmp_path, "kafka,fastapi,unrelated,tune,real,\n"), enforce_counts=False)
+    path = tmp_path / "cos.csv"
+    cal.write_cosines(path, pairs, {("fastapi", "kafka"): 0.616}, "qwen")
+    assert path.read_text(encoding="utf-8").splitlines() == ["a,b,cosine,embed_tag", "fastapi,kafka,0.616000,qwen"]
+    assert cal.read_cosines(path, "qwen") == {("fastapi", "kafka"): 0.616}
+    assert cal.read_cosines(path, "other-model") == {}
 
 
 # ── the blind sampler ───────────────────────────────────────────────────────
@@ -428,7 +423,7 @@ def test_cli_dry_run_writes_nothing(tmp_path, capsys, pg_url):
     out = capsys.readouterr().out
     assert "HAVE=0.87 ADJ=0.63" in out and "DRY RUN" in out
     assert config.read_text(encoding="utf-8") == before and not (tmp_path / "reports").exists()
-    assert (tmp_path / "cos.csv").exists()  # the snapshot is always kept
+    assert not (tmp_path / "cos.csv").exists()  # the snapshot belongs to a written calibration
 
 
 def test_cli_write_updates_config_and_saves_the_report(tmp_path, pg_url):
@@ -438,6 +433,10 @@ def test_cli_write_updates_config_and_saves_the_report(tmp_path, pg_url):
     assert (cfg.have, cfg.adj) == (0.87, 0.63) and cfg.calibration_id.startswith("step5-")
     report = next((tmp_path / "reports").glob("step5-*.md")).read_text(encoding="utf-8")
     assert "**HAVE = 0.87**" in report and "## Misclassified holdout pairs" in report
+    # the snapshot sweeps back to the thresholds just written (what the regression guard checks)
+    snapshot = cal.read_cosines(tmp_path / "cos.csv", cfg.embed_tag)
+    result = cal.calibrate(cal.load_pairs(args[args.index("--pairs") + 1]), snapshot)
+    assert (result.have, result.adj) == (0.87, 0.63)
 
 
 def test_cli_broken_result_exits_3_and_writes_nothing(tmp_path, pg_url):
