@@ -14,11 +14,13 @@ owner's machine as a list of facts (name, website, hiring regions) and is never 
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
+from urllib.robotparser import RobotFileParser
 
 from hiredra.sourcing.http import FetchError, HTTPError
 from hiredra.sourcing.identity import company_slug
@@ -150,3 +152,106 @@ def probe(
 def known_folds(rows: Iterable[Any]) -> set[str]:
     """Squashed company keys that already have a board (``slug`` per row)."""
     return {str(r[0]).replace("-", "") for r in rows}
+
+
+# ── slice 2.5: the board link on a company's own careers page ──────────────
+# Ported from freehire's ``internal/ingest/atsdetect`` (``Detect``) and ``cmd/harvest-ats`` (``resolve``), MIT,
+# for the three ATSs we have adapters for. A board linked from the company's own site is the company's: no
+# namesake question, unlike a guessed slug (2.4). The other ATSs' URL shapes come with their adapters (step 3).
+_BOARD_LINKS = (
+    ("greenhouse", re.compile(r"(?:^|[^A-Za-z0-9])(?:boards|job-boards)\.greenhouse\.io/embed/job_board(?:/js)?\?for=([a-z0-9][a-z0-9-]*)")),
+    ("greenhouse", re.compile(r"(?:^|[^A-Za-z0-9])(?:boards|job-boards)(?:\.eu)?\.greenhouse\.io/([a-z0-9][a-z0-9-]*)")),
+    ("lever", re.compile(r"(?:^|[^A-Za-z0-9])jobs\.(?:eu\.)?lever\.co/([a-z0-9][a-z0-9-]*)")),
+    ("ashby", re.compile(r"(?:^|[^A-Za-z0-9])jobs\.ashbyhq\.com/([a-z0-9][a-z0-9-]*)")),
+)  # fmt: skip
+_RESERVED = frozenset({"embed", "demo"})  # "demo": an embed placeholder seen on a real careers page
+#: Where a company keeps its careers page, tried after its homepage (freehire's careerPaths and careerHostPrefixes).
+CAREER_PATHS = ("/careers", "/jobs", "/career", "/vacancies", "/employment", "/about/careers", "/join-us")
+CAREER_HOSTS = ("careers", "jobs")
+_ANCHOR = re.compile(r"""(?is)<a\b[^>]*\bhref=["']([^"']*)["'][^>]*>(.*?)</a>""")
+_TAG = re.compile(r"<[^>]*>")
+_DEEPER = re.compile(r"(?i)(vacan|opening|apply|position|current-|search.?job|job.?search|opportunit)")
+
+
+def detect_board(html: str) -> tuple[str, str] | None:
+    """The first Greenhouse, Lever or Ashby board a page links to or embeds, as ``(provider, slug)``."""
+    for provider, pattern in _BOARD_LINKS:
+        for m in pattern.finditer(html):
+            slug = m.group(1).lower()
+            if slug not in _RESERVED:
+                return provider, slug
+    return None
+
+
+def slug_names(company: str, slug: str) -> bool:
+    """Does a board slug carry the company's name? One squashed form contains the other ("Bolna AI" ~ ``bolna``,
+    "Nourish" ~ ``usenourish``), the shorter one at least 4 characters. Measured 2026-11-01: all 20 boards that
+    were really the company's passed, and all 5 that were not (a careers page listing customers' jobs, a site
+    redirected to its acquirer, an embed placeholder) failed."""
+    key, board = company_slug(company).replace("-", ""), slug.replace("-", "")
+    short, long = sorted((key, board), key=len)
+    return len(short) >= 4 and short in long
+
+
+def _link(html: str, base: str, wanted: Callable[[str], bool]) -> str | None:
+    for href, text in _ANCHOR.findall(html):
+        if wanted(href.lower()) or wanted(_TAG.sub("", text).lower()):
+            link = urljoin(base, href.strip())
+            if urlsplit(link).scheme in ("http", "https"):
+                return link
+    return None
+
+
+def careers_walk(website: str, fetch: Callable[[str], str | None]) -> tuple[str, str, str] | None:
+    """Find the board a company's site links to: the homepage, then its common careers paths and hosts, then the
+    homepage's careers link; from each careers page, one link deeper ("open positions"). ``fetch`` returns a page's
+    HTML or ``None``. Returns ``(provider, slug, page_url)``: the page the link was found on."""
+    base = website.strip().rstrip("/")
+    if not urlsplit(base).hostname:
+        return None
+    home = fetch(base)
+    if home is None:
+        return None
+    if found := detect_board(home):
+        return (*found, base)
+    host = urlsplit(base).hostname.removeprefix("www.")
+    scheme = urlsplit(base).scheme or "https"
+    pages = [base + path for path in CAREER_PATHS] + [f"{scheme}://{h}.{host}" for h in CAREER_HOSTS]
+    if link := _link(home, base, lambda s: "career" in s or "job" in s):
+        pages.append(link)
+    seen = {base}
+    for page in pages:
+        if page in seen:
+            continue
+        seen.add(page)
+        html = fetch(page)
+        if html is None:
+            continue
+        if found := detect_board(html):
+            return (*found, page)
+        deeper = _link(html, page, lambda s: bool(_DEEPER.search(s)))
+        if deeper and deeper not in seen:
+            seen.add(deeper)
+            if (html := fetch(deeper)) is not None and (found := detect_board(html)):
+                return (*found, deeper)
+    return None
+
+
+class Robots:
+    """robots.txt per host, read once (decision D4.2: respected for every HTML page we read). A host whose
+    robots.txt is missing or unreadable allows everything, as the robots convention says."""
+
+    def __init__(self, fetch_text: Callable[[str], str | None], agent: str) -> None:
+        self._fetch = fetch_text
+        self._agent = agent
+        self._cache: dict[str, RobotFileParser] = {}
+
+    def allowed(self, url: str) -> bool:
+        parts = urlsplit(url)
+        origin = f"{parts.scheme}://{parts.netloc}"
+        parser = self._cache.get(origin)
+        if parser is None:
+            parser = RobotFileParser()
+            parser.parse((self._fetch(origin + "/robots.txt") or "").splitlines())
+            self._cache[origin] = parser
+        return parser.can_fetch(self._agent, url)
