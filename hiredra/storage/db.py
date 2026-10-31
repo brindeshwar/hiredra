@@ -189,9 +189,25 @@ def _id(conn: psycopg.Connection, job_id: str) -> int:
 # writes
 # ─────────────────────────────────────────────────────────────────────────────
 def _company_id(conn: psycopg.Connection, name: str) -> int | None:
+    """The company ``name`` belongs to (D2.4): by its key, else a recorded alias, else a company whose key differs
+    only by hyphens ("Together AI" -> ``togetherai``; the new spelling is then recorded as an alias). Only a name
+    none of these reach makes a new company."""
     key = company_key(name)
     if not key:
         return None
+    for by_fold, sql, arg in (
+        (False, "SELECT id FROM companies WHERE slug = %s", key),
+        (False, "SELECT company_id FROM company_slug_aliases WHERE alias = %s", key),
+        (True, "SELECT id FROM companies WHERE replace(slug, '-', '') = %s ORDER BY id LIMIT 1", key.replace("-", "")),
+    ):
+        row = conn.execute(sql, (arg,)).fetchone()
+        if row is not None:
+            if by_fold:  # found by the squashed spelling: remember this one
+                conn.execute(
+                    "INSERT INTO company_slug_aliases (alias, company_id) VALUES (%s, %s) ON CONFLICT DO NOTHING",
+                    (key, row[0]),
+                )
+            return row[0]
     conn.execute("INSERT INTO companies (slug, name) VALUES (%s, %s) ON CONFLICT (slug) DO NOTHING", (key, name))
     return conn.execute("SELECT id FROM companies WHERE slug = %s", (key,)).fetchone()[0]
 

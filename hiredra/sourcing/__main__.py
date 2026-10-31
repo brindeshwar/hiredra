@@ -1,6 +1,7 @@
 """``python -m hiredra.sourcing run --config PATH [--db URL] [--resume]``
 ``python -m hiredra.sourcing runs [--db URL] [--limit N]``
 ``python -m hiredra.sourcing boards import PATH [--provenance NAME] [--db URL]``
+``python -m hiredra.sourcing companies merge [--apply] [--curated PATH] [--db URL]``
 
 A run crawls the ``boards`` table, picked by the run config's ``boards`` key (decision D2.1). A company list such
 as ``config/companies.yml`` reaches the table through ``boards import``: new entries are added as ``pending``,
@@ -24,6 +25,7 @@ for _stream in (sys.stdout, sys.stderr):
 
 from pathlib import Path
 
+from hiredra.sourcing import companies as company_merge
 from hiredra.sourcing.config import board_entry, load_companies, load_run_config
 from hiredra.sourcing.orchestrator import RunReport, run as run_orchestrator
 from hiredra.sourcing.provider import company_slug
@@ -122,6 +124,39 @@ def _cmd_boards_import(args: argparse.Namespace) -> int:
     return 1 if unroutable else 0
 
 
+def _cmd_companies_merge(args: argparse.Namespace) -> int:
+    curated = company_merge.load_curated(args.curated)
+    conn = db.connect(args.db)
+    try:
+        db.init_db(conn)
+        rows = company_merge.company_rows(conn)
+        renames, groups = company_merge.plan_merges(rows, curated)
+        print(
+            f"companies: {len(rows)}; renamed by the key rule: {len(renames)}; merge groups: {len(groups)} "
+            f"({sum(len(g.retired) for g in groups)} companies folded in, {sum(g.jobs for g in groups)} jobs)"
+        )
+        for g in groups:
+            members = " + ".join([g.old_slug, *(s for _, s in g.retired)])
+            print(f"  [{g.reason}] {members} -> {g.slug} ({g.name}, {g.jobs} jobs)")
+        for r in renames[: args.show]:
+            print(f"  [rule] {r.old_slug} -> {r.new_slug}")
+        if len(renames) > args.show:
+            print(f"  ... and {len(renames) - args.show} more renames")
+        hints = company_merge.suggestions(rows)
+        if hints:
+            print(f"possibly one employer, NOT merged (add to {company_merge.CURATED_PATH.name} to merge):")
+            for a, b, n in hints:
+                print(f"  {a} / {b} ({n} jobs)")
+        if not args.apply:
+            print("DRY RUN: nothing written. Re-run with --apply to merge.")
+            return 0
+        company_merge.apply_merges(conn, renames, groups)
+        print(f"applied: {len(groups)} merges, {len(renames)} renames; old spellings kept as aliases")
+        return 0
+    finally:
+        conn.close()
+
+
 def _cmd_runs(args: argparse.Namespace) -> int:
     conn = db.connect(args.db)
     try:
@@ -162,6 +197,15 @@ def main(argv: list[str] | None = None) -> int:
     p_import.add_argument("--provenance", default=None, help="default: curated for companies.yml, else the file stem")
     p_import.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
     p_import.set_defaults(func=_cmd_boards_import)
+
+    p_companies = sub.add_parser("companies", help="one company per employer (D2.4)")
+    companies_sub = p_companies.add_subparsers(dest="companies_command", required=True)
+    p_merge = companies_sub.add_parser("merge", help="merge companies that are one employer (dry run by default)")
+    p_merge.add_argument("--apply", action="store_true", help="write the merges")
+    p_merge.add_argument("--curated", default=str(company_merge.CURATED_PATH), help="owner-listed merges")
+    p_merge.add_argument("--show", type=int, default=20, help="renames to print")
+    p_merge.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
+    p_merge.set_defaults(func=_cmd_companies_merge)
 
     args = parser.parse_args(argv)
     return args.func(args)
