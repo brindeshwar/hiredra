@@ -13,10 +13,11 @@ for the data rows, to read their published data on the owner's machine.
 | [OpenJobs](https://github.com/outscal/OpenJobs) (a fork of career-ops) | MIT | Its company dataset `data/companies_v2.json` (the `ats_links` field), read from the local clone to build the candidate company pool. No code is copied or run. | `discovery/harvest.py` |
 | [freehire](https://github.com/strelov1/freehire) | MIT | Location parsing rules from `internal/dict/location`, re-written in Python: the US-state / country-code clash rule, the GeoNames last-resort city rule, UK postcodes, Cyrillic city prefixes, title restrictions, and its curated place names and region-name tables (copied as data). Its location test cases, copied as a test fixture. The Lever description assembly (`description` + `lists` + `additional`) and the years-parser age/cap rules (`internal/job/jobfacts`), re-written. Its GeoNames city export `cities1000.tsv`, copied unchanged. The company-name key (`internal/dict/normalize`: `CompanySlug`, `Slug`, the legal-form list) and the role fingerprint (`internal/job/jobhash/rolefingerprint.go`), re-written, with their test cases. The company-merge design (`cmd/merge-companies`, `docs/agents/company-identity.md`: group by the squashed key, a curated list for the rest, old spellings kept as aliases), re-written. Its skill descriptions (`internal/dict/skilltag/descriptions.tsv`) joined with the display labels from `labels.go`, copied as data. Its skill-tagging dictionary (`internal/dict/skilltag`: word and phrase aliases, ambiguous and proper-noun words, acronym tiers, labels, aliases), exported unchanged as data, and its matcher (`skilltag.go`, `internal/dict/wordmatch`) re-written in Python; its own test texts with the Go code's output, copied as a test fixture. | `hiredra/location.py`, `hiredra/geonames_cities.tsv`, `tests/fixtures/freehire_location_cases.json`, `hiredra/sourcing/providers/lever.py`, `hiredra/filter.py`, `hiredra/sourcing/identity.py`, `hiredra/sourcing/companies.py`, `tests/test_identity.py`, `hiredra/graph/skill_descriptions.tsv`, `hiredra/skill_dict.json`, `hiredra/skilltag.py`, `tests/fixtures/freehire_skilltag_cases.json` |
 | [Qwen3-Embedding-0.6B](https://huggingface.co/Qwen/Qwen3-Embedding-0.6B) (Alibaba Qwen team), run with [sentence-transformers](https://github.com/UKPLab/sentence-transformers) (Apache 2.0) on [PyTorch](https://pytorch.org) (BSD-3) | Apache 2.0 | The local skill-embedding model (decision D1.15). Its weights are downloaded at first use into `data/models/` (git-ignored); nothing of it is copied into this repository. The libraries are the optional `embed` dependency group. | `hiredra/graph/embedder.py`, `config/graph.yml` |
+| [ats-scrapers](https://github.com/kalil0321/ats-scrapers) | MIT | Its public company lists per ATS (`ats-companies/greenhouse.csv`, `lever.csv`, `ashby.csv`: name, slug, careers URL), read by `boards import` into the local database to find boards (decision D2.2). The files are not in this repository. | `hiredra/sourcing/config.py` (`load_inventory`) |
 | [GeoNames](https://www.geonames.org/) (via freehire) | CC BY 4.0 | The `cities1000` place names and countries in `hiredra/geonames_cities.tsv` (freehire's export of it, unchanged). | `hiredra/geonames_cities.tsv` |
 | [open-jobs](https://github.com/elliottdehn/open-jobs) | CC0 1.0 | `tools/locparse.py`, ported to Python module `hiredra/location.py`, with its bare-city table copied as `hiredra/city_countries.json`. Its published job export: the `enrichment_json` skill fields (market skill vocabulary) and the per-ATS crawled postings. Its board roster `slugs.json`. | `hiredra/location.py`, `hiredra/city_countries.json`, `hiredra/graph/harvest.py`, `discovery/harvest.py`, `scripts/generate_company_list.py` |
 
-Versions read: career-ops at commit `fe06051`, OpenJobs at `cdcc533`, open-jobs at `a2d88f4`, freehire at `8b55a65` (the skill dictionary at `0e715dfc`).
+Versions read: career-ops at commit `fe06051`, OpenJobs at `cdcc533`, open-jobs at `a2d88f4`, freehire at `8b55a65` (the skill dictionary at `0e715dfc`), ats-scrapers at `6b44a1b`.
 
 Later units will add one more use, recorded here when they land: the HTML/CSS structure of
 career-ops' CV and cover-letter templates, adapted into Jinja2 templates.
@@ -74,6 +75,14 @@ freehire uses the same MIT text as career-ops above, with this copyright line:
 
 ```
 Copyright (c) 2026 freehire contributors
+```
+
+### ats-scrapers (MIT)
+
+ats-scrapers uses the same MIT text as career-ops above, with this copyright line:
+
+```
+Copyright (c) 2026 Kalil Bouzigues
 ```
 
 ### GeoNames (CC BY 4.0)
