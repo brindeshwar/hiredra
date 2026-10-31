@@ -14,6 +14,7 @@ default.
 
 from __future__ import annotations
 
+import csv
 from collections.abc import Mapping
 from dataclasses import MISSING, dataclass, fields
 from pathlib import Path
@@ -143,6 +144,31 @@ def load_companies(
             )
         )
     return entries
+
+
+#: Where a public ATS-company list came from (decision D2.2), the value ``boards.provenance`` records.
+INVENTORY_PROVENANCE = "ats-inventory"
+
+
+def load_inventory(path: str | Path, provider: str, provenance: str = INVENTORY_PROVENANCE) -> list[CompanyEntry]:
+    """A public ATS-company list (build slice 2.3): one ``name,slug,url`` CSV per ATS, e.g. kalil0321/ats-scrapers'
+    ``ats-companies/<provider>.csv`` (MIT). Every row is that one ``provider``; the slug is used as given, so nothing
+    is fetched or detected. Rows without a name or slug are skipped."""
+    with Path(path).open(encoding="utf-8", newline="") as fh:
+        reader = csv.DictReader(fh)
+        missing = {"name", "slug", "url"} - set(reader.fieldnames or ())
+        if missing:
+            raise ConfigError(f"{path}: missing column(s) {sorted(missing)} (expected name,slug,url)")
+        return [
+            CompanyEntry(
+                name=row["name"].strip(),
+                careers_url=row["url"].strip() or None,
+                provider=provider,
+                extra={"slug": row["slug"].strip(), "provenance": provenance},
+            )
+            for row in reader
+            if row["name"].strip() and row["slug"].strip()
+        ]
 
 
 def board_entry(row: Mapping[str, Any]) -> CompanyEntry:
