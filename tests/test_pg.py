@@ -83,3 +83,51 @@ def test_a_failed_migration_leaves_nothing_applied(db_url, tmp_path):
         conn.rollback()
         assert {r[0] for r in conn.execute("SELECT version FROM schema_migrations")} == {"0001_ok"}
         assert conn.execute("SELECT to_regclass('b')").fetchone()[0] is None  # 0002's first statement rolled back too
+
+
+# ── D15.2: an applied migration is never edited ─────────────────────────────
+def test_an_edited_applied_migration_is_refused(db_url, tmp_path):
+    first = tmp_path / "0001_a.sql"
+    first.write_text("CREATE TABLE a (x int);\n", encoding="utf-8")
+    with pg.connect(db_url) as conn:
+        assert pg.migrate(conn, tmp_path) == ["0001_a"]
+        recorded = conn.execute("SELECT checksum FROM schema_migrations WHERE version = '0001_a'").fetchone()[0]
+        assert recorded == pg.checksum(first)
+
+        first.write_bytes(b"CREATE TABLE a (x int);\r\n")  # a CRLF checkout of the same text is not an edit
+        assert pg.migrate(conn, tmp_path) == []
+
+        first.write_text("CREATE TABLE a (x int, y int);\n", encoding="utf-8")
+        (tmp_path / "0002_b.sql").write_text("CREATE TABLE b (x int);\n", encoding="utf-8")
+        with pytest.raises(pg.MigrationChanged, match="0001_a: applied, but 0001_a.sql has been edited since"):
+            pg.migrate(conn, tmp_path)
+        with pytest.raises(pg.MigrationChanged):
+            pg.pending(conn, tmp_path)
+        assert conn.execute("SELECT to_regclass('b')").fetchone()[0] is None  # nothing after the refusal ran
+
+
+def test_a_removed_applied_migration_is_refused(db_url, tmp_path):
+    (tmp_path / "0001_a.sql").write_text("CREATE TABLE a (x int);\n", encoding="utf-8")
+    with pg.connect(db_url) as conn:
+        pg.migrate(conn, tmp_path)
+        (tmp_path / "0001_a.sql").rename(tmp_path / "0001_renamed.sql")
+        with pytest.raises(pg.MigrationChanged, match="0001_a: applied, but its file is gone"):
+            pg.migrate(conn, tmp_path)
+
+
+def test_rows_from_before_the_checksum_take_todays_hash(db_url, tmp_path):
+    path = tmp_path / "0001_a.sql"
+    path.write_text("CREATE TABLE a (x int);\n", encoding="utf-8")
+    with pg.connect(db_url) as conn:
+        # a database migrated before D15.2: the table has no checksum column
+        conn.execute(
+            "CREATE TABLE schema_migrations (version text PRIMARY KEY, applied_at timestamptz NOT NULL DEFAULT now())"
+        )
+        conn.execute("CREATE TABLE a (x int)")
+        conn.execute("INSERT INTO schema_migrations (version) VALUES ('0001_a')")
+        conn.commit()
+        assert pg.migrate(conn, tmp_path) == []
+        assert conn.execute("SELECT checksum FROM schema_migrations").fetchone()[0] == pg.checksum(path)
+        path.write_text("CREATE TABLE a (y int);\n", encoding="utf-8")
+        with pytest.raises(pg.MigrationChanged):
+            pg.migrate(conn, tmp_path)
