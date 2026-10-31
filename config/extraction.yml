@@ -46,7 +46,9 @@ dictionary_skip: [
   api, automation, analytics, agile, saas, machine learning, data science, llm, agentic ai,
   generative ai, networking, iot, observability, devops, data engineering,
   asana, notion, slack, zoom, jira, confluence, gdpr, hipaa, soc 2, iso 27001, github,
-  google workspace, microsoft office, excel, statistics, user research, openai, anthropic
+  google workspace, microsoft office, excel, statistics, user research, openai, anthropic,
+  # industries and business functions, not skills (owner, 2026-10-31)
+  fintech, cryptocurrency, crm, business development
 ]
 # canonical name -> other names that count as "the JD names it"
 skill_synonyms:
