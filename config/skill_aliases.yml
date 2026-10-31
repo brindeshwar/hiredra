@@ -17,25 +17,25 @@
 
 aliases:
   kubernetes: [k8s]
-  javascript: [js]
+  javascript: [js, es6]
   typescript: [ts]
   go: [golang]
   gcp: [google cloud platform, google cloud]   # "google cloud" is loose; drop it if you prefer
   azure: [microsoft azure]
   aws: [amazon web services]
   generative ai: [genai]
-  llm: [large language models, large language models (llm)]
+  llm: [large language models, large language models (llm), large language model]
   machine learning: [ml]
   natural language processing: [nlp]
   sre: [site reliability engineering]
-  vue: [vue.js]
+  vue: [vue.js, vuejs]
   node.js: [nodejs, node]
   react: [react.js, reactjs]
   c#: [csharp]
   mongodb: [mongo]
   scikit-learn: [sklearn]
   postgresql: [postgres]
-  ci/cd: [cicd]
+  ci/cd: [cicd, continuous delivery]
   # Short/long forms of the owner's own skills that embeddings score low (owner review 2026-10-25,
   # data/merge-review-short-forms-2026-10-25.md). The cosine is today's similarity.
   mcp: [model context protocol, mcps]                    # 0.57 / 0.75
@@ -45,3 +45,27 @@ aliases:
   transformers: [hugging face transformers]              # 0.78
   ec2: [amazon ec2]                                      # 0.80
   gemini: [google gemini]                                # 0.85
+  # Separate nodes that freehire's dictionary calls one skill (owner review 2026-10-30,
+  # data/merge-review-freehire-2026-10-29.md). The cosine is today's similarity.
+  angular: [angularjs]                                   # 0.84
+  api: [apis]                                            # 0.81
+  azure data factory: [data factory]                     # 0.79
+  c: [c programming]                                     # 0.79
+  claude: [anthropic claude]                             # 0.73
+  css: [css3]                                            # 0.70
+  data modeling: [data modelling]                        # 0.81
+  .net: [.net core]                                      # 0.76
+  express.js: [express]                                  # 0.98
+  google analytics: [ga4]                                # 0.54
+  html: [html5]                                          # 0.71
+  apache iceberg: [iceberg]                              # 0.78
+  object-oriented programming: [object-oriented design, oop]   # 0.85 / 0.78
+  pl/sql: [plsql]                                        # 1.00
+  power bi: [powerbi]                                    # 1.00
+  ruby on rails: [rails]                                 # 0.82
+  relational databases: [rdbms]                          # 0.79
+  rest api: [rest]                                       # 0.83
+  rest assured: [restassured]                            # 0.86
+  spring boot: [spring, spring framework, spring mvc, spring-boot, springboot]   # 0.82-0.99
+  sql server: [ms sql, t-sql]                            # 0.85 / 0.79
+  tdd: [test-driven development]                         # 0.84
