@@ -14,8 +14,13 @@ from hiredra import pg  # noqa: E402
 
 def test_migrate_applies_each_migration_once(db_url):
     with pg.connect(db_url) as conn:
-        assert pg.migrate(conn) == ["0001_init", "0002_cooldowns", "0003_api_usage_exhausted", "0004_search_on_demand",
-                                   "0005_skill_source"]
+        assert pg.migrate(conn) == [
+            "0001_init",
+            "0002_cooldowns",
+            "0003_api_usage_exhausted",
+            "0004_search_on_demand",
+            "0005_skill_source",
+        ]
         assert pg.migrate(conn) == []  # idempotent: nothing pending the second time
         tables = {r[0] for r in conn.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")}
     assert tables >= {
