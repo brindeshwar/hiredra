@@ -368,9 +368,6 @@ class HttpClient:
     def get_text(self, url: str, **kw: Any) -> str:
         return self.request("GET", url, **kw).text
 
-    def post_json(self, url: str, *, json: Any, **kw: Any) -> Any:
-        return self._as_json(self.request("POST", url, json=json, **kw), url)
-
     # internals ---------------------------------------------------------
     @staticmethod
     def _as_json(resp: httpx.Response, url: str) -> Any:

@@ -112,9 +112,6 @@ class JobSpyResult:
     jobs: list[Job] = field(default_factory=list)
     outcomes: tuple[SiteOutcome, ...] = ()
 
-    def by_status(self, status: str) -> tuple[SiteOutcome, ...]:
-        return tuple(o for o in self.outcomes if o.status == status)
-
 
 # ── log capture ────────────────────────────────────────────────────────────
 class _RecordCollector(logging.Handler):
