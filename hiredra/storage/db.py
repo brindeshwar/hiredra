@@ -308,6 +308,74 @@ def fill_provenance(
             )
 
 
+def load_boards(conn: psycopg.Connection, provenances: Sequence[str]) -> list[Row]:
+    """The boards a run crawls (decision D2.1): status pending or active, of the given provenances (``("all",)``
+    = every provenance), each with its company's display name. Ordered by provider, then board, so a run and its
+    ``--resume`` walk the same list."""
+    if not provenances:
+        return []
+    sql = (
+        "SELECT b.id, b.provider, b.board, b.careers_url, b.provenance, b.list_tag, c.name "
+        "FROM boards b LEFT JOIN companies c ON c.id = b.company_id "
+        "WHERE b.status IN ('pending', 'active')"
+    )
+    params: tuple = ()
+    if tuple(provenances) != ("all",):
+        sql += " AND b.provenance = ANY(%s)"
+        params = (list(provenances),)
+    return conn.execute(sql + " ORDER BY b.provider, lower(b.board), b.region", params).fetchall()
+
+
+def import_board(
+    conn: psycopg.Connection,
+    *,
+    provider: str,
+    board: str,
+    name: str,
+    provenance: str,
+    source_name: str,
+    list_tag: str | None = None,
+    careers_url: str | None = None,
+    enabled: bool = True,
+) -> str:
+    """Write one company-list entry into ``boards`` (``boards import``). Returns what happened:
+
+    ``new``        not stored yet: added as ``pending`` (D5.5), with its company.
+    ``known``      already stored: only blank fields are filled; provenance and status never change (the first
+                   sighting wins, as in ``fill_provenance``).
+    ``re-enabled`` stored, retired earlier because the list disabled it, and enabled again: back to ``pending``.
+    ``retired``    ``enabled: false`` in the list: the board is retired with that reason and is no longer crawled.
+    ``skipped``    disabled and never stored: nothing to do.
+    """
+    row = conn.execute(
+        "SELECT id, status, status_reason FROM boards WHERE provider = %s AND lower(board) = lower(%s) AND region = ''",
+        (provider, board),
+    ).fetchone()
+    reason = f"disabled in {source_name}"
+    if not enabled:
+        if row is None:
+            return "skipped"
+        conn.execute("UPDATE boards SET status = 'retired', status_reason = %s WHERE id = %s", (reason, row["id"]))
+        return "retired"
+    company_id = _company_id(conn, name)
+    if row is None:
+        conn.execute(
+            "INSERT INTO boards (provider, board, company_id, careers_url, status, provenance, list_tag) "
+            "VALUES (%s, %s, %s, %s, 'pending', %s, %s)",
+            (provider, board, company_id, careers_url, provenance, list_tag),
+        )
+        return "new"
+    conn.execute(
+        "UPDATE boards SET company_id = COALESCE(company_id, %s), careers_url = COALESCE(careers_url, %s), "
+        "list_tag = COALESCE(list_tag, %s) WHERE id = %s",
+        (company_id, careers_url, list_tag, row["id"]),
+    )
+    if row["status"] == "retired" and row["status_reason"] == reason:
+        conn.execute("UPDATE boards SET status = 'pending', status_reason = NULL WHERE id = %s", (row["id"],))
+        return "re-enabled"
+    return "known"
+
+
 def _sources(conn: psycopg.Connection, job_ids: list[str]) -> list[Row]:
     return conn.execute("SELECT DISTINCT source FROM jobs WHERE job_key = ANY(%s)", (job_ids,)).fetchall()
 

@@ -1,7 +1,10 @@
 """YAML config loading for the sourcing orchestrator (docs/sourcing.md §7.5, §9.5).
 
-* ``config/companies.yml`` -> ``list[CompanyEntry]``
-* ``config/scoring.yml`` / ``config/scoring.wide.yml`` -> ``RunConfig``
+* ``config/companies.yml`` -> ``list[CompanyEntry]``: an IMPORT list. ``python -m hiredra.sourcing boards import``
+  writes it into the ``boards`` table, which is what a run crawls (decision D2.1, build slice 2.1).
+* ``config/scoring.yml`` / ``config/scoring.wide.yml`` -> ``RunConfig``; its ``boards`` key picks which boards a
+  run crawls, by provenance (``[curated]``, or ``all``).
+* a ``boards`` row -> ``CompanyEntry`` (``board_entry``), so the orchestrator stays free of any database code.
 
 **Strict**: an unknown key -- at the top level OR inside any nested section
 (``jobspy``, ``jobspy.default_query``, ``pacing``, ``http`` ...) -- is a
@@ -11,6 +14,7 @@ default.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import MISSING, dataclass, fields
 from pathlib import Path
 from typing import Any, TypeVar
@@ -38,7 +42,7 @@ class Pacing:
 class RunConfig:
     kind: str  # "scoring" (the backfill kind was removed, R1a)
     config_name: str  # basename, recorded on the runs row
-    companies_path: str | None
+    boards: tuple[str, ...]  # provenances to crawl; ("all",) = every provenance; () = no boards (JobSpy only)
     jobspy: JobSpyConfig
     http: HttpConfig
     pacing: Pacing
@@ -98,7 +102,13 @@ def list_provenance(path: str | Path | None) -> str:
     return LIST_PROVENANCE.get(Path(path).name, Path(path).stem)
 
 
-def load_companies(path: str | Path) -> list[CompanyEntry]:
+def load_companies(
+    path: str | Path, provenance: str | None = None, *, include_disabled: bool = False
+) -> list[CompanyEntry]:
+    """The list's entries, each carrying ``extra["provenance"]`` (``provenance``, else ``list_provenance(path)``).
+    ``enabled: false`` entries are left out, or kept with ``extra["enabled"] = False`` (``boards import`` retires
+    them)."""
+    provenance = provenance or list_provenance(path)
     doc = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
     raw = doc.get("companies") or []
     if not isinstance(raw, list):
@@ -115,11 +125,14 @@ def load_companies(path: str | Path) -> list[CompanyEntry]:
         unknown = set(item) - _COMPANY_KEYS
         if unknown:
             raise ConfigError(f"{where} ({name}): unknown key(s) {sorted(unknown)}")
-        if item.get("enabled") is False:
+        if item.get("enabled") is False and not include_disabled:
             continue
         extra = dict(item.get("extra") or {})
+        if item.get("enabled") is False:
+            extra["enabled"] = False
         if item.get("slug"):
             extra["slug"] = item["slug"]
+        extra["provenance"] = provenance
         entries.append(
             CompanyEntry(
                 name=name,
@@ -132,8 +145,29 @@ def load_companies(path: str | Path) -> list[CompanyEntry]:
     return entries
 
 
+def board_entry(row: Mapping[str, Any]) -> CompanyEntry:
+    """One ``boards`` row (``storage.db.load_boards``) as the entry the registry routes: the stored provider and
+    slug, so nothing is re-detected; the careers URL when one is stored (e.g. a Lever EU host)."""
+    extra: dict[str, Any] = {"slug": row["board"], "provenance": row["provenance"], "board_id": row["id"]}
+    if row["list_tag"]:
+        extra["tag"] = row["list_tag"]
+    return CompanyEntry(
+        name=row["name"] or row["board"], careers_url=row["careers_url"], provider=row["provider"], extra=extra
+    )
+
+
 # ── scoring.yml / scoring.wide.yml ─────────────────────────────────────────────
-_RUN_KEYS = {"kind", "companies_path", "jobspy", "http", "pacing", "path2"}
+_RUN_KEYS = {"kind", "boards", "jobspy", "http", "pacing", "path2"}
+
+
+def _boards(raw: Any, path: Path) -> tuple[str, ...]:
+    if raw is None:
+        return ()
+    if raw == "all":
+        return ("all",)
+    if isinstance(raw, list) and raw and all(isinstance(p, str) and p and p != "all" for p in raw):
+        return tuple(raw)
+    raise ConfigError(f"{path}: 'boards' must be 'all' or a non-empty list of provenances, got {raw!r}")
 
 
 def load_run_config(path: str | Path) -> RunConfig:
@@ -156,7 +190,7 @@ def load_run_config(path: str | Path) -> RunConfig:
     return RunConfig(
         kind=kind,
         config_name=path.name,
-        companies_path=doc.get("companies_path"),
+        boards=_boards(doc.get("boards"), path),
         jobspy=_build(JobSpyConfig, doc.get("jobspy"), "jobspy"),
         http=_build(HttpConfig, doc.get("http"), "http"),
         pacing=_build(Pacing, doc.get("pacing"), "pacing"),

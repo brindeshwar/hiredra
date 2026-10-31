@@ -6,6 +6,7 @@ from __future__ import annotations
 import pytest
 
 from hiredra import liveness
+from hiredra.sourcing.config import load_companies
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.orchestrator import run
 from hiredra.sourcing.provider import CompanyEntry, company_slug
@@ -138,7 +139,8 @@ def test_orchestrator_passes_slug_and_tag_per_company(tmp_path):
         return sinks[-1]
 
     run(
-        _config(companies_path=str(companies)),
+        _config(),
+        companies=load_companies(companies),
         sink_factory=factory,
         run_store=FakeRunStore(),
         ctx=None,

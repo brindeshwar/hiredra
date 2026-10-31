@@ -10,7 +10,7 @@ import time
 
 import pytest
 
-from hiredra.sourcing.config import Pacing, RunConfig
+from hiredra.sourcing.config import Pacing, RunConfig, load_companies
 from hiredra.sourcing.http import Blocked, FetchError, HTTPError, HttpClient, HttpConfig
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.jobspy_source import JobSpyConfig, JobSpyResult, SiteOutcome, SiteQuery
@@ -24,7 +24,7 @@ def _config(**over):
     base = dict(
         kind="scoring",
         config_name="test.yml",
-        companies_path=None,
+        boards=(),
         jobspy=JobSpyConfig(sites=(), default_query=SiteQuery(search_terms=("x",))),
         http=HttpConfig(),
         pacing=Pacing(between_companies=0.0, jitter=0.0),
@@ -124,7 +124,8 @@ def test_happy_path(tmp_path, ctx):
         return s
 
     report = run(
-        _config(companies_path=companies),
+        _config(),
+        companies=load_companies(companies),
         sink_factory=factory,
         run_store=store,
         ctx=ctx,
@@ -150,7 +151,8 @@ def test_fetcherror_makes_partial_other_companies_still_run(tmp_path, ctx):
     p1 = FakeProvider("p1", error=FetchError("boom"))
     p2 = FakeProvider("p2", jobs=[_job(job_id="p2:1")])
     report = run(
-        _config(companies_path=companies),
+        _config(),
+        companies=load_companies(companies),
         sink_factory=lambda r: RecordingSink(),
         run_store=FakeRunStore(),
         ctx=ctx,
@@ -166,7 +168,8 @@ def test_blocked_makes_partial(tmp_path, ctx):
     companies = _companies_yaml(tmp_path, [("Acme", "p1")])
     p1 = FakeProvider("p1", error=Blocked("blocked", cooldown_key="p1host", until=0.0))
     report = run(
-        _config(companies_path=companies),
+        _config(),
+        companies=load_companies(companies),
         sink_factory=lambda r: RecordingSink(),
         run_store=FakeRunStore(),
         ctx=ctx,
@@ -182,7 +185,8 @@ def test_provider_bug_is_caught_as_error_not_a_crash(tmp_path, ctx):
     companies = _companies_yaml(tmp_path, [("Acme", "p1")])
     p1 = FakeProvider("p1", error=RuntimeError("provider bug"))
     report = run(
-        _config(companies_path=companies),
+        _config(),
+        companies=load_companies(companies),
         sink_factory=lambda r: RecordingSink(),
         run_store=FakeRunStore(),
         ctx=ctx,
@@ -197,7 +201,8 @@ def test_provider_bug_is_caught_as_error_not_a_crash(tmp_path, ctx):
 def test_unroutable_stays_ok_but_is_reported(tmp_path, ctx):
     companies = _companies_yaml(tmp_path, [("Ghost", "nobody")])
     report = run(
-        _config(companies_path=companies),
+        _config(),
+        companies=load_companies(companies),
         sink_factory=lambda r: RecordingSink(),
         run_store=FakeRunStore(),
         ctx=ctx,
@@ -218,7 +223,8 @@ def test_404_is_gone_not_error_and_stays_ok(tmp_path, ctx):
     p1 = FakeProvider("p1", error=HTTPError("not found", status=404))
     p2 = FakeProvider("p2", jobs=[_job(job_id="p2:1")])
     report = run(
-        _config(companies_path=companies),
+        _config(),
+        companies=load_companies(companies),
         sink_factory=lambda r: RecordingSink(),
         run_store=FakeRunStore(),
         ctx=ctx,
@@ -236,7 +242,8 @@ def test_non_404_http_error_still_makes_partial(tmp_path, ctx):
     companies = _companies_yaml(tmp_path, [("Acme", "p1")])
     p1 = FakeProvider("p1", error=HTTPError("server error", status=500))
     report = run(
-        _config(companies_path=companies),
+        _config(),
+        companies=load_companies(companies),
         sink_factory=lambda r: RecordingSink(),
         run_store=FakeRunStore(),
         ctx=ctx,
@@ -282,7 +289,8 @@ def test_jobspy_exception_does_not_lose_company_results(tmp_path, ctx):
     js = FakeJobSpySource(raise_=RuntimeError("jobspy bug"))
     store = FakeRunStore()
     report = run(
-        _config(companies_path=companies),
+        _config(),
+        companies=load_companies(companies),
         sink_factory=lambda r: RecordingSink(),
         run_store=store,
         ctx=ctx,
@@ -301,9 +309,10 @@ def test_pacing_sleeps_between_companies_not_before_the_first(tmp_path, ctx):
     companies = _companies_yaml(tmp_path, [("A", "p"), ("B", "p"), ("C", "p")])
     p = FakeProvider("p", jobs=[])
     slept: list[float] = []
-    cfg = _config(companies_path=companies, pacing=Pacing(between_companies=2.0, jitter=0.0))
+    cfg = _config(pacing=Pacing(between_companies=2.0, jitter=0.0))
     run(
         cfg,
+        companies=load_companies(companies),
         sink_factory=lambda r: RecordingSink(),
         run_store=FakeRunStore(),
         ctx=ctx,
@@ -322,7 +331,8 @@ def test_resume_skips_done_companies(tmp_path, ctx):
     handle = RunHandle(run_id="R1", companies_done={"A|p|"}, resumed=True)
     store = FakeRunStore(resume_handle=handle)
     report = run(
-        _config(companies_path=companies),
+        _config(),
+        companies=load_companies(companies),
         sink_factory=lambda r: RecordingSink(),
         run_store=store,
         ctx=ctx,
@@ -351,7 +361,8 @@ def test_two_boards_with_one_name_are_both_fetched(tmp_path, ctx):
     gh, ab = FakeProvider("gh", jobs=[_job(job_id="gh:1")]), FakeProvider("ab", jobs=[_job(job_id="ab:1")])
     store = FakeRunStore()
     report = run(
-        _config(companies_path=str(p)),
+        _config(),
+        companies=load_companies(p),
         sink_factory=lambda r: RecordingSink(),
         run_store=store,
         ctx=ctx,
@@ -472,7 +483,8 @@ def test_unexpected_crash_marks_run_failed_and_reraises(tmp_path, ctx):
     store = FakeRunStore()
     with pytest.raises(RuntimeError, match="sink bug"):
         run(
-            _config(companies_path=companies),
+            _config(),
+            companies=load_companies(companies),
             sink_factory=lambda r: BadSink(),
             run_store=store,
             ctx=ctx,
@@ -490,7 +502,8 @@ def test_report_to_json_round_trips(tmp_path, ctx):
     companies = _companies_yaml(tmp_path, [("A", "p")])
     p = FakeProvider("p", jobs=[_job(job_id="p:1")])
     report = run(
-        _config(companies_path=companies),
+        _config(),
+        companies=load_companies(companies),
         sink_factory=lambda r: RecordingSink(),
         run_store=FakeRunStore(),
         ctx=ctx,

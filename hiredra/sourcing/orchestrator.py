@@ -16,7 +16,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 
-from hiredra.sourcing.config import RunConfig, list_provenance, load_companies
+from hiredra.sourcing.config import RunConfig
 from hiredra.sourcing.http import Blocked, FetchError, HTTPError, HttpClient
 from hiredra.sourcing.jobspy_source import JobSpySource, SiteOutcome
 from hiredra.sourcing.provider import CompanyEntry, FetchContext, Provider, company_slug
@@ -104,6 +104,7 @@ def _roll_up(companies: Sequence[CompanyOutcome], jobspy: Sequence[SiteOutcome])
 def run(
     config: RunConfig,
     *,
+    companies: Sequence[CompanyEntry] = (),
     sink_factory: Callable[[str], Sink],
     run_store: RunStore,
     ctx: FetchContext | None = None,
@@ -113,8 +114,8 @@ def run(
     sleep: Callable[[float], None] = time.sleep,
     rng: random.Random | None = None,
 ) -> RunReport:
-    """Fetch every configured company + the JobSpy batch, handing each batch to
-    ``sink.consume()``. Fail-soft per company and per JobSpy site (sec. 5/9) --
+    """Fetch every company in ``companies`` (the caller picks them: the CLI reads the ``boards`` table, D2.1) +
+    the JobSpy batch, handing each batch to ``sink.consume()``. Fail-soft per company and per JobSpy site (sec. 5/9) --
     only a config error or a genuine bug raises out of this function.
     """
     rng = rng or random.Random()
@@ -132,7 +133,6 @@ def run(
         companies_done: set[str] = set(handle.companies_done)
         jobspy_done = handle.jobspy_done
 
-        companies: list[CompanyEntry] = load_companies(config.companies_path) if config.companies_path else []
         if config.path2_enabled:
             log.warning(
                 "orchestrator: path2 is enabled in config but Path-2 discovery "
@@ -188,7 +188,7 @@ def run(
                         jobs_c,
                         company_slug=company_slug(provider, entry),
                         list_tag=str(tag) if tag else None,
-                        provenance=list_provenance(config.companies_path),
+                        provenance=str((entry.extra or {}).get("provenance") or "orphan"),
                     )
                     outcomes.append(CompanyOutcome(entry.name, "ok", provider.name, len(jobs_c)))
 
@@ -197,9 +197,8 @@ def run(
 
         if unroutable and companies and len(unroutable) == len(companies):
             log.warning(
-                "orchestrator: ALL %d companies unroutable -- check %s",
+                "orchestrator: ALL %d companies unroutable -- check the board list",
                 len(companies),
-                config.companies_path,
             )
 
         jobspy_outcomes: tuple[SiteOutcome, ...] = ()

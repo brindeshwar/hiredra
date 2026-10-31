@@ -1,5 +1,10 @@
 """``python -m hiredra.sourcing run --config PATH [--db URL] [--resume]``
 ``python -m hiredra.sourcing runs [--db URL] [--limit N]``
+``python -m hiredra.sourcing boards import PATH [--provenance NAME] [--db URL]``
+
+A run crawls the ``boards`` table, picked by the run config's ``boards`` key (decision D2.1). A company list such
+as ``config/companies.yml`` reaches the table through ``boards import``: new entries are added as ``pending``,
+known ones only get blank fields filled, and ``enabled: false`` retires a board.
 
 The CLI owns the one shared connection to the operational DB: opens it once,
 closes it once in a ``finally``. ``ScoringSink`` and ``PgRunStore`` share it.
@@ -17,8 +22,12 @@ for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
         _stream.reconfigure(errors="replace")
 
-from hiredra.sourcing.config import load_run_config
+from pathlib import Path
+
+from hiredra.sourcing.config import board_entry, load_companies, load_run_config
 from hiredra.sourcing.orchestrator import RunReport, run as run_orchestrator
+from hiredra.sourcing.provider import company_slug
+from hiredra.sourcing.registry import REGISTRY, route
 from hiredra.sourcing.runstore import PgRunStore
 from hiredra.sourcing.sink import ScoringSink
 from hiredra.storage import db
@@ -64,8 +73,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
     try:
         db.init_db(conn)
         run_store = PgRunStore(conn)
+        companies = [board_entry(row) for row in db.load_boards(conn, config.boards)]
         report = run_orchestrator(
             config,
+            companies=companies,
             sink_factory=lambda run_id: ScoringSink(conn, run_id),
             run_store=run_store,
             resume=args.resume,
@@ -74,6 +85,41 @@ def _cmd_run(args: argparse.Namespace) -> int:
         return 0 if report.status != "failed" else 1
     finally:
         conn.close()
+
+
+def _cmd_boards_import(args: argparse.Namespace) -> int:
+    entries = load_companies(args.path, args.provenance, include_disabled=True)
+    counts: dict[str, int] = {}
+    unroutable: list[str] = []
+    conn = db.connect(args.db)
+    try:
+        db.init_db(conn)
+        with conn.transaction():
+            for entry in entries:
+                provider = route(entry, REGISTRY)
+                slug = company_slug(provider, entry) if provider is not None else None
+                if provider is None or slug is None:
+                    unroutable.append(entry.name)
+                    continue
+                outcome = db.import_board(
+                    conn,
+                    provider=provider.name,
+                    board=slug,
+                    name=entry.name,
+                    provenance=str(entry.extra["provenance"]),
+                    source_name=Path(args.path).name,
+                    list_tag=entry.extra.get("tag"),
+                    careers_url=entry.careers_url,
+                    enabled=entry.extra.get("enabled", True),
+                )
+                counts[outcome] = counts.get(outcome, 0) + 1
+    finally:
+        conn.close()
+    summary = ", ".join(f"{k} {v}" for k, v in sorted(counts.items())) or "nothing"
+    print(f"boards import {args.path}: {len(entries)} entries -> {summary}")
+    if unroutable:
+        print(f"  [!] no provider or board slug for {len(unroutable)}: {', '.join(unroutable)}")
+    return 1 if unroutable else 0
 
 
 def _cmd_runs(args: argparse.Namespace) -> int:
@@ -108,6 +154,14 @@ def main(argv: list[str] | None = None) -> int:
     p_runs.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
     p_runs.add_argument("--limit", type=int, default=20)
     p_runs.set_defaults(func=_cmd_runs)
+
+    p_boards = sub.add_parser("boards", help="manage the boards table (what a run crawls)")
+    boards_sub = p_boards.add_subparsers(dest="boards_command", required=True)
+    p_import = boards_sub.add_parser("import", help="write a company list (e.g. config/companies.yml) into boards")
+    p_import.add_argument("path")
+    p_import.add_argument("--provenance", default=None, help="default: curated for companies.yml, else the file stem")
+    p_import.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
+    p_import.set_defaults(func=_cmd_boards_import)
 
     args = parser.parse_args(argv)
     return args.func(args)
