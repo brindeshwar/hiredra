@@ -29,7 +29,7 @@ typescript,javascript,related,tune,trap,superset
 sql server,sql,related,holdout,real,
 http apis,rest api,related,tune,real,
 fastapi,django,related,holdout,trap,heavier sibling
-agentic ai,ai agents,same,tune,real,
+agentic ai,ai agents,related,tune,real,relabelled same->related 2026-10-31 (D11.6: kept apart in D10.1)
 halide,sqlite,unrelated,tune,real,
 mcps,mcp,same,tune,real,
 tensorflow,pytorch,related,holdout,trap,rival frameworks
