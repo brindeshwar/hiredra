@@ -6,7 +6,7 @@ import textwrap
 
 import pytest
 
-from hiredra.sourcing.config import ConfigError, load_companies, load_run_config
+from hiredra.sourcing.config import ConfigError, board_entry, load_companies, load_run_config
 from hiredra.sourcing.jobspy_source import JobSpyConfig, SiteQuery
 
 
@@ -41,7 +41,7 @@ def test_load_companies_maps_fields(tmp_path):
     )
     entries = load_companies(p)
     assert [e.name for e in entries] == ["Stripe", "Ramp"]  # disabled one dropped
-    assert entries[1].provider == "ashby" and entries[1].extra == {"slug": "ramp"}
+    assert entries[1].provider == "ashby" and entries[1].extra == {"slug": "ramp", "provenance": "c"}
 
 
 @pytest.mark.parametrize(
@@ -60,7 +60,7 @@ def test_load_companies_rejects_bad_input(tmp_path, body):
 # ── run config: strict, nested ─────────────────────────────────────────────
 _GOOD = textwrap.dedent("""
     kind: scoring
-    companies_path: config/companies.yml
+    boards: [curated]
     pacing: {between_companies: 2.0, jitter: 1.0}
     http: {timeout: 20.0}
     jobspy:
@@ -78,7 +78,7 @@ _GOOD = textwrap.dedent("""
 
 def test_load_run_config_builds_everything(tmp_path):
     rc = load_run_config(_write(tmp_path, "scoring.yml", _GOOD))
-    assert rc.kind == "scoring" and rc.config_name == "scoring.yml"
+    assert rc.kind == "scoring" and rc.config_name == "scoring.yml" and rc.boards == ("curated",)
     assert rc.pacing.between_companies == 2.0 and rc.pacing.jitter == 1.0
     assert rc.http.timeout == 20.0 and rc.http.cooldown_seconds == 900.0  # default fills in
     assert rc.jobspy.sites == ("indeed", "linkedin")
@@ -130,3 +130,53 @@ def test_run_config_missing_required_search_terms(tmp_path):
     body = _GOOD.replace("    search_terms: [AI Engineer, Backend Engineer]\n", "")
     with pytest.raises(ConfigError):
         load_run_config(_write(tmp_path, "s.yml", body))
+
+
+def test_disabled_entries_kept_on_request_and_provenance_given(tmp_path):
+    p = _write(
+        tmp_path,
+        "companies.yml",
+        """
+        companies:
+          - name: Ramp
+            slug: ramp
+            provider: ashby
+          - name: Old Co
+            slug: old
+            provider: ashby
+            enabled: false
+    """,
+    )
+    assert [e.name for e in load_companies(p)] == ["Ramp"]
+    kept = load_companies(p, include_disabled=True)
+    assert [(e.name, e.extra.get("enabled", True), e.extra["provenance"]) for e in kept] == [
+        ("Ramp", True, "curated"),
+        ("Old Co", False, "curated"),
+    ]
+    assert load_companies(p, "yc")[0].extra["provenance"] == "yc"
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [("boards: all\n", ("all",)), ("boards: [curated, orphan]\n", ("curated", "orphan")), ("", ())],
+)
+def test_run_config_boards(tmp_path, value, expected):
+    body = _GOOD.replace("boards: [curated]\n", value)
+    assert load_run_config(_write_raw(tmp_path, "s.yml", body)).boards == expected
+
+
+@pytest.mark.parametrize("value", ["boards: []\n", "boards: curated\n", "boards: [all]\n", "boards: [1]\n"])
+def test_run_config_rejects_bad_boards(tmp_path, value):
+    body = _GOOD.replace("boards: [curated]\n", value)
+    with pytest.raises(ConfigError):
+        load_run_config(_write_raw(tmp_path, "s.yml", body))
+
+
+def test_board_entry_routes_on_the_stored_provider_and_slug():
+    row = {"id": 7, "provider": "lever", "board": "acme", "careers_url": "https://jobs.eu.lever.co/acme",
+           "provenance": "orphan", "list_tag": None, "name": None}  # fmt: skip
+    entry = board_entry(row)
+    assert (entry.name, entry.provider, entry.careers_url) == ("acme", "lever", "https://jobs.eu.lever.co/acme")
+    assert entry.extra == {"slug": "acme", "provenance": "orphan", "board_id": 7}
+    tagged = board_entry({**row, "name": "Acme", "list_tag": "confirmed"})
+    assert tagged.name == "Acme" and tagged.extra["tag"] == "confirmed"

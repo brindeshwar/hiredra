@@ -2,7 +2,9 @@
 # Loading is STRICT: an unknown key anywhere (including nested sections) is an error.
 
 kind: scoring
-companies_path: config/companies.yml
+# Which boards to crawl, by provenance: the boards table (D2.1), filled from config/companies.yml by
+# `python -m hiredra.sourcing boards import config/companies.yml`. `all` = every pending/active board.
+boards: [curated]
 
 pacing:
   between_companies: 1.0      # base seconds between company fetches

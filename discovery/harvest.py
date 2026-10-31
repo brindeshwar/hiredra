@@ -268,13 +268,14 @@ def cmd_self_fetch(_args: argparse.Namespace) -> int:
         config = RunConfig(
             kind="backfill",
             config_name="discovery-self-fetch",
-            companies_path=str(NOT_COVERED_PATH),
+            boards=(),
             jobspy=JobSpyConfig(sites=()),
             http=HttpConfig(),
             pacing=Pacing(between_companies=1.0, jitter=0.5),  # same pacing proven at 1,000 companies, zero blocks
         )
         report = run_orchestrator(
             config,
+            companies=load_companies(NOT_COVERED_PATH),
             sink_factory=lambda run_id: ScoringSink(conn, run_id),
             run_store=PgRunStore(conn),
             jobspy_source=_NoJobSpy(),

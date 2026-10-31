@@ -15,6 +15,9 @@ separately later.
 
     python scripts/wide_list_from_discovery.py
     python scripts/wide_list_from_discovery.py --csv path/to/companies.csv --out config/companies.wide.yml
+
+The file is an IMPORT list (decision D2.1): runs crawl the boards table, so load the result with
+`python -m hiredra.sourcing boards import config/companies.wide.yml` (provenance openjobs).
 """
 
 from __future__ import annotations
