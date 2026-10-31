@@ -2,6 +2,7 @@
 ``python -m hiredra.sourcing runs [--db URL] [--limit N]``
 ``python -m hiredra.sourcing boards import PATH [--provenance NAME] [--provider NAME] [--db URL]``
 ``python -m hiredra.sourcing companies merge [--apply] [--curated PATH] [--db URL]``
+``python -m hiredra.sourcing boards discover-yc PATH [--limit N] [--dry-run] [--db URL]``
 
 A run crawls the ``boards`` table, picked by the run config's ``boards`` key (decision D2.1). A company list such
 as ``config/companies.yml``, or a public ``name,slug,url`` CSV of one ATS's companies (D2.2, ``--provider``
@@ -24,12 +25,16 @@ for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
         _stream.reconfigure(errors="replace")
 
+import time
 from pathlib import Path
 
+from hiredra.filter import load_filter_config, passes_location, passes_role_type, passes_seniority_gate
 from hiredra.sourcing import companies as company_merge
+from hiredra.sourcing import discover
 from hiredra.sourcing.config import INVENTORY_PROVENANCE, board_entry, load_companies, load_inventory, load_run_config
+from hiredra.sourcing.http import HttpClient, HttpConfig
 from hiredra.sourcing.orchestrator import RunReport, run as run_orchestrator
-from hiredra.sourcing.provider import company_slug
+from hiredra.sourcing.provider import FetchContext, company_slug
 from hiredra.sourcing.registry import REGISTRY, route
 from hiredra.sourcing.runstore import PgRunStore
 from hiredra.sourcing.sink import ScoringSink
@@ -163,6 +168,74 @@ def _cmd_companies_merge(args: argparse.Namespace) -> int:
         conn.close()
 
 
+def _cmd_boards_discover_yc(args: argparse.Namespace) -> int:
+    """Slice 2.4: YC companies hiring in India or remote, without a board yet -> guessed slugs, checked live.
+    A board found is imported as pending with provenance ``yc`` only when its jobs name the company's own web
+    domain. A name-only match is printed with ``?`` for the owner to check: measured 2026-10-31, 3 of 7 checked were
+    namesakes (Haven, Morph, Runway). The imported boards' jobs are run through the funnel's three text stages in
+    memory, so the report says what they are worth (nothing about jobs is stored here)."""
+    funnel = load_filter_config()
+    conn = db.connect(args.db)
+    ctx = FetchContext(http=HttpClient(HttpConfig()))
+    try:
+        db.init_db(conn)
+        known = discover.known_folds(
+            conn.execute(
+                "SELECT c.slug FROM companies c JOIN boards b ON b.company_id = c.id UNION "
+                "SELECT a.alias FROM company_slug_aliases a JOIN boards b ON b.company_id = a.company_id"
+            ).fetchall()
+        )
+        candidates = discover.yc_candidates(args.path, known)[: args.limit or None]
+        print(f"discover-yc {args.path}: {len(candidates)} candidates (hiring, India/remote region, no board yet)")
+        found = eligible = kept = errors = 0
+        by_provider: dict[str, int] = {}
+        by_confirm: dict[str, int] = {}
+        started = time.monotonic()
+        for i, cand in enumerate(candidates, 1):
+            result = discover.probe(cand, REGISTRY, ctx, sleep=time.sleep, pause=args.pause)
+            errors += bool(result.errors)
+            if result.provider is not None:
+                confirmed = discover.confirm(result)
+                by_confirm[confirmed] = by_confirm.get(confirmed, 0) + 1
+                print(
+                    f"  {dict(domain='+', name='?').get(confirmed, '-')} {cand.name}: {result.provider}/{result.slug} "
+                    f"({len(result.jobs)} jobs, confirmed: {confirmed})"
+                )
+                if confirmed != "domain":
+                    continue  # name-only or nothing: too likely a namesake to import unchecked
+                found += 1
+                by_provider[result.provider] = by_provider.get(result.provider, 0) + 1
+                for job in result.jobs:
+                    if not passes_location(job.title, job.location, job.description, funnel).keep:
+                        continue
+                    eligible += 1
+                    if (
+                        passes_seniority_gate(job.title, job.description, funnel).keep
+                        and passes_role_type(job.title, funnel).keep
+                    ):
+                        kept += 1
+                if not args.dry_run:
+                    with conn.transaction():
+                        db.import_board(
+                            conn, provider=result.provider, board=result.slug, name=cand.name, provenance="yc",
+                            source_name=Path(args.path).name,
+                        )  # fmt: skip
+            if i % 25 == 0:
+                print(
+                    f"  .. {i}/{len(candidates)} checked, {found} found, {time.monotonic() - started:.0f}s", flush=True
+                )
+        print(f"boards answering: {sum(by_confirm.values())}; confirmed by: {by_confirm}")
+        print(
+            f"imported-worthy {found} of {len(candidates)} ({', '.join(f'{k} {v}' for k, v in sorted(by_provider.items()))}); "
+            f"probe errors on {errors}; jobs India/remote-eligible {eligible}, passing all three stages {kept}"
+        )
+        print("DRY RUN: no board written." if args.dry_run else f"imported {found} board(s) as pending, provenance yc")
+        return 0
+    finally:
+        ctx.http.close()
+        conn.close()
+
+
 def _cmd_runs(args: argparse.Namespace) -> int:
     conn = db.connect(args.db)
     try:
@@ -208,6 +281,13 @@ def main(argv: list[str] | None = None) -> int:
     p_import.add_argument("--provider", default=None, help="a CSV's ATS (default: the file stem, e.g. lever.csv)")
     p_import.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
     p_import.set_defaults(func=_cmd_boards_import)
+    p_yc = boards_sub.add_parser("discover-yc", help="find boards for YC companies hiring in India/remote (D2.2)")
+    p_yc.add_argument("path", help="yc-oss companies/all.json, downloaded into data/ (no licence stated: local only)")
+    p_yc.add_argument("--limit", type=int, default=0, help="check only the first N candidates")
+    p_yc.add_argument("--pause", type=float, default=0.5, help="seconds between probe requests")
+    p_yc.add_argument("--dry-run", action="store_true", help="report only; write no board")
+    p_yc.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
+    p_yc.set_defaults(func=_cmd_boards_discover_yc)
 
     p_companies = sub.add_parser("companies", help="one company per employer (D2.4)")
     companies_sub = p_companies.add_subparsers(dest="companies_command", required=True)
