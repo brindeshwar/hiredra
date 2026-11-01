@@ -12,6 +12,8 @@ from collections.abc import Callable, Iterable
 from datetime import date, datetime, timezone
 from typing import Any, TypeVar
 from urllib.parse import urlsplit
+from urllib.robotparser import RobotFileParser
+from xml.etree import ElementTree
 
 from hiredra.sourcing.http import FetchError
 from hiredra.sourcing.job import Job
@@ -134,3 +136,42 @@ def hydrate(
     if waiting:
         log.info("%s: %d new postings wait for the next run", label, waiting)
     return jobs
+
+
+class Robots:
+    """robots.txt per host, read once (decision D4.2: respected for every HTML page we read). A host whose
+    robots.txt is missing or unreadable allows everything, as the robots convention says."""
+
+    def __init__(self, fetch_text: Callable[[str], str | None], agent: str) -> None:
+        self._fetch = fetch_text
+        self._agent = agent
+        self._cache: dict[str, RobotFileParser] = {}
+
+    def allowed(self, url: str) -> bool:
+        parts = urlsplit(url)
+        origin = f"{parts.scheme}://{parts.netloc}"
+        parser = self._cache.get(origin)
+        if parser is None:
+            parser = RobotFileParser()
+            parser.parse((self._fetch(origin + "/robots.txt") or "").splitlines())
+            self._cache[origin] = parser
+        return parser.can_fetch(self._agent, url)
+
+
+def sitemap_locs(xml: str) -> tuple[list[str], list[str]]:
+    """A sitemap's ``(page locs, sub-sitemap locs)``: a ``<urlset>`` has the first, a ``<sitemapindex>`` the
+    second (freehire's ``sitemapDoc``). Anything else is an error, never an empty board."""
+    try:
+        root = ElementTree.fromstring(xml.strip().removeprefix("﻿"))
+    except ElementTree.ParseError as err:
+        raise FetchError(f"sitemap is not XML: {err}") from err
+    kind = root.tag.rsplit("}", 1)[-1].lower()
+    if kind not in ("urlset", "sitemapindex"):
+        raise FetchError(f"sitemap root is <{kind}>")
+    locs: dict[str, list[str]] = {"url": [], "sitemap": []}
+    for child in root:
+        name = child.tag.rsplit("}", 1)[-1]
+        loc = next((c.text for c in child if c.tag.rsplit("}", 1)[-1] == "loc"), None)
+        if name in locs and loc and loc.strip():
+            locs[name].append(loc.strip())
+    return locs["url"], locs["sitemap"]

@@ -7,12 +7,17 @@ entities ("&amp;", "&#39;") only decode safely once the tags are gone.
 
 Good enough to feed the seniority-gate regex (build 2b) and the skill-extraction
 LLM (build 3); it is not a general HTML renderer.
+
+Also the schema.org JobPosting a server-rendered job page carries (``ld_job_posting``,
+ported from freehire's ``jsonld.go``, MIT), for the adapters that read job pages (iCIMS).
 """
 
 from __future__ import annotations
 
 import html
+import json
 import re
+from typing import Any
 
 _SCRIPT_STYLE = re.compile(r"<(script|style)\b[^>]*>.*?</\1\s*>", re.I | re.S)
 _NEWLINE_TAGS = re.compile(
@@ -40,3 +45,31 @@ def html_to_text(value: str | None) -> str:
     text = "\n".join(line.strip() for line in text.splitlines())
     text = _BLANK_LINES.sub("\n\n", text)
     return text.strip()
+
+
+_LD_JSON = re.compile(r"""<script\b[^>]*\btype=["']application/ld\+json["'][^>]*>(.*?)</script\s*>""", re.I | re.S)
+
+
+def _job_postings(node: Any) -> list[dict]:
+    """The schema.org JobPosting nodes in one ld+json value: a bare object, a list, an ``@graph`` wrapper, or a page
+    whose ``mainEntity`` is the posting (freehire's ``jobPostingNodes``)."""
+    if isinstance(node, list):
+        return [n for n in node if isinstance(n, dict) and str(n.get("@type", "")).lower() == "jobposting"]
+    if not isinstance(node, dict):
+        return []
+    if str(node.get("@type", "")).lower() == "jobposting":
+        return [node]
+    return _job_postings(node.get("@graph")) or _job_postings([node.get("mainEntity")])
+
+
+def ld_job_posting(page: str | None) -> dict | None:
+    """The first schema.org JobPosting a server-rendered page carries in an ``application/ld+json`` block, else
+    ``None``. Raw control characters inside its strings are accepted, as freehire's decoder accepts them."""
+    for block in _LD_JSON.findall(page or ""):
+        try:
+            value = json.loads(block, strict=False)
+        except ValueError:
+            continue
+        if postings := _job_postings(value):
+            return postings[0]
+    return None

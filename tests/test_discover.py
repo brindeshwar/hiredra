@@ -10,6 +10,7 @@ import pytest
 from hiredra.sourcing import discover
 from hiredra.sourcing.http import FetchError, HTTPError
 from hiredra.sourcing.job import Job
+from hiredra.sourcing.providers._common import Robots
 
 
 def _job(desc="", url="https://jobs.ashbyhq.com/x/1"):
@@ -110,6 +111,16 @@ def test_confirm_tells_the_company_from_a_namesake():
         ),
         ("https://jobs.smartrecruiters.com/Visa/744000067-engineer", ("smartrecruiters", "Visa")),
         ("https://jobs.smartrecruiters.com/oneclick-ui/company/x", None),
+        ("https://apply.workable.com/capgemini-insurance/j/C15CE8BF0F", ("workable", "capgemini-insurance")),
+        ("https://apply.workable.com/j/C15CE8BF0F", None),  # a short link: followed, not read
+        ("https://apply.workable.com/oops", None),  # where a closed job's short link points
+        ("https://apply.workable.com/oopsla/", ("workable", "oopsla")),
+        ("https://careers-shure.icims.com/jobs/5039/job?utm_source=x", ("icims", "shure")),
+        (
+            "https://globalcareers-msci.icims.com/jobs/5929/job?utm_source=x",
+            ("icims", "globalcareers-msci.icims.com"),
+        ),  # not the classic careers-<slug> shape: the whole host
+        ("https://www.icims.com/products/", None),
         ('<a href="https://boards.greenhouse.io/embed/">x</a>', None),  # "embed" is never a board
         ('<a href="https://notjobs.lever.cool/x">', None),
         ("<p>We are hiring!</p>", None),
@@ -172,7 +183,7 @@ def test_robots_is_read_once_per_host_and_obeyed():
         asked.append(url)
         return "User-agent: *\nDisallow: /careers\n" if "acme" in url else None
 
-    robots = discover.Robots(fetch, "Hiredra/0.1")
+    robots = Robots(fetch, "Hiredra/0.1")
     assert not robots.allowed("https://acme.com/careers")
     assert robots.allowed("https://acme.com/jobs")
     assert robots.allowed("https://other.com/careers")  # no robots.txt: everything allowed
@@ -192,6 +203,7 @@ def test_orphans_read_apply_links_and_guess_the_rest():
             None,
         ),
         (3, "Genea", "SRE", "https://grnh.se/abc123", None),
+        (5, "Capgemini", "QA", "https://apply.workable.com/j/C15CE8BF0F", None),
         (4, "Acme Group", "Data Engineer", None, "https://in.indeed.com/y"),
     ]
     by_name = {o.name: o for o in discover.orphans(rows)}
@@ -199,6 +211,8 @@ def test_orphans_read_apply_links_and_guess_the_rest():
     assert velaura.board == ("lever", "velaura") and velaura.titles == {"backend engineer", "ml engineer"}
     assert by_name["Infosys Limited"].other_ats == "taleo" and by_name["Infosys Limited"].board is None
     assert by_name["Genea"].short_links == ["https://grnh.se/abc123"]
+    assert by_name["Capgemini"].short_links == ["https://apply.workable.com/j/C15CE8BF0F"]
+    assert by_name["Capgemini"].board is None and by_name["Capgemini"].other_ats == "workable"
     assert by_name["Acme Group"].slugs == ("acme", "acmegroup", "acme-group")  # the board-name tail off first
 
 

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from hiredra.sourcing._html import html_to_text
+from hiredra.sourcing._html import html_to_text, ld_job_posting
 
 
 @pytest.mark.parametrize("value", [None, "", "   "])
@@ -44,3 +44,25 @@ def test_br_becomes_newline():
 
 def test_runs_of_blank_lines_collapse():
     assert "\n\n\n" not in html_to_text("<p>a</p><p></p><p></p><p>b</p>")
+
+
+# ── ld_job_posting (freehire's jsonld.go cases) ────────────────────────────
+@pytest.mark.parametrize(
+    "block",
+    [
+        '{"@type":"JobPosting","title":"A"}',
+        '[{"@type":"Organization"},{"@type":"JobPosting","title":"A"}]',
+        '{"@graph":[{"@type":"WebPage"},{"@type":"jobposting","title":"A"}]}',
+        '{"@type":"WebPage","mainEntity":{"@type":"JobPosting","title":"A"}}',
+        '{"@type":"JobPosting","title":"A","description":"line\none"}',  # a raw newline inside a string
+    ],
+)
+def test_ld_job_posting_finds_the_posting_in_any_shape(block):
+    script = '<script type="application/ld+json">{}</script>'
+    page = script.format('{"@type":"Organization"}') + script.format(block)
+    assert ld_job_posting(page)["title"] == "A"
+
+
+def test_ld_job_posting_none_without_one():
+    assert ld_job_posting("<script type='application/ld+json'>{broken</script><p>x</p>") is None
+    assert ld_job_posting(None) is None

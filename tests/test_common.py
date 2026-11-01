@@ -10,6 +10,7 @@ from hiredra.sourcing.providers._common import (
     clean,
     infer_remote,
     iso_date,
+    sitemap_locs,
 )
 
 _HOSTS = frozenset({"api.lever.co"})
@@ -100,3 +101,20 @@ def test_assert_allowed_url_rejects_bad_host():
 )
 def test_clean(value, expected):
     assert clean(value) == expected
+
+
+# ── sitemap_locs ───────────────────────────────────────────────────────────
+def test_sitemap_locs_reads_both_shapes():
+    ns = 'xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"'
+    urlset = (
+        f'\ufeff<?xml version="1.0"?><urlset {ns}><url><loc> https://a/jobs/1?x=1&amp;y=2 </loc></url><url/></urlset>'
+    )
+    assert sitemap_locs(urlset) == (["https://a/jobs/1?x=1&y=2"], [])
+    index = f"<sitemapindex {ns}><sitemap><loc>https://a/s1.xml</loc></sitemap></sitemapindex>"
+    assert sitemap_locs(index) == ([], ["https://a/s1.xml"])
+
+
+@pytest.mark.parametrize("body", ["<html><body>maintenance</body></html>", "not xml at all"])
+def test_sitemap_locs_rejects_anything_else(body):
+    with pytest.raises(FetchError):
+        sitemap_locs(body)

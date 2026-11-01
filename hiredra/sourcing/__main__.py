@@ -29,15 +29,17 @@ for _stream in (sys.stdout, sys.stderr):
 
 import time
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from hiredra.filter import load_filter_config, passes_location, passes_role_type, passes_seniority_gate
 from hiredra.sourcing import companies as company_merge
 from hiredra.sourcing import discover
 from hiredra.sourcing.config import INVENTORY_PROVENANCE, board_entry, load_companies, load_inventory, load_run_config
-from hiredra.sourcing.http import FetchError, HttpClient, HttpConfig
+from hiredra.sourcing.http import FetchError, HttpClient, HttpConfig, HTTPError
 from hiredra.sourcing.orchestrator import RunReport, run as run_orchestrator
 from hiredra.sourcing.provider import FetchContext, company_slug
 from hiredra.sourcing.registry import REGISTRY, route
+from hiredra.sourcing.providers._common import Robots
 from hiredra.sourcing.runstore import PgRunStore
 from hiredra.sourcing.sink import ScoringSink
 from hiredra.storage import db
@@ -211,7 +213,7 @@ def _cmd_boards_discover_careers(args: argparse.Namespace) -> int:
         except FetchError:
             return None
 
-    robots = discover.Robots(text, http.config.user_agent)
+    robots = Robots(text, http.config.user_agent)
     pages = refused = 0
 
     def page(url: str) -> str | None:
@@ -350,7 +352,8 @@ WHERE j.source LIKE 'jobspy-%%'
 
 def _cmd_boards_discover_orphans(args: argparse.Namespace) -> int:
     """Slice 2.6: companies we hold only through JobSpy (no board, no ATS job) -> their board. An apply link that
-    names a Greenhouse/Lever/Ashby board is taken as is (a ``grnh.se`` short link is followed once); otherwise the
+    names a board on an ATS we have an adapter for is taken as is (a ``grnh.se`` or Workable ``/j/`` short link is
+    followed once, the board read from where it lands); otherwise the
     name's guessed slugs are probed, and a board found is kept only if it lists a job title we saw on the
     aggregator for that company. A company whose apply links show another ATS but name no board is counted, not
     guessed. A board found that we already hold under another company is that company under a second name: a
@@ -367,7 +370,22 @@ def _cmd_boards_discover_orphans(args: argparse.Namespace) -> int:
         except FetchError:
             return None
 
-    robots = discover.Robots(text, http.config.user_agent)
+    def landing(url: str) -> str | None:
+        """Where a short link points, else the page it lands on: the board is in one or the other. A redirect that
+        names the board is read without requesting its target (Workable's job page answers with a challenge); one
+        that stays on the short link's host and names none (Workable's ``/oops`` for a closed job) is the end."""
+        try:
+            return http.get_text(url, follow_redirects=False, timeout=10)
+        except HTTPError as err:
+            if err.location and discover.detect_board(err.location):
+                return err.location
+            if err.location is None or urlsplit(err.location).hostname == urlsplit(url).hostname:
+                return None
+        except FetchError:
+            return None
+        return text(url)
+
+    robots = Robots(text, http.config.user_agent)
     try:
         db.init_db(conn)
         worklist = discover.orphans(conn.execute(_ORPHAN_JOBS).fetchall())
@@ -386,7 +404,7 @@ def _cmd_boards_discover_orphans(args: argparse.Namespace) -> int:
             board, how = o.board, "apply link"
             if board is None:
                 for link in o.short_links:
-                    if robots.allowed(link) and (html := text(link)) and (board := discover.detect_board(html)):
+                    if robots.allowed(link) and (page := landing(link)) and (board := discover.detect_board(page)):
                         how = "short link"
                         break
             if board is None and o.other_ats:
