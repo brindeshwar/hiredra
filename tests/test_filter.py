@@ -85,6 +85,32 @@ def test_extract_max_years_ignores_company_history():
     assert funnel.extract_max_years("A company that has been providing quality childcare for over 20 years!") is None
 
 
+def test_extract_max_years_ignores_company_size_beside_its_years():
+    # the Keka false drop (2026-11-01): an "Associate AI Engineer" asking 1-2 years, dropped as 13
+    text = (
+        "With 13+ years of experience, 350+ professionals, and 400+ agency partners globally, E2M offers services "
+        "across WordPress, Shopify, SEO, PPC, content marketing, and AI automation.\n"
+        "1–2 years of experience in software development, AI/ML, backend development."
+    )
+    assert funnel.extract_max_years(text) == 1
+    assert funnel.extract_max_years("Over 20 years of experience and 5,000 employees in 30 countries.") is None
+    # about the candidate, it counts
+    assert funnel.extract_max_years("You bring 5+ years of experience and 2+ projects shipped to production.") == 5
+    assert funnel.extract_max_years("5+ years of experience leading 10+ engineers.") == 5
+
+
+def test_extract_max_years_ignores_service_agreements():
+    # the Keka false drop (2026-11-01): a fresher role dropped as needing 3 years
+    text = "Fresher role.\n• Agreement Period: 3 Years from the date of joining (including probation)."
+    assert funnel.extract_max_years(text) is None
+    assert funnel.extract_max_years("There is a service bond of 2 years.") is None
+    assert funnel.extract_max_years("Lock-in period: 18 months; 3 years after joining.") is None
+    assert funnel.extract_max_years("Contract duration: 3 years") is None
+    # experience still counts, even beside an agreement
+    assert funnel.extract_max_years("Bond: 2 years. 4 years of experience in Java.") == 4
+    assert funnel.extract_max_years("3 years of contract experience required") == 3
+
+
 def test_extract_max_years_ignores_age_phrases():
     assert funnel.extract_max_years("Availability on evenings and weekends 18+ years old") is None
     assert funnel.extract_max_years("Must be at least 21 years of age; 2 years of experience.") == 2
