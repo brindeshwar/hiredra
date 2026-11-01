@@ -3,6 +3,7 @@
 ``python -m hiredra.sourcing boards import PATH [--provenance NAME] [--provider NAME] [--db URL]``
 ``python -m hiredra.sourcing companies merge [--apply] [--curated PATH] [--db URL]``
 ``python -m hiredra.sourcing boards discover-yc PATH [--limit N] [--dry-run] [--db URL]``
+``python -m hiredra.sourcing boards discover-careers PATH [--limit N] [--dry-run] [--db URL]``
 
 A run crawls the ``boards`` table, picked by the run config's ``boards`` key (decision D2.1). A company list such
 as ``config/companies.yml``, or a public ``name,slug,url`` CSV of one ATS's companies (D2.2, ``--provider``
@@ -32,7 +33,7 @@ from hiredra.filter import load_filter_config, passes_location, passes_role_type
 from hiredra.sourcing import companies as company_merge
 from hiredra.sourcing import discover
 from hiredra.sourcing.config import INVENTORY_PROVENANCE, board_entry, load_companies, load_inventory, load_run_config
-from hiredra.sourcing.http import HttpClient, HttpConfig
+from hiredra.sourcing.http import FetchError, HttpClient, HttpConfig
 from hiredra.sourcing.orchestrator import RunReport, run as run_orchestrator
 from hiredra.sourcing.provider import FetchContext, company_slug
 from hiredra.sourcing.registry import REGISTRY, route
@@ -168,6 +169,119 @@ def _cmd_companies_merge(args: argparse.Namespace) -> int:
         conn.close()
 
 
+def _boarded_folds(conn) -> set[str]:
+    """Squashed keys (and aliases) of every company that already has a board."""
+    return discover.known_folds(
+        conn.execute(
+            "SELECT c.slug FROM companies c JOIN boards b ON b.company_id = c.id UNION "
+            "SELECT a.alias FROM company_slug_aliases a JOIN boards b ON b.company_id = a.company_id"
+        ).fetchall()
+    )
+
+
+def _funnel_counts(jobs, funnel) -> tuple[int, int]:
+    """(India/remote-eligible, passing all three text stages): the funnel run in memory, nothing stored."""
+    eligible = kept = 0
+    for job in jobs:
+        if not passes_location(job.title, job.location, job.description, funnel).keep:
+            continue
+        eligible += 1
+        if passes_seniority_gate(job.title, job.description, funnel).keep and passes_role_type(job.title, funnel).keep:
+            kept += 1
+    return eligible, kept
+
+
+def _cmd_boards_discover_careers(args: argparse.Namespace) -> int:
+    """Slice 2.5: YC companies hiring in India or remote, still without a board -> their own careers site is read
+    for a Greenhouse, Lever or Ashby board link (robots.txt respected, private addresses refused by the client).
+    A board found is imported as pending with provenance ``atsdetect`` once the ATS answers for it and its slug
+    carries the company's name, or its jobs name the company's web domain. Anything else is printed with ``?`` for
+    the owner to check: measured 2026-11-01, a site's board link is not always the company's own (a careers page
+    listing customers' jobs, a site redirected to its acquirer, an embed placeholder)."""
+    funnel = load_filter_config()
+    conn = db.connect(args.db)
+    http = HttpClient(HttpConfig())
+    ctx = FetchContext(http=http)
+
+    def text(url: str) -> str | None:
+        try:
+            return http.get_text(url, follow_redirects=True, timeout=args.timeout)
+        except FetchError:
+            return None
+
+    robots = discover.Robots(text, http.config.user_agent)
+    pages = refused = 0
+
+    def page(url: str) -> str | None:
+        nonlocal pages, refused
+        if not robots.allowed(url):
+            refused += 1
+            return None
+        pages += 1
+        time.sleep(args.pause)
+        return text(url)
+
+    try:
+        db.init_db(conn)
+        candidates = [c for c in discover.yc_candidates(args.path, _boarded_folds(conn)) if c.website]
+        candidates = candidates[: args.limit or None]
+        print(f"discover-careers {args.path}: {len(candidates)} candidates with a website and no board yet")
+        found = linked = doubted = eligible = kept = 0
+        started = time.monotonic()
+        by_provider: dict[str, int] = {}
+        outcomes: dict[str, int] = {}  # import_board's answer: new / known / ...
+        for i, cand in enumerate(candidates, 1):
+            hit = discover.careers_walk(cand.website, page)
+            if hit is not None:
+                linked += 1
+                provider, slug, where = hit
+                result = discover.probe(
+                    discover.Candidate(cand.name, (slug,), cand.website, cand.team_size),
+                    [p for p in REGISTRY if p.name == provider],
+                    ctx,
+                )
+                if result.provider is None:
+                    print(f"  - {cand.name}: {provider}/{slug} linked from {where}, but the ATS does not answer")
+                elif not (discover.slug_names(cand.name, slug) or discover.confirm(result) == "domain"):
+                    doubted += 1
+                    print(f"  ? {cand.name}: {provider}/{slug} ({len(result.jobs)} jobs) linked from {where}")
+                else:
+                    found += 1
+                    by_provider[provider] = by_provider.get(provider, 0) + 1
+                    e, k = _funnel_counts(result.jobs, funnel)
+                    eligible, kept = eligible + e, kept + k
+                    print(f"  + {cand.name}: {provider}/{slug} ({len(result.jobs)} jobs) linked from {where}")
+                    if not args.dry_run:
+                        with conn.transaction():
+                            outcome = db.import_board(
+                                conn, provider=provider, board=slug, name=cand.name, provenance="atsdetect",
+                                source_name=Path(args.path).name, careers_url=where,
+                            )  # fmt: skip
+                        outcomes[outcome] = outcomes.get(outcome, 0) + 1
+            if i % 25 == 0:
+                print(
+                    f"  .. {i}/{len(candidates)} sites, {found} found, {pages} pages, {time.monotonic() - started:.0f}s",
+                    flush=True,
+                )
+        print(
+            f"sites {len(candidates)}: board link found on {linked}, ATS answering and the company's {found} "
+            f"({', '.join(f'{k} {v}' for k, v in sorted(by_provider.items()))}), not clearly theirs {doubted} (?); "
+            f"pages read {pages}, "
+            f"refused by robots.txt {refused}; jobs India/remote-eligible {eligible}, passing all three stages {kept}"
+        )
+        print(
+            "DRY RUN: no board written."
+            if args.dry_run
+            else "boards: "
+            + (", ".join(f"{v} {k}" for k, v in sorted(outcomes.items())) or "none found")
+            + " (new ones added as pending, provenance atsdetect)"
+        )
+        return 0
+    finally:
+        http.close()
+        conn.close()
+
+
 def _cmd_boards_discover_yc(args: argparse.Namespace) -> int:
     """Slice 2.4: YC companies hiring in India or remote, without a board yet -> guessed slugs, checked live.
     A board found is imported as pending with provenance ``yc`` only when its jobs name the company's own web
@@ -179,13 +293,7 @@ def _cmd_boards_discover_yc(args: argparse.Namespace) -> int:
     ctx = FetchContext(http=HttpClient(HttpConfig()))
     try:
         db.init_db(conn)
-        known = discover.known_folds(
-            conn.execute(
-                "SELECT c.slug FROM companies c JOIN boards b ON b.company_id = c.id UNION "
-                "SELECT a.alias FROM company_slug_aliases a JOIN boards b ON b.company_id = a.company_id"
-            ).fetchall()
-        )
-        candidates = discover.yc_candidates(args.path, known)[: args.limit or None]
+        candidates = discover.yc_candidates(args.path, _boarded_folds(conn))[: args.limit or None]
         print(f"discover-yc {args.path}: {len(candidates)} candidates (hiring, India/remote region, no board yet)")
         found = eligible = kept = errors = 0
         by_provider: dict[str, int] = {}
@@ -205,15 +313,8 @@ def _cmd_boards_discover_yc(args: argparse.Namespace) -> int:
                     continue  # name-only or nothing: too likely a namesake to import unchecked
                 found += 1
                 by_provider[result.provider] = by_provider.get(result.provider, 0) + 1
-                for job in result.jobs:
-                    if not passes_location(job.title, job.location, job.description, funnel).keep:
-                        continue
-                    eligible += 1
-                    if (
-                        passes_seniority_gate(job.title, job.description, funnel).keep
-                        and passes_role_type(job.title, funnel).keep
-                    ):
-                        kept += 1
+                e, k = _funnel_counts(result.jobs, funnel)
+                eligible, kept = eligible + e, kept + k
                 if not args.dry_run:
                     with conn.transaction():
                         db.import_board(
@@ -288,6 +389,14 @@ def main(argv: list[str] | None = None) -> int:
     p_yc.add_argument("--dry-run", action="store_true", help="report only; write no board")
     p_yc.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
     p_yc.set_defaults(func=_cmd_boards_discover_yc)
+    p_cs = boards_sub.add_parser("discover-careers", help="find boards linked from YC companies' careers sites (D2.2)")
+    p_cs.add_argument("path", help="yc-oss companies/all.json, downloaded into data/ (no licence stated: local only)")
+    p_cs.add_argument("--limit", type=int, default=0, help="read only the first N sites")
+    p_cs.add_argument("--pause", type=float, default=0.5, help="seconds between page requests")
+    p_cs.add_argument("--timeout", type=float, default=10.0, help="seconds per page")
+    p_cs.add_argument("--dry-run", action="store_true", help="report only; write no board")
+    p_cs.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
+    p_cs.set_defaults(func=_cmd_boards_discover_careers)
 
     p_companies = sub.add_parser("companies", help="one company per employer (D2.4)")
     companies_sub = p_companies.add_subparsers(dest="companies_command", required=True)

@@ -5,6 +5,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from hiredra.sourcing import discover
 from hiredra.sourcing.http import FetchError, HTTPError
 from hiredra.sourcing.job import Job
@@ -76,3 +78,81 @@ def test_confirm_tells_the_company_from_a_namesake():
     assert discover.confirm(result([_job("Apollo is hiring")])) == "name"
     assert discover.confirm(result([_job("Apollo is hiring")] * 40)) == "none"  # out-hires an 8-person startup
     assert discover.confirm(result([_job("We build boats")])) == "none"
+
+
+# ── slice 2.5: the careers site ─────────────────────────────────────────────
+@pytest.mark.parametrize(
+    ("html", "want"),
+    [
+        ('<script src="https://boards.greenhouse.io/embed/job_board/js?for=acme"></script>', ("greenhouse", "acme")),
+        ('<a href="https://job-boards.greenhouse.io/razorpay/jobs/1">', ("greenhouse", "razorpay")),
+        ('<a href="https://jobs.lever.co/acme-co">Jobs</a>', ("lever", "acme-co")),
+        ('<a href="https://jobs.eu.lever.co/acme">Jobs</a>', ("lever", "acme")),
+        ('<iframe src="https://jobs.ashbyhq.com/apollo-graphql/embed"></iframe>', ("ashby", "apollo-graphql")),
+        ('<a href="https://boards.greenhouse.io/embed/">x</a>', None),  # "embed" is never a board
+        ('<a href="https://notjobs.lever.cool/x">', None),
+        ("<p>We are hiring!</p>", None),
+    ],
+)
+def test_detect_board(html, want):
+    assert discover.detect_board(html) == want
+
+
+@pytest.mark.parametrize(
+    ("company", "slug", "want"),
+    [
+        ("Razorpay", "razorpaysoftwareprivatelimited", True),
+        ("Nourish", "usenourish", True),
+        ("Bolna AI", "bolna", True),
+        ("Dyneti Technologies", "dyneti", True),
+        ("Kivo Health", "kivo-health", True),
+        ("Cargo", "checkr", False),  # a careers page listing customers' jobs
+        ("Minimum", "novisto78", False),  # the site redirects to its acquirer
+        ("Flock Safety", "demo", False),
+        ("AI Co", "ai", False),  # too short to mean anything
+    ],
+)
+def test_slug_names(company, slug, want):
+    assert discover.slug_names(company, slug) is want
+
+
+def test_careers_walk_follows_paths_links_and_one_level_deeper():
+    site = {
+        "https://acme.com": '<a href="/about">About</a><a href="/team/join">Join our team</a>',
+        "https://acme.com/careers": '<a href="/careers/open-positions">See open positions</a>',
+        "https://acme.com/careers/open-positions": '<a href="https://jobs.ashbyhq.com/acme">Apply</a>',
+    }
+    asked = []
+
+    def fetch(url):
+        asked.append(url)
+        return site.get(url)
+
+    assert discover.careers_walk("https://acme.com/", fetch) == (
+        "ashby", "acme", "https://acme.com/careers/open-positions"
+    )  # fmt: skip
+    assert asked == ["https://acme.com", "https://acme.com/careers", "https://acme.com/careers/open-positions"]
+
+
+def test_careers_walk_uses_the_homepage_link_and_gives_up_cleanly():
+    site = {
+        "https://acme.com": '<a href="https://work.acme.com/">Careers</a>',
+        "https://work.acme.com/": '<a href="https://jobs.lever.co/acme">x</a>',
+    }
+    assert discover.careers_walk("https://acme.com", site.get) == ("lever", "acme", "https://work.acme.com/")
+    assert discover.careers_walk("https://quiet.example", lambda u: None) is None  # homepage unreachable
+    assert discover.careers_walk("not a url", lambda u: "") is None
+
+
+def test_robots_is_read_once_per_host_and_obeyed():
+    asked = []
+
+    def fetch(url):
+        asked.append(url)
+        return "User-agent: *\nDisallow: /careers\n" if "acme" in url else None
+
+    robots = discover.Robots(fetch, "Hiredra/0.1")
+    assert not robots.allowed("https://acme.com/careers")
+    assert robots.allowed("https://acme.com/jobs")
+    assert robots.allowed("https://other.com/careers")  # no robots.txt: everything allowed
+    assert asked == ["https://acme.com/robots.txt", "https://other.com/robots.txt"]
