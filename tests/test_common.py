@@ -107,9 +107,10 @@ def test_clean(value, expected):
 def test_sitemap_locs_reads_both_shapes():
     ns = 'xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"'
     urlset = (
-        f'\ufeff<?xml version="1.0"?><urlset {ns}><url><loc> https://a/jobs/1?x=1&amp;y=2 </loc></url><url/></urlset>'
+        f'\ufeff<?xml version="1.0"?><urlset {ns}><url><loc> https://a/jobs/1?x=1&amp;y=2 </loc>'
+        "<lastmod>2026-10-01</lastmod></url><url><loc>https://a/jobs/2</loc></url><url/></urlset>"
     )
-    assert sitemap_locs(urlset) == (["https://a/jobs/1?x=1&y=2"], [])
+    assert sitemap_locs(urlset) == ([("https://a/jobs/1?x=1&y=2", "2026-10-01"), ("https://a/jobs/2", None)], [])
     index = f"<sitemapindex {ns}><sitemap><loc>https://a/s1.xml</loc></sitemap></sitemapindex>"
     assert sitemap_locs(index) == ([], ["https://a/s1.xml"])
 

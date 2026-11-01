@@ -73,3 +73,32 @@ def ld_job_posting(page: str | None) -> dict | None:
         if postings := _job_postings(value):
             return postings[0]
     return None
+
+
+def itemprop_html(page: str | None, prop: str) -> list[str]:
+    """The inner HTML of each element carrying ``itemprop="<prop>"`` (schema.org microdata), up to its matching
+    close tag; a self-closing or never-closed element gives nothing. For pages that mark a posting up in microdata
+    instead of ld+json (SuccessFactors)."""
+    page = page or ""
+    found: list[str] = []
+    opening = re.compile(rf"""<([A-Za-z][A-Za-z0-9]*)\b[^>]*\bitemprop=["']{re.escape(prop)}["'][^>]*>""", re.I)
+    for m in opening.finditer(page):
+        if m.group(0).endswith("/>"):
+            continue
+        tags = re.compile(rf"<(/?){m.group(1)}\b[^>]*?(/?)>", re.I)
+        depth = 1
+        for t in tags.finditer(page, m.end()):
+            depth += -1 if t.group(1) else 0 if t.group(2) else 1
+            if depth == 0:
+                found.append(page[m.end() : t.start()])
+                break
+    return found
+
+
+def meta_property(page: str | None, prop: str) -> str | None:
+    """The ``content`` of the first ``<meta property="<prop>">`` (Open Graph), unescaped."""
+    for tag in re.findall(r"<meta\b[^>]*>", page or "", re.I):
+        if re.search(rf"""\bproperty=["']{re.escape(prop)}["']""", tag, re.I):
+            m = re.search(r"""\bcontent=(["'])(.*?)\1""", tag, re.S)
+            return (html.unescape(m.group(2)).strip() or None) if m else None
+    return None

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from hiredra.sourcing._html import html_to_text, ld_job_posting
+from hiredra.sourcing._html import html_to_text, itemprop_html, ld_job_posting, meta_property
 
 
 @pytest.mark.parametrize("value", [None, "", "   "])
@@ -66,3 +66,20 @@ def test_ld_job_posting_finds_the_posting_in_any_shape(block):
 def test_ld_job_posting_none_without_one():
     assert ld_job_posting("<script type='application/ld+json'>{broken</script><p>x</p>") is None
     assert ld_job_posting(None) is None
+
+
+# ── itemprop_html / meta_property (freehire's html.go cases) ───────────────
+def test_itemprop_html_takes_each_element_to_its_matching_close():
+    page = (
+        '<div itemprop="description"><h2>Role</h2><div><p>Build it.</p></div></div>'
+        '<span itemprop="title">Engineer</span><meta itemprop="title" content="x"/><div itemprop="description">open'
+    )
+    assert itemprop_html(page, "description") == ["<h2>Role</h2><div><p>Build it.</p></div>"]
+    assert itemprop_html(page, "title") == ["Engineer"]
+    assert itemprop_html(page, "missing") == [] and itemprop_html(None, "title") == []
+
+
+def test_meta_property():
+    page = '<meta name="x" content="no"><meta content="A &amp; B" property="og:title"><meta property="og:title" content="2">'
+    assert meta_property(page, "og:title") == "A & B"
+    assert meta_property(page, "og:image") is None

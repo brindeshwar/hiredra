@@ -121,6 +121,20 @@ def test_confirm_tells_the_company_from_a_namesake():
             ("icims", "globalcareers-msci.icims.com"),
         ),  # not the classic careers-<slug> shape: the whole host
         ("https://www.icims.com/products/", None),
+        ("https://assaabloy.jobs2web.com/job/Pune-Engineer/1234/", ("successfactors", "assaabloy.jobs2web.com")),
+        ("https://acme.jobs.hr.cloud.sap/job/x/1/", ("successfactors", "acme.jobs.hr.cloud.sap")),
+        ("https://acme.stage.jobs2web.com/job/x/1/", None),  # a staging copy, one label deeper
+        ("https://career55.sapsf.eu/career?company=HCLPRD&career_job_req_id=1", None),  # legacy: no sitemap
+        (
+            "https://phf.tbe.taleo.net/phf01/ats/careers/v2/viewRequisition?org=COVESTIC2&cws=37&rid=14016",
+            ("taleobe", "COVESTIC2:37"),
+        ),
+        (
+            '<a href="https://chp.tbe.taleo.net/chp02/ats/careers/requisition.jsp?cws=4&amp;org=acme_co">',
+            ("taleobe", "ACME_CO:4"),
+        ),
+        ("https://phf.tbe.taleo.net/phf01/ats/careers/searchResults.jsp?org=ACME", None),  # no career site
+        ("https://uhg.taleo.net/careersection/10780/jobdetail.ftl?job=1", None),  # Taleo Enterprise: no adapter
         ('<a href="https://boards.greenhouse.io/embed/">x</a>', None),  # "embed" is never a board
         ('<a href="https://notjobs.lever.cool/x">', None),
         ("<p>We are hiring!</p>", None),

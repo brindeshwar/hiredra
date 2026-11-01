@@ -103,10 +103,10 @@ class ICIMSProvider:
         sitemap = f"https://{site}/sitemap.xml"
         if not robots.allowed(sitemap):
             raise FetchError(f"icims: {site} robots.txt disallows its sitemap", url=sitemap)
-        locs, subs = sitemap_locs(get(sitemap))
+        pages, subs = sitemap_locs(get(sitemap))
         for sub in subs:  # a sub-sitemap's postings are part of the board: one failing fails the board (freehire)
-            locs += sitemap_locs(get(sub))[0]
-        locs = [loc for loc in dict.fromkeys(locs) if job_id(loc)]
+            pages += sitemap_locs(get(sub))[0]
+        locs = [loc for loc in dict.fromkeys(loc for loc, _ in pages) if job_id(loc)]
 
         def detail(loc: str) -> Job | None:
             page = page_url(site, loc)

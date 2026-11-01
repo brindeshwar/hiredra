@@ -19,6 +19,7 @@ from hiredra.sourcing.http import FetchError
 from hiredra.sourcing.job import Job
 
 log = logging.getLogger("hiredra.sourcing.providers")
+BOM = "\ufeff"
 T = TypeVar("T")
 
 
@@ -158,20 +159,29 @@ class Robots:
         return parser.can_fetch(self._agent, url)
 
 
-def sitemap_locs(xml: str) -> tuple[list[str], list[str]]:
-    """A sitemap's ``(page locs, sub-sitemap locs)``: a ``<urlset>`` has the first, a ``<sitemapindex>`` the
-    second (freehire's ``sitemapDoc``). Anything else is an error, never an empty board."""
+def sitemap_locs(xml: str) -> tuple[list[tuple[str, str | None]], list[str]]:
+    """A sitemap's ``(pages, sub-sitemap locs)``, each page a ``(loc, lastmod)``: a ``<urlset>`` has the first, a
+    ``<sitemapindex>`` the second (freehire's ``sitemapDoc``). Anything else is an error, never an empty board."""
     try:
-        root = ElementTree.fromstring(xml.strip().removeprefix("﻿"))
+        root = ElementTree.fromstring(xml.strip().removeprefix(BOM))
     except ElementTree.ParseError as err:
         raise FetchError(f"sitemap is not XML: {err}") from err
-    kind = root.tag.rsplit("}", 1)[-1].lower()
+    kind = _local(root.tag).lower()
     if kind not in ("urlset", "sitemapindex"):
         raise FetchError(f"sitemap root is <{kind}>")
-    locs: dict[str, list[str]] = {"url": [], "sitemap": []}
+    pages: list[tuple[str, str | None]] = []
+    subs: list[str] = []
     for child in root:
-        name = child.tag.rsplit("}", 1)[-1]
-        loc = next((c.text for c in child if c.tag.rsplit("}", 1)[-1] == "loc"), None)
-        if name in locs and loc and loc.strip():
-            locs[name].append(loc.strip())
-    return locs["url"], locs["sitemap"]
+        fields = {_local(c.tag): (c.text or "").strip() for c in child}
+        if not fields.get("loc"):
+            continue
+        if _local(child.tag) == "url":
+            pages.append((fields["loc"], fields.get("lastmod") or None))
+        elif _local(child.tag) == "sitemap":
+            subs.append(fields["loc"])
+    return pages, subs
+
+
+def _local(tag: str) -> str:
+    """An XML tag without its namespace."""
+    return tag.rsplit("}", 1)[-1]
