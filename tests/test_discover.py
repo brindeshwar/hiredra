@@ -146,6 +146,21 @@ def test_confirm_tells_the_company_from_a_namesake():
         ("https://Kanerika.zohorecruit.com/jobs/Careers/7/x", ("zohorecruit", "kanerika.zohorecruit.com")),
         ("https://acme.zohorecruit.com.au/recruit/Portal.na?digest=x", ("zohorecruit", "acme.zohorecruit.com.au")),
         ("https://www.zohorecruit.com/jobs/", None),
+        (
+            "https://clearroute.teamtailor.com/jobs/8509129-ai-platform-support-engineer",
+            ("teamtailor", "clearroute.teamtailor.com"),
+        ),
+        ("https://teoco.na.teamtailor.com/jobs/727050-data-engineer", ("teamtailor", "teoco.na.teamtailor.com")),
+        ("https://tt.teamtailor.com/jobs/x", None),  # the vendor's own tracking host
+        ("https://ats.rippling.com/oneorigin/jobs/1e3cce74?jobSite=Indeed", ("rippling", "oneorigin")),
+        ("https://ats.rippling.com/api/v1/board/x/jobs", None),
+        (
+            "https://fortive.eightfold.ai/careers/job/893398346266?domain=fortive.com",
+            ("eightfold", "fortive.eightfold.ai/fortive.com"),
+        ),
+        ("https://paypal.eightfold.ai/careers/job/274922789363", ("eightfold", "paypal.eightfold.ai")),
+        ("https://nab.eightfold.ai/careers?microsite=bnz&start=0&pid=563980770683036", None),  # a sub-brand's view
+        ("https://latentview.darwinbox.in/ms/candidatev2/main/careers/jobDetails/a1", None),  # no adapter (D4.3)
         ('<a href="https://boards.greenhouse.io/embed/">x</a>', None),  # "embed" is never a board
         ('<a href="https://notjobs.lever.cool/x">', None),
         ("<p>We are hiring!</p>", None),

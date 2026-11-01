@@ -200,6 +200,17 @@ _KEKA_LINK = re.compile(
     r"(?i)(?<![A-Za-z0-9.-])((?!(?:www|app|dashboard|admin|api|support|help|blog|docs)\.)[a-z0-9][a-z0-9-]*)"
     r"\.keka\.com/careers"
 )
+#: Teamtailor: the career-site host, regional label included (``teoco.na.teamtailor.com``); ``tt``/``app``/``www`` are
+#: the vendor's.
+_TEAMTAILOR_LINK = re.compile(
+    r"(?i)(?<![A-Za-z0-9.-])((?!(?:www|app|tt)\.)[a-z0-9][a-z0-9-]*(?:\.[a-z]{2})?\.teamtailor\.com)/jobs"
+)
+#: Rippling: ``ats.rippling.com/<board>/jobs``.
+_RIPPLING_LINK = re.compile(r"(?i)(?<![A-Za-z0-9.-])ats\.rippling\.com/(?!api/)([a-z0-9][a-z0-9_-]*)/jobs")
+#: Eightfold: ``<tenant>.eightfold.ai/careers``; the board is ``host/domain`` when the link names the domain.
+_EIGHTFOLD_LINK = re.compile(
+    r"""(?i)(?<![A-Za-z0-9.-])((?!(?:www|app)\.)[a-z0-9][a-z0-9-]*\.eightfold\.ai)/careers[^\s"'<>]*"""
+)
 #: Zoho Recruit: a tenant host on any regional domain (``<tenant>.zohorecruit.com``/``.in``/``.eu``) is the board.
 _ZOHO_LINK = re.compile(
     r"(?i)(?<![A-Za-z0-9.-])((?!www\.)[a-z0-9][a-z0-9-]*\.zohorecruit(?:\.[a-z]{2,3}){1,2})/(?:jobs|recruit)/"
@@ -215,8 +226,8 @@ _DEEPER = re.compile(r"(?i)(vacan|opening|apply|position|current-|search.?job|jo
 
 def detect_board(html: str) -> tuple[str, str] | None:
     """The first Greenhouse, Lever or Ashby board a page links to or embeds, else a Workday, Oracle,
-    SmartRecruiters, Workable, iCIMS, SuccessFactors, Taleo Business Edition, Keka or Zoho Recruit one, as
-    ``(provider, slug)``."""
+    SmartRecruiters, Workable, iCIMS, SuccessFactors, Taleo Business Edition, Keka, Zoho Recruit, Teamtailor,
+    Rippling or Eightfold one, as ``(provider, slug)``."""
     for provider, pattern in _BOARD_LINKS:
         for m in pattern.finditer(html):
             slug = m.group(1).lower()
@@ -244,6 +255,15 @@ def detect_board(html: str) -> tuple[str, str] | None:
         return "keka", m.group(1).lower()
     if m := _ZOHO_LINK.search(html):
         return "zohorecruit", m.group(1).lower()
+    if m := _TEAMTAILOR_LINK.search(html):
+        return "teamtailor", m.group(1).lower()
+    if m := _RIPPLING_LINK.search(html):
+        return "rippling", m.group(1).lower()
+    for m in _EIGHTFOLD_LINK.finditer(html):
+        query = {k.lower(): v for k, v in parse_qs(urlsplit(unescape(m.group(0))).query).items()}
+        if "microsite" not in query:  # a sub-brand's view of a parent's board, not the employer's own
+            domain = (query.get("domain") or [""])[0].lower()
+            return "eightfold", f"{m.group(1).lower()}/{domain}" if domain else m.group(1).lower()
     return None
 
 
@@ -320,6 +340,10 @@ OTHER_ATS = (
     ("successfactors", re.compile(r"successfactors\.|\.sapsf\.|\.jobs2web\.com|\.jobs\.hr\.cloud\.sap")),
     ("keka", re.compile(r"\.keka\.com")),
     ("zohorecruit", re.compile(r"\.zohorecruit\.")),
+    ("teamtailor", re.compile(r"\.teamtailor\.com")),
+    ("rippling", re.compile(r"ats\.rippling\.com")),
+    ("eightfold", re.compile(r"\.eightfold\.ai")),
+    ("darwinbox", re.compile(r"\.darwinbox\.(?:in|com)")),  # no adapter: its API refuses a plain client (D4.3)
 )
 #: Short links that redirect to the board: Greenhouse's ``grnh.se`` (to the board, or a careers page embedding it)
 #: and Workable's account-less ``apply.workable.com/j/<code>`` (to ``/<account>/j/<code>``).

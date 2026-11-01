@@ -10,6 +10,7 @@ import logging
 import re
 from collections.abc import Callable, Iterable
 from datetime import date, datetime, timezone
+from email.utils import parsedate_to_datetime
 from typing import Any, TypeVar
 from urllib.parse import urlsplit
 from urllib.robotparser import RobotFileParser
@@ -185,3 +186,22 @@ def sitemap_locs(xml: str) -> tuple[list[tuple[str, str | None]], list[str]]:
 def _local(tag: str) -> str:
     """An XML tag without its namespace."""
     return tag.rsplit("}", 1)[-1]
+
+
+def rss_items(feed: str, provider: str) -> list[ElementTree.Element]:
+    """An RSS feed's ``<item>`` elements; a body that is not RSS is an error, never an empty board."""
+    try:
+        root = ElementTree.fromstring(feed.strip().removeprefix(BOM))
+    except ElementTree.ParseError as err:
+        raise FetchError(f"{provider}: the feed is not XML: {err}") from err
+    if root.tag != "rss":
+        raise FetchError(f"{provider}: the feed's root is <{root.tag}>")
+    return root.findall("./channel/item")
+
+
+def rss_date(value: str | None) -> str | None:
+    """An RFC 822 ``pubDate`` as ``YYYY-MM-DD``."""
+    try:
+        return parsedate_to_datetime(value).date().isoformat() if value else None
+    except (TypeError, ValueError):
+        return None

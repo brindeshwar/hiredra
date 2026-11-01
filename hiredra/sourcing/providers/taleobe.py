@@ -13,7 +13,6 @@ error page, an unknown career site on ``rssErrMsg.jsp``. Those are read as a 404
 from __future__ import annotations
 
 import re
-from email.utils import parsedate_to_datetime
 from urllib.parse import parse_qs, urlencode, urlsplit
 from xml.etree import ElementTree
 
@@ -21,7 +20,7 @@ from hiredra.sourcing._html import html_to_text
 from hiredra.sourcing.http import FetchError, HTTPError
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
-from hiredra.sourcing.providers._common import BOM, clean, infer_remote
+from hiredra.sourcing.providers._common import clean, infer_remote, rss_date, rss_items
 
 _ORG = re.compile(r"^[A-Z0-9_]+$")
 _CWS = re.compile(r"^[0-9]+$")
@@ -79,17 +78,7 @@ class TaleoBEProvider:
         if not _on_tbe(final):
             raise FetchError(f"taleobe: {url} left Taleo for {final}", url=url)
         org, _ = parse_board(board)
-        return [j for j in (to_job(entry.name, org, item) for item in items(resp.text)) if j is not None]
-
-
-def items(feed: str) -> list[ElementTree.Element]:
-    try:
-        root = ElementTree.fromstring(feed.strip().removeprefix(BOM))
-    except ElementTree.ParseError as err:
-        raise FetchError(f"taleobe: the feed is not XML: {err}") from err
-    if root.tag != "rss":
-        raise FetchError(f"taleobe: the feed's root is <{root.tag}>")
-    return root.findall("./channel/item")
+        return [j for j in (to_job(entry.name, org, item) for item in rss_items(resp.text, self.name)) if j is not None]
 
 
 def to_job(company: str, org: str, item: ElementTree.Element) -> Job | None:
@@ -111,14 +100,6 @@ def to_job(company: str, org: str, item: ElementTree.Element) -> Job | None:
         source="taleobe",
         description=html_to_text(text(f"{_NS}html-description") or text("description")) or None,
         location=location,
-        date_posted=_pub_date(text("pubDate")),
+        date_posted=rss_date(text("pubDate")),
         is_remote=infer_remote(f"{location or ''} {title}"),
     )
-
-
-def _pub_date(value: str | None) -> str | None:
-    """An RFC 822 ``pubDate`` as ``YYYY-MM-DD``."""
-    try:
-        return parsedate_to_datetime(value).date().isoformat() if value else None
-    except (TypeError, ValueError):
-        return None
