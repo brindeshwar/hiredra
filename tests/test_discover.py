@@ -89,6 +89,16 @@ def test_confirm_tells_the_company_from_a_namesake():
         ('<a href="https://jobs.lever.co/acme-co">Jobs</a>', ("lever", "acme-co")),
         ('<a href="https://jobs.eu.lever.co/acme">Jobs</a>', ("lever", "acme")),
         ('<iframe src="https://jobs.ashbyhq.com/apollo-graphql/embed"></iframe>', ("ashby", "apollo-graphql")),
+        (
+            "https://abb.wd3.myworkdayjobs.com/en-US/External_Career_Page/job/Bangalore/X_JR1",
+            ("workday", "abb.wd3.myworkdayjobs.com/External_Career_Page"),
+        ),  # the site keeps its case
+        ("https://Autodesk.wd1.myworkdayjobs.com/Ext/details/Y_1", ("workday", "autodesk.wd1.myworkdayjobs.com/Ext")),
+        (
+            "https://wd1.myworkdaysite.com/en-US/recruiting/snapchat/snap/job/Z",
+            ("workday", "wd1.myworkdaysite.com/snapchat/snap"),
+        ),
+        ("https://acme.wd5.myworkdayjobs.com/job/Pune/X", None),  # no site in the link
         ('<a href="https://boards.greenhouse.io/embed/">x</a>', None),  # "embed" is never a board
         ('<a href="https://notjobs.lever.cool/x">', None),
         ("<p>We are hiring!</p>", None),
@@ -163,14 +173,20 @@ def test_orphans_read_apply_links_and_guess_the_rest():
     rows = [
         (1, "Velaura", "Backend Engineer", "https://jobs.lever.co/velaura/abc", "https://in.indeed.com/x"),
         (1, "Velaura", "ML Engineer", None, None),
-        (2, "Infosys Limited", "Java Developer", "https://infosys.myworkdayjobs.com/en/job/1", None),
+        (
+            2,
+            "Infosys Limited",
+            "Java Developer",
+            "https://career.infosys.taleo.net/careersection/2/jobdetail.ftl?job=1",
+            None,
+        ),
         (3, "Genea", "SRE", "https://grnh.se/abc123", None),
         (4, "Acme Group", "Data Engineer", None, "https://in.indeed.com/y"),
     ]
     by_name = {o.name: o for o in discover.orphans(rows)}
     velaura = by_name["Velaura"]
     assert velaura.board == ("lever", "velaura") and velaura.titles == {"backend engineer", "ml engineer"}
-    assert by_name["Infosys Limited"].other_ats == "workday" and by_name["Infosys Limited"].board is None
+    assert by_name["Infosys Limited"].other_ats == "taleo" and by_name["Infosys Limited"].board is None
     assert by_name["Genea"].short_links == ["https://grnh.se/abc123"]
     assert by_name["Acme Group"].slugs == ("acme", "acmegroup", "acme-group")  # the board-name tail off first
 

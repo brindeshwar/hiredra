@@ -113,15 +113,17 @@ def run(
     resume: bool = False,
     sleep: Callable[[float], None] = time.sleep,
     rng: random.Random | None = None,
+    seen: Callable[[str], bool] | None = None,
 ) -> RunReport:
     """Fetch every company in ``companies`` (the caller picks them: the CLI reads the ``boards`` table, D2.1) +
     the JobSpy batch, handing each batch to ``sink.consume()``. Fail-soft per company and per JobSpy site (sec. 5/9) --
-    only a config error or a genuine bug raises out of this function.
+    only a config error or a genuine bug raises out of this function. ``seen`` (is a job id already stored?) goes
+    into the fetch context for hydrating providers (D3.4).
     """
     rng = rng or random.Random()
     owns_ctx = ctx is None
     if ctx is None:
-        ctx = FetchContext(http=HttpClient(config.http))
+        ctx = FetchContext(http=HttpClient(config.http), **({"seen": seen} if seen else {}))
 
     try:
         # Cross-process cooldown durability (decisions.md #27).

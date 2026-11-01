@@ -11,7 +11,7 @@ The JobSpy source is deliberately NOT a ``Provider``: it is company-agnostic
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 from urllib.parse import urlsplit
@@ -41,12 +41,13 @@ class CompanyEntry:
 class FetchContext:
     """Shared context handed to every ``Provider.fetch`` call.
 
-    Carries the http client (retry / backoff / cooldown / proxy). Results-per-run,
-    concurrency and delay knobs are added here when a provider or the orchestrator
-    needs them (sub-slice 4+).
+    Carries the http client (retry / backoff / cooldown / proxy) and ``seen``: is a ``job_id`` already stored? A
+    hydrating provider (one detail request per posting, D3.4) fetches details only for postings ``seen`` says are
+    new; the CLI answers it from the database, so the orchestrator stays DB-free. Default: nothing is stored.
     """
 
     http: HttpClient
+    seen: Callable[[str], bool] = field(default=lambda job_id: False)
 
 
 @runtime_checkable
