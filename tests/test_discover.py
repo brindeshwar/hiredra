@@ -156,3 +156,37 @@ def test_robots_is_read_once_per_host_and_obeyed():
     assert robots.allowed("https://acme.com/jobs")
     assert robots.allowed("https://other.com/careers")  # no robots.txt: everything allowed
     assert asked == ["https://acme.com/robots.txt", "https://other.com/robots.txt"]
+
+
+# ── slice 2.6: companies seen only on JobSpy ────────────────────────────────
+def test_orphans_read_apply_links_and_guess_the_rest():
+    rows = [
+        (1, "Velaura", "Backend Engineer", "https://jobs.lever.co/velaura/abc", "https://in.indeed.com/x"),
+        (1, "Velaura", "ML Engineer", None, None),
+        (2, "Infosys Limited", "Java Developer", "https://infosys.myworkdayjobs.com/en/job/1", None),
+        (3, "Genea", "SRE", "https://grnh.se/abc123", None),
+        (4, "Acme Group", "Data Engineer", None, "https://in.indeed.com/y"),
+    ]
+    by_name = {o.name: o for o in discover.orphans(rows)}
+    velaura = by_name["Velaura"]
+    assert velaura.board == ("lever", "velaura") and velaura.titles == {"backend engineer", "ml engineer"}
+    assert by_name["Infosys Limited"].other_ats == "workday" and by_name["Infosys Limited"].board is None
+    assert by_name["Genea"].short_links == ["https://grnh.se/abc123"]
+    assert by_name["Acme Group"].slugs == ("acme", "acmegroup", "acme-group")  # the board-name tail off first
+
+
+def test_orphans_drop_a_guess_two_employers_propose():
+    rows = [(1, "Nova Labs", "x", None, None), (2, "Nova-Labs Inc", "y", None, None), (3, "NovaLabs", "z", None, None)]
+    rows += [(4, "Bolt", "x", None, None), (5, "Bolt Group", "y", None, None)]
+    by_name = {o.name: o for o in discover.orphans(rows)}
+    assert by_name["NovaLabs"].slugs == ("novalabs",)  # one employer under three spellings keeps its guesses
+    assert by_name["Bolt"].slugs == () and by_name["Bolt Group"].slugs == ("boltgroup", "bolt-group")
+    assert discover.orphans([(1, "AI", "x", None, None)])[0].slugs == ()  # too short to be anyone's
+
+
+def test_same_opening_needs_a_shared_title():
+    titles = {discover.norm_title("Backend Engineer (Python) - Bengaluru")}
+    assert discover.same_opening(
+        [Job(url="u", title="Backend Engineer (Python) – Bengaluru", company="X", source="lever")], titles
+    )
+    assert not discover.same_opening([Job(url="u", title="Backend Engineer", company="X", source="lever")], titles)

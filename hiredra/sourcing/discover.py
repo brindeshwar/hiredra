@@ -255,3 +255,81 @@ class Robots:
             parser.parse((self._fetch(origin + "/robots.txt") or "").splitlines())
             self._cache[origin] = parser
         return parser.can_fetch(self._agent, url)
+
+
+# ── slice 2.6: companies seen only on an aggregator (JobSpy) ────────────────
+# Ported in idea from freehire's ``cmd/harvest-orphans`` (MIT): the worklist is the companies the store holds only
+# through aggregators, each proposing board ids from its name alone, a candidate two employers propose dropped.
+# Our additions, from slices 2.4-2.5: an aggregator job's own apply link is read first (it names the board, no
+# guess), and a guessed board is kept only when it lists a job title we saw on the aggregator for that company.
+
+#: Apply links that show a company uses an ATS we have no adapter for yet (build step 3). Such a company is not
+#: guessed on Greenhouse/Lever/Ashby, where it could only meet a namesake; it is counted for step 3 instead.
+OTHER_ATS = (
+    ("workday", re.compile(r"\.myworkday(?:jobs|site)\.com")),
+    ("oracle", re.compile(r"\.oraclecloud\.com")),
+    ("smartrecruiters", re.compile(r"smartrecruiters\.com")),
+    ("icims", re.compile(r"\.icims\.com")),
+    ("workable", re.compile(r"workable\.com")),
+    ("taleo", re.compile(r"\.taleo\.net")),
+    ("successfactors", re.compile(r"successfactors\.|\.sapsf\.")),
+)
+#: Greenhouse's short-link host: it redirects to the board (or a careers page embedding it).
+SHORT_LINK_HOSTS = frozenset({"grnh.se"})
+#: Words a board id commonly drops that the company key keeps (freehire's ``boardNameTails``).
+_BOARD_NAME_TAILS = re.compile(r"(?i)[\s,]+(?:group|s\.?p\.?a\.?)$")
+#: The shortest guess worth probing (freehire's ``minCandidate``): shorter ids belong to someone else.
+MIN_GUESS = 3
+
+
+@dataclass(slots=True)
+class Orphan:
+    company_id: int
+    name: str
+    titles: set[str] = field(default_factory=set)  # normalised, as seen on the aggregator
+    links: list[str] = field(default_factory=list)  # the jobs' apply and listing URLs
+    board: tuple[str, str] | None = None  # (provider, slug) an apply link names
+    other_ats: str | None = None
+    short_links: list[str] = field(default_factory=list)
+    slugs: tuple[str, ...] = ()
+
+
+def norm_title(title: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", (title or "").lower()))
+
+
+def orphans(rows: Iterable[Sequence[Any]]) -> list[Orphan]:
+    """Rows of ``(company_id, company name, job title, url, apply_url)``, one per aggregator job, grouped per company
+    and sorted by name. Each orphan's apply links are read: a Greenhouse/Lever/Ashby board, another ATS, or a
+    short link to follow. The rest get guessed slugs, a guess two employers propose dropped (freehire's rule)."""
+    by_id: dict[int, Orphan] = {}
+    for cid, name, title, *urls in rows:
+        o = by_id.setdefault(cid, Orphan(cid, name))
+        o.titles.add(norm_title(title))
+        o.links += [u for u in urls if u]
+    out = sorted(by_id.values(), key=lambda o: o.name.lower())
+    for o in out:
+        for link in o.links:
+            if o.board is None and (found := detect_board(link)):
+                o.board = found
+            if o.other_ats is None:
+                o.other_ats = next((ats for ats, pattern in OTHER_ATS if pattern.search(link)), None)
+            if _host(link) in SHORT_LINK_HOSTS and link not in o.short_links:
+                o.short_links.append(link)
+    for o in out:
+        tail_off = company_slug(_BOARD_NAME_TAILS.sub("", o.name))
+        o.slugs = tuple(g for g in slug_guesses(o.name, [tail_off, tail_off.replace("-", "")]) if len(g) >= MIN_GUESS)
+    claims: dict[str, str] = {}  # guess -> the squashed key of the first employer proposing it
+    contested: set[str] = set()
+    for o in out:
+        key = company_slug(o.name).replace("-", "")
+        contested.update(g for g in o.slugs if claims.setdefault(g, key) != key)
+    for o in out:
+        o.slugs = tuple(g for g in o.slugs if g not in contested)
+    return out
+
+
+def same_opening(jobs: Iterable[Job], titles: set[str]) -> bool:
+    """Does the board list a job with a title we saw on the aggregator for this company? The same opening on both
+    is the employer's evidence a namesake can't give (2.4 found three namesakes that a name match let through)."""
+    return any(norm_title(j.title) in titles for j in jobs)

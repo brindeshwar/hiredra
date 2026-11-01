@@ -82,6 +82,19 @@ def test_a_known_board_keeps_its_company_and_mints_none_for_another_spelling(con
     ).fetchone()[0] == "1910"  # fmt: skip
 
 
+def test_a_checked_discovery_records_its_spelling_as_an_alias(conn):
+    _board(conn, "greenhouse", "razorpaysoftwareprivatelimited", "openjobs", name="Razorpaysoftwareprivatelimited")
+    kw = dict(provider="greenhouse", board="razorpaysoftwareprivatelimited", provenance="atsdetect", source_name="yc")
+    assert db.import_board(conn, name="Razorpay", alias=True, **kw) == "known"
+    razorpay = conn.execute("SELECT company_id FROM boards").fetchone()[0]
+    assert db._company_id(conn, "Razorpay") == razorpay
+    assert conn.execute("SELECT count(*) FROM companies").fetchone()[0] == 1
+
+    db._company_id(conn, "Weekday")  # a spelling that is already a company is a merge, not an alias
+    assert db.record_alias(conn, "Weekday", razorpay) is False
+    assert conn.execute("SELECT alias FROM company_slug_aliases").fetchall() == [("razorpay",)]
+
+
 def test_a_board_retired_for_another_reason_is_not_re_enabled(conn):
     _board(conn, "ashby", "ramp", "curated", status="retired")
     conn.execute("UPDATE boards SET status_reason = 'board removed by the company'")

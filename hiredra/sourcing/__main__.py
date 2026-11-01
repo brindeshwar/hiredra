@@ -4,6 +4,7 @@
 ``python -m hiredra.sourcing companies merge [--apply] [--curated PATH] [--db URL]``
 ``python -m hiredra.sourcing boards discover-yc PATH [--limit N] [--dry-run] [--db URL]``
 ``python -m hiredra.sourcing boards discover-careers PATH [--limit N] [--dry-run] [--db URL]``
+``python -m hiredra.sourcing boards discover-orphans [--limit N] [--dry-run] [--db URL]``
 
 A run crawls the ``boards`` table, picked by the run config's ``boards`` key (decision D2.1). A company list such
 as ``config/companies.yml``, or a public ``name,slug,url`` CSV of one ATS's companies (D2.2, ``--provider``
@@ -255,7 +256,7 @@ def _cmd_boards_discover_careers(args: argparse.Namespace) -> int:
                         with conn.transaction():
                             outcome = db.import_board(
                                 conn, provider=provider, board=slug, name=cand.name, provenance="atsdetect",
-                                source_name=Path(args.path).name, careers_url=where,
+                                source_name=Path(args.path).name, careers_url=where, alias=True,
                             )  # fmt: skip
                         outcomes[outcome] = outcomes.get(outcome, 0) + 1
             if i % 25 == 0:
@@ -319,7 +320,7 @@ def _cmd_boards_discover_yc(args: argparse.Namespace) -> int:
                     with conn.transaction():
                         db.import_board(
                             conn, provider=result.provider, board=result.slug, name=cand.name, provenance="yc",
-                            source_name=Path(args.path).name,
+                            source_name=Path(args.path).name, alias=True,
                         )  # fmt: skip
             if i % 25 == 0:
                 print(
@@ -334,6 +335,112 @@ def _cmd_boards_discover_yc(args: argparse.Namespace) -> int:
         return 0
     finally:
         ctx.http.close()
+        conn.close()
+
+
+_ORPHAN_JOBS = """
+SELECT j.company_id, c.name, j.title, j.apply_url, j.url
+FROM jobs j JOIN companies c ON c.id = j.company_id
+WHERE j.source LIKE 'jobspy-%%'
+  AND NOT EXISTS (SELECT 1 FROM boards b WHERE b.company_id = j.company_id)
+  AND NOT EXISTS (SELECT 1 FROM jobs k WHERE k.company_id = j.company_id AND k.source NOT LIKE 'jobspy-%%')
+"""
+
+
+def _cmd_boards_discover_orphans(args: argparse.Namespace) -> int:
+    """Slice 2.6: companies we hold only through JobSpy (no board, no ATS job) -> their board. An apply link that
+    names a Greenhouse/Lever/Ashby board is taken as is (a ``grnh.se`` short link is followed once); otherwise the
+    name's guessed slugs are probed, and a board found is kept only if it lists a job title we saw on the
+    aggregator for that company. A company whose apply links show another ATS is counted for build step 3, not
+    guessed. A board found that we already hold under another company is that company under a second name: a
+    merge suggestion is printed, nothing is written for it. New boards are imported as pending, provenance
+    ``aggregator``."""
+    funnel = load_filter_config()
+    conn = db.connect(args.db)
+    http = HttpClient(HttpConfig())
+    ctx = FetchContext(http=http)
+
+    def text(url: str) -> str | None:
+        try:
+            return http.get_text(url, follow_redirects=True, timeout=10)
+        except FetchError:
+            return None
+
+    robots = discover.Robots(text, http.config.user_agent)
+    try:
+        db.init_db(conn)
+        worklist = discover.orphans(conn.execute(_ORPHAN_JOBS).fetchall())[: args.limit or None]
+        print(f"discover-orphans: {len(worklist)} companies seen only on JobSpy")
+        tally: dict[str, int] = {}
+        other_ats: dict[str, int] = {}
+        merges: list[tuple[str, str]] = []
+        found = eligible = kept = 0
+        started = time.monotonic()
+        for i, o in enumerate(worklist):
+            if i and i % 50 == 0:
+                print(f"  .. {i}/{len(worklist)} companies, {found} new, {time.monotonic() - started:.0f}s", flush=True)
+            board, how = o.board, "apply link"
+            if board is None:
+                for link in o.short_links:
+                    if robots.allowed(link) and (html := text(link)) and (board := discover.detect_board(html)):
+                        how = "short link"
+                        break
+            if board is None and o.other_ats:
+                other_ats[o.other_ats] = other_ats.get(o.other_ats, 0) + 1
+                tally["uses another ATS"] = tally.get("uses another ATS", 0) + 1
+                continue
+            providers = REGISTRY if board is None else [p for p in REGISTRY if p.name == board[0]]
+            slugs = o.slugs if board is None else (board[1],)
+            result = discover.probe(
+                discover.Candidate(o.name, slugs), providers, ctx, sleep=time.sleep, pause=args.pause
+            )
+            if result.provider is None:
+                tally["no board"] = tally.get("no board", 0) + 1
+                if board is not None:
+                    print(f"  - {o.name}: {board[0]}/{board[1]} from an {how}, but the ATS does not answer")
+                continue
+            if board is None:
+                how = "guess"
+                if not discover.same_opening(result.jobs, o.titles):
+                    tally["guess, no shared job title"] = tally.get("guess, no shared job title", 0) + 1
+                    print(f"  ? {o.name}: {result.provider}/{result.slug} ({len(result.jobs)} jobs), no shared title")
+                    continue
+            owner = conn.execute(
+                "SELECT c.name FROM boards b JOIN companies c ON c.id = b.company_id"
+                " WHERE b.provider = %s AND b.board = %s",
+                (result.provider, result.slug),
+            ).fetchone()
+            if owner is not None:
+                tally["board already ours"] = tally.get("board already ours", 0) + 1
+                merges.append((o.name, owner[0]))
+                print(f"  = {o.name}: {result.provider}/{result.slug} is already {owner[0]}'s board ({how})")
+                continue
+            found += 1
+            tally[f"new, by {how}"] = tally.get(f"new, by {how}", 0) + 1
+            e, k = _funnel_counts(result.jobs, funnel)
+            eligible, kept = eligible + e, kept + k
+            print(f"  + {o.name}: {result.provider}/{result.slug} ({len(result.jobs)} jobs, by {how})")
+            if not args.dry_run:
+                with conn.transaction():
+                    db.import_board(
+                        conn, provider=result.provider, board=result.slug, name=o.name, provenance="aggregator",
+                        source_name="jobspy", alias=True,
+                    )  # fmt: skip
+        print(f"companies {len(worklist)}: " + ", ".join(f"{v} {k}" for k, v in sorted(tally.items())))
+        print("other ATSs (build step 3): " + (", ".join(f"{k} {v}" for k, v in sorted(other_ats.items())) or "none"))
+        print(f"new boards {found}: jobs India/remote-eligible {eligible}, passing all three stages {kept}")
+        if merges:
+            print(f"one employer under two names ({len(merges)}); to merge, add to config/company_merges.yml:")
+            for ours, theirs in merges:
+                print(f"  - [{ours!r}, {theirs!r}]")
+        print(
+            "DRY RUN: no board written."
+            if args.dry_run
+            else f"imported {found} board(s) as pending, provenance aggregator"
+        )
+        return 0
+    finally:
+        http.close()
         conn.close()
 
 
@@ -397,6 +504,13 @@ def main(argv: list[str] | None = None) -> int:
     p_cs.add_argument("--dry-run", action="store_true", help="report only; write no board")
     p_cs.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
     p_cs.set_defaults(func=_cmd_boards_discover_careers)
+
+    p_or = boards_sub.add_parser("discover-orphans", help="find boards for companies seen only on JobSpy (D2.2)")
+    p_or.add_argument("--limit", type=int, default=0, help="check only the first N companies")
+    p_or.add_argument("--pause", type=float, default=0.5, help="seconds between probe requests")
+    p_or.add_argument("--dry-run", action="store_true", help="report only; write no board")
+    p_or.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
+    p_or.set_defaults(func=_cmd_boards_discover_orphans)
 
     p_companies = sub.add_parser("companies", help="one company per employer (D2.4)")
     companies_sub = p_companies.add_subparsers(dest="companies_command", required=True)
