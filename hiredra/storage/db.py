@@ -212,6 +212,25 @@ def _company_id(conn: psycopg.Connection, name: str) -> int | None:
     return conn.execute("SELECT id FROM companies WHERE slug = %s", (key,)).fetchone()[0]
 
 
+def record_alias(conn: psycopg.Connection, name: str, company_id: int) -> bool:
+    """Record ``name`` as another spelling of ``company_id`` (build slice 2.6), unless that spelling already reaches
+    a company: then the two are one employer under two rows, a merge for the owner, not an alias. True if
+    recorded (or already there)."""
+    key = company_key(name)
+    if not key:
+        return False
+    for sql in (
+        "SELECT id FROM companies WHERE slug = %s",
+        "SELECT company_id FROM company_slug_aliases WHERE alias = %s",
+        "SELECT id FROM companies WHERE replace(slug, '-', '') = replace(%s, '-', '') ORDER BY id LIMIT 1",
+    ):
+        row = conn.execute(sql, (key,)).fetchone()
+        if row is not None:
+            return row[0] == company_id
+    conn.execute("INSERT INTO company_slug_aliases (alias, company_id) VALUES (%s, %s)", (key, company_id))
+    return True
+
+
 def upsert_job(
     conn: psycopg.Connection,
     job: Mapping[str, Any],
@@ -353,8 +372,11 @@ def import_board(
     list_tag: str | None = None,
     careers_url: str | None = None,
     enabled: bool = True,
+    alias: bool = False,
 ) -> str:
-    """Write one company-list entry into ``boards`` (``boards import``). Returns what happened:
+    """Write one company-list entry into ``boards`` (``boards import``). With ``alias``, a known board filed under
+    another spelling gets ``name`` recorded as an alias of its company (``record_alias``): for discovery whose
+    match was checked (slices 2.4-2.6), never for a list taken on trust. Returns what happened:
 
     ``new``        not stored yet: added as ``pending`` (D5.5), with its company.
     ``known``      already stored: only blank fields are filled; provenance and status never change (the first
@@ -389,6 +411,8 @@ def import_board(
         "list_tag = COALESCE(list_tag, %s) WHERE id = %s",
         (company_id, careers_url, list_tag, row["id"]),
     )
+    if alias and company_id is not None:
+        record_alias(conn, name, company_id)
     if row["status"] == "retired" and row["status_reason"] == reason:
         conn.execute("UPDATE boards SET status = 'pending', status_reason = NULL WHERE id = %s", (row["id"],))
         return "re-enabled"
