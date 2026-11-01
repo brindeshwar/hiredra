@@ -19,7 +19,8 @@ from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
-from urllib.parse import urljoin, urlsplit
+from html import unescape
+from urllib.parse import parse_qs, urljoin, urlsplit
 
 from hiredra.sourcing.http import FetchError, HTTPError
 from hiredra.sourcing.identity import company_slug
@@ -185,6 +186,14 @@ _WORKABLE_LINK = re.compile(
 #: iCIMS: a posting on ``<label>.icims.com/jobs/``. A classic ``careers-<slug>`` label is the board ``slug``; any
 #: other label keeps the whole host (freehire's two board forms).
 _ICIMS_LINK = re.compile(r"(?i)(?<![A-Za-z0-9.-])([a-z0-9][a-z0-9-]*)\.icims\.com/jobs/")
+#: SuccessFactors sites on SAP's own domains: the board is the host, one label under ``jobs2web.com`` or
+#: ``jobs.hr.cloud.sap`` (``stage``/``www`` are the vendor's). The legacy ``careerNN.sapsf.*`` sections serve no
+#: sitemap and are not read.
+_SUCCESSFACTORS_LINK = re.compile(
+    r"(?i)(?<![A-Za-z0-9.-])((?!stage\.|www\.)[a-z0-9][a-z0-9-]*\.(?:jobs2web\.com|jobs\.hr\.cloud\.sap))(?![A-Za-z0-9.-])"
+)
+#: Taleo Business Edition: any ``tbe.taleo.net`` link with ``org`` and ``cws`` parameters -> ``ORG:cws``.
+_TALEOBE_LINK = re.compile(r"""(?i)(?<![A-Za-z0-9.-])(?:[a-z0-9-]+\.)?tbe\.taleo\.net/[^\s"'<>]*""")
 _RESERVED = frozenset({"embed", "demo"})  # "demo": an embed placeholder seen on a real careers page
 #: Where a company keeps its careers page, tried after its homepage (freehire's careerPaths and careerHostPrefixes).
 CAREER_PATHS = ("/careers", "/jobs", "/career", "/vacancies", "/employment", "/about/careers", "/join-us")
@@ -196,7 +205,7 @@ _DEEPER = re.compile(r"(?i)(vacan|opening|apply|position|current-|search.?job|jo
 
 def detect_board(html: str) -> tuple[str, str] | None:
     """The first Greenhouse, Lever or Ashby board a page links to or embeds, else a Workday, Oracle,
-    SmartRecruiters, Workable or iCIMS one, as ``(provider, slug)``."""
+    SmartRecruiters, Workable, iCIMS, SuccessFactors or Taleo Business Edition one, as ``(provider, slug)``."""
     for provider, pattern in _BOARD_LINKS:
         for m in pattern.finditer(html):
             slug = m.group(1).lower()
@@ -213,6 +222,13 @@ def detect_board(html: str) -> tuple[str, str] | None:
         label = m.group(1).lower()
         classic = label.startswith("careers-") and len(label) > len("careers-")
         return "icims", label.removeprefix("careers-") if classic else f"{label}.icims.com"
+    if m := _SUCCESSFACTORS_LINK.search(html):
+        return "successfactors", m.group(1).lower()
+    for m in _TALEOBE_LINK.finditer(html):
+        query = {k.lower(): v for k, v in parse_qs(urlsplit(unescape(m.group(0))).query).items()}
+        org, cws = (query.get("org") or [""])[0].upper(), (query.get("cws") or [""])[0]
+        if re.fullmatch(r"[A-Z0-9_]+", org) and cws.isdigit():
+            return "taleobe", f"{org}:{cws}"
     return None
 
 
@@ -286,7 +302,7 @@ OTHER_ATS = (
     ("icims", re.compile(r"\.icims\.com")),
     ("workable", re.compile(r"workable\.com")),
     ("taleo", re.compile(r"\.taleo\.net")),
-    ("successfactors", re.compile(r"successfactors\.|\.sapsf\.")),
+    ("successfactors", re.compile(r"successfactors\.|\.sapsf\.|\.jobs2web\.com|\.jobs\.hr\.cloud\.sap")),
 )
 #: Short links that redirect to the board: Greenhouse's ``grnh.se`` (to the board, or a careers page embedding it)
 #: and Workable's account-less ``apply.workable.com/j/<code>`` (to ``/<account>/j/<code>``).

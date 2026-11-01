@@ -19,6 +19,8 @@ from hiredra.sourcing.providers import (
     LeverProvider,
     OracleProvider,
     SmartRecruitersProvider,
+    SuccessFactorsProvider,
+    TaleoBEProvider,
     WorkableProvider,
     WorkdayProvider,
 )
@@ -36,6 +38,8 @@ REGISTRY: tuple[Provider, ...] = (
     SmartRecruitersProvider(),
     WorkableProvider(),
     ICIMSProvider(),
+    SuccessFactorsProvider(),
+    TaleoBEProvider(),
 )
 
 

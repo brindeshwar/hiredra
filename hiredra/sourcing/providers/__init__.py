@@ -6,6 +6,8 @@ from hiredra.sourcing.providers.icims import ICIMSProvider
 from hiredra.sourcing.providers.lever import LeverProvider
 from hiredra.sourcing.providers.oracle import OracleProvider
 from hiredra.sourcing.providers.smartrecruiters import SmartRecruitersProvider
+from hiredra.sourcing.providers.successfactors import SuccessFactorsProvider
+from hiredra.sourcing.providers.taleobe import TaleoBEProvider
 from hiredra.sourcing.providers.workable import WorkableProvider
 from hiredra.sourcing.providers.workday import WorkdayProvider
 
@@ -16,6 +18,8 @@ __all__ = [
     "LeverProvider",
     "OracleProvider",
     "SmartRecruitersProvider",
+    "SuccessFactorsProvider",
+    "TaleoBEProvider",
     "WorkableProvider",
     "WorkdayProvider",
 ]
