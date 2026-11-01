@@ -135,6 +135,17 @@ def test_confirm_tells_the_company_from_a_namesake():
         ),
         ("https://phf.tbe.taleo.net/phf01/ats/careers/searchResults.jsp?org=ACME", None),  # no career site
         ("https://uhg.taleo.net/careersection/10780/jobdetail.ftl?job=1", None),  # Taleo Enterprise: no adapter
+        ("https://anblicks.keka.com/careers/jobdetails/164414?source=indeed%20job%20posts", ("keka", "anblicks")),
+        ("https://cloudsufi.keka.com/careers//jobdetails/91133", ("keka", "cloudsufi")),
+        ("https://app.keka.com/careers/x", None),  # the vendor's own host
+        ("https://www.keka.com/careers", None),
+        (
+            "https://telradsol.zohorecruit.in/jobs/TRS/102249000007241027/Junior-AI-Engineer?source=CareerSite",
+            ("zohorecruit", "telradsol.zohorecruit.in"),
+        ),  # another portal, the same board
+        ("https://Kanerika.zohorecruit.com/jobs/Careers/7/x", ("zohorecruit", "kanerika.zohorecruit.com")),
+        ("https://acme.zohorecruit.com.au/recruit/Portal.na?digest=x", ("zohorecruit", "acme.zohorecruit.com.au")),
+        ("https://www.zohorecruit.com/jobs/", None),
         ('<a href="https://boards.greenhouse.io/embed/">x</a>', None),  # "embed" is never a board
         ('<a href="https://notjobs.lever.cool/x">', None),
         ("<p>We are hiring!</p>", None),

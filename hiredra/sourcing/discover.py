@@ -194,6 +194,16 @@ _SUCCESSFACTORS_LINK = re.compile(
 )
 #: Taleo Business Edition: any ``tbe.taleo.net`` link with ``org`` and ``cws`` parameters -> ``ORG:cws``.
 _TALEOBE_LINK = re.compile(r"""(?i)(?<![A-Za-z0-9.-])(?:[a-z0-9-]+\.)?tbe\.taleo\.net/[^\s"'<>]*""")
+#: Keka: the board is the subdomain of ``<board>.keka.com/careers`` (the vendor's own hosts are freehire's
+#: ``platformLabels``).
+_KEKA_LINK = re.compile(
+    r"(?i)(?<![A-Za-z0-9.-])((?!(?:www|app|dashboard|admin|api|support|help|blog|docs)\.)[a-z0-9][a-z0-9-]*)"
+    r"\.keka\.com/careers"
+)
+#: Zoho Recruit: a tenant host on any regional domain (``<tenant>.zohorecruit.com``/``.in``/``.eu``) is the board.
+_ZOHO_LINK = re.compile(
+    r"(?i)(?<![A-Za-z0-9.-])((?!www\.)[a-z0-9][a-z0-9-]*\.zohorecruit(?:\.[a-z]{2,3}){1,2})/(?:jobs|recruit)/"
+)
 _RESERVED = frozenset({"embed", "demo"})  # "demo": an embed placeholder seen on a real careers page
 #: Where a company keeps its careers page, tried after its homepage (freehire's careerPaths and careerHostPrefixes).
 CAREER_PATHS = ("/careers", "/jobs", "/career", "/vacancies", "/employment", "/about/careers", "/join-us")
@@ -205,7 +215,8 @@ _DEEPER = re.compile(r"(?i)(vacan|opening|apply|position|current-|search.?job|jo
 
 def detect_board(html: str) -> tuple[str, str] | None:
     """The first Greenhouse, Lever or Ashby board a page links to or embeds, else a Workday, Oracle,
-    SmartRecruiters, Workable, iCIMS, SuccessFactors or Taleo Business Edition one, as ``(provider, slug)``."""
+    SmartRecruiters, Workable, iCIMS, SuccessFactors, Taleo Business Edition, Keka or Zoho Recruit one, as
+    ``(provider, slug)``."""
     for provider, pattern in _BOARD_LINKS:
         for m in pattern.finditer(html):
             slug = m.group(1).lower()
@@ -229,6 +240,10 @@ def detect_board(html: str) -> tuple[str, str] | None:
         org, cws = (query.get("org") or [""])[0].upper(), (query.get("cws") or [""])[0]
         if re.fullmatch(r"[A-Z0-9_]+", org) and cws.isdigit():
             return "taleobe", f"{org}:{cws}"
+    if m := _KEKA_LINK.search(html):
+        return "keka", m.group(1).lower()
+    if m := _ZOHO_LINK.search(html):
+        return "zohorecruit", m.group(1).lower()
     return None
 
 
@@ -303,6 +318,8 @@ OTHER_ATS = (
     ("workable", re.compile(r"workable\.com")),
     ("taleo", re.compile(r"\.taleo\.net")),
     ("successfactors", re.compile(r"successfactors\.|\.sapsf\.|\.jobs2web\.com|\.jobs\.hr\.cloud\.sap")),
+    ("keka", re.compile(r"\.keka\.com")),
+    ("zohorecruit", re.compile(r"\.zohorecruit\.")),
 )
 #: Short links that redirect to the board: Greenhouse's ``grnh.se`` (to the board, or a careers page embedding it)
 #: and Workable's account-less ``apply.workable.com/j/<code>`` (to ``/<account>/j/<code>``).
