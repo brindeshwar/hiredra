@@ -70,6 +70,6 @@ def test_detect_exception_is_skipped_not_fatal(caplog):
 def test_registry_contents():
     assert [p.name for p in REGISTRY] == [
         "greenhouse", "lever", "ashby", "workday", "oracle", "smartrecruiters", "workable", "icims",
-        "successfactors", "taleobe", "keka", "zohorecruit",
+        "successfactors", "taleobe", "keka", "zohorecruit", "teamtailor", "rippling", "eightfold",
     ]  # fmt: skip
     assert all(isinstance(p, Provider) for p in REGISTRY)

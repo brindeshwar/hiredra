@@ -14,14 +14,17 @@ from collections.abc import Sequence
 from hiredra.sourcing.provider import CompanyEntry, Provider
 from hiredra.sourcing.providers import (
     AshbyProvider,
+    EightfoldProvider,
     GreenhouseProvider,
     ICIMSProvider,
     KekaProvider,
     LeverProvider,
     OracleProvider,
+    RipplingProvider,
     SmartRecruitersProvider,
     SuccessFactorsProvider,
     TaleoBEProvider,
+    TeamtailorProvider,
     WorkableProvider,
     WorkdayProvider,
     ZohoRecruitProvider,
@@ -44,6 +47,9 @@ REGISTRY: tuple[Provider, ...] = (
     TaleoBEProvider(),
     KekaProvider(),
     ZohoRecruitProvider(),
+    TeamtailorProvider(),
+    RipplingProvider(),
+    EightfoldProvider(),
 )
 
 
