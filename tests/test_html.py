@@ -21,6 +21,11 @@ def test_double_encoded_markup_and_entities():
     assert html_to_text("&lt;p&gt;Hi &amp;amp; bye&lt;/p&gt;") == "Hi & bye"
 
 
+def test_escaped_angle_brackets_in_single_encoded_html_are_text():
+    # real tags present: one encoding level, so "&lt;String&gt;" is the text "<String>" (Oracle, Lever, Workday)
+    assert html_to_text("<p>Java: List&lt;String&gt;</p>") == "Java: List<String>"
+
+
 def test_nbsp_becomes_space():
     assert html_to_text("<p>a&nbsp;b</p>") == "a b"
 

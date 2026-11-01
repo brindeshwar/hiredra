@@ -6,12 +6,18 @@ timestamp normalization, or the remote heuristic. Providers stay tiny.
 
 from __future__ import annotations
 
+import logging
 import re
+from collections.abc import Callable, Iterable
 from datetime import date, datetime, timezone
-from typing import Any
+from typing import Any, TypeVar
 from urllib.parse import urlsplit
 
 from hiredra.sourcing.http import FetchError
+from hiredra.sourcing.job import Job
+
+log = logging.getLogger("hiredra.sourcing.providers")
+T = TypeVar("T")
 
 
 def assert_allowed_url(url: str, allowed_hosts: frozenset[str], provider: str) -> None:
@@ -88,3 +94,43 @@ def infer_remote(text: str, *, workplace_type: str | None = None) -> bool | None
         if wt in _WORKPLACE_NOT_REMOTE:
             return False
     return True if _REMOTE_RE.search(text) else None
+
+
+#: Detail requests per board per run for a hydrating provider (D3.4): a stored posting needs none, and a huge new
+#: board drains over runs instead of eating one (Workday's ABB, 2,035 postings, took 29 min one at a time).
+DETAIL_BUDGET = 200
+
+
+def hydrate(
+    items: Iterable[T],
+    *,
+    key: Callable[[T], str],
+    seen: Callable[[str], bool],
+    listing: Callable[[T], Job | None],
+    detail: Callable[[T], Job | None],
+    budget: int = DETAIL_BUDGET,
+    label: str = "",
+) -> list[Job]:
+    """The listing-then-detail crawl (D3.4). A posting already stored (``seen(key(item))``) is re-sighted from the
+    listing with no request; a new one costs ``detail``, up to ``budget`` per run, the rest waiting for the next.
+    A detail that fails is skipped: still new, it is tried again next run."""
+    jobs: list[Job] = []
+    waiting = 0
+    for item in items:
+        if seen(key(item)):
+            job = listing(item)
+        elif budget <= 0:
+            waiting += 1
+            continue
+        else:
+            budget -= 1
+            try:
+                job = detail(item)
+            except FetchError as err:
+                log.info("%s: detail %s: %s", label, key(item), err)
+                continue
+        if job is not None:
+            jobs.append(job)
+    if waiting:
+        log.info("%s: %d new postings wait for the next run", label, waiting)
+    return jobs

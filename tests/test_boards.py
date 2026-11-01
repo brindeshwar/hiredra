@@ -226,6 +226,6 @@ def test_cli_imports_an_inventory_csv(tmp_path, capsys, pg_url):
     finally:
         conn.close()
 
-    other = _write(tmp_path, "name,slug,url\nAcme,acme,https://jobs.smartrecruiters.com/Acme\n", "smartrecruiters.csv")
-    assert main(["boards", "import", str(other), "--db", pg_url]) == 1  # no SmartRecruiters adapter yet (build step 3)
+    other = _write(tmp_path, "name,slug,url\nAcme,acme,https://acme.examplehr.test\n", "examplehr.csv")
+    assert main(["boards", "import", str(other), "--db", pg_url]) == 1  # an ATS we have no adapter for
     assert "no provider or board slug for 1: Acme" in capsys.readouterr().out

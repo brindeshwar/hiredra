@@ -23,16 +23,20 @@ from hiredra.sourcing._html import html_to_text
 from hiredra.sourcing.http import FetchError
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
-from hiredra.sourcing.providers._common import assert_allowed_url, clean, infer_remote, iso_date
+from hiredra.sourcing.providers._common import (
+    DETAIL_BUDGET,
+    assert_allowed_url,
+    clean,
+    hydrate,
+    infer_remote,
+    iso_date,
+)
 
 log = logging.getLogger("hiredra.sourcing.workday")
 
 PAGE = 20
 CAP = 2000  # the total a capped board reports
 MAX_FACET_DEPTH = 3
-#: Detail requests per board per run (D3.4): a stored posting needs none, and a huge new board drains over runs
-#: instead of eating one (ABB's 2,035 postings took 29 min one at a time).
-DETAIL_BUDGET = 200
 _HOST = re.compile(r"^(?:[a-z0-9-]+\.wd\d+\.myworkdayjobs\.com|wd\d+\.myworkdaysite\.com)$")
 _TIMEOUT_S = 30.0
 
@@ -133,25 +137,15 @@ class WorkdayProvider:
             data = ctx.http.get_json(url, timeout=_TIMEOUT_S)
             return data if isinstance(data, dict) else {}
 
-        jobs, budget, waiting = [], DETAIL_BUDGET, 0
-        for p in list_postings(post):
-            if ctx.seen(job_id(board, p)):
-                jobs.append(to_job(entry.name, board, p, {}))  # stored: re-sighted from the listing, no request
-                continue
-            if budget <= 0:
-                waiting += 1  # new, over this run's budget: fetched next run
-                continue
-            budget -= 1
-            try:
-                detail = get(p["externalPath"])
-            except FetchError as err:
-                log.info("workday: %s detail %s: %s", board.tenant, p["externalPath"], err)
-                continue
-            if (job := to_job(entry.name, board, p, detail)) is not None:
-                jobs.append(job)
-        if waiting:
-            log.info("workday: %s/%s: %d new postings wait for the next run", board.tenant, board.site, waiting)
-        return [j for j in jobs if j is not None]
+        return hydrate(
+            list_postings(post),
+            key=lambda p: job_id(board, p),
+            seen=ctx.seen,
+            listing=lambda p: to_job(entry.name, board, p, {}),
+            detail=lambda p: to_job(entry.name, board, p, get(p["externalPath"])),
+            budget=DETAIL_BUDGET,
+            label=f"workday {board.tenant}/{board.site}",
+        )
 
 
 def _page(post: Callable[[dict], dict], facets: dict, offset: int) -> dict:

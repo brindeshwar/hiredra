@@ -352,7 +352,7 @@ def _cmd_boards_discover_orphans(args: argparse.Namespace) -> int:
     """Slice 2.6: companies we hold only through JobSpy (no board, no ATS job) -> their board. An apply link that
     names a Greenhouse/Lever/Ashby board is taken as is (a ``grnh.se`` short link is followed once); otherwise the
     name's guessed slugs are probed, and a board found is kept only if it lists a job title we saw on the
-    aggregator for that company. A company whose apply links show another ATS is counted for build step 3, not
+    aggregator for that company. A company whose apply links show another ATS but name no board is counted, not
     guessed. A board found that we already hold under another company is that company under a second name: a
     merge suggestion is printed, nothing is written for it. New boards are imported as pending, provenance
     ``aggregator``."""
@@ -391,7 +391,7 @@ def _cmd_boards_discover_orphans(args: argparse.Namespace) -> int:
                         break
             if board is None and o.other_ats:
                 other_ats[o.other_ats] = other_ats.get(o.other_ats, 0) + 1
-                tally["uses another ATS"] = tally.get("uses another ATS", 0) + 1
+                tally["another ATS, no board in its links"] = tally.get("another ATS, no board in its links", 0) + 1
                 continue
             if board is None and args.links_only:
                 tally["no board in its links"] = tally.get("no board in its links", 0) + 1
@@ -434,7 +434,10 @@ def _cmd_boards_discover_orphans(args: argparse.Namespace) -> int:
                         source_name="jobspy", alias=True,
                     )  # fmt: skip
         print(f"companies {len(worklist)}: " + ", ".join(f"{v} {k}" for k, v in sorted(tally.items())))
-        print("other ATSs (build step 3): " + (", ".join(f"{k} {v}" for k, v in sorted(other_ats.items())) or "none"))
+        print(
+            "on another ATS, board not in the link: "
+            + (", ".join(f"{k} {v}" for k, v in sorted(other_ats.items())) or "none")
+        )
         print(f"new boards {found}: jobs India/remote-eligible {eligible}, passing all three stages {kept}")
         if merges:
             print(f"one employer under two names ({len(merges)}); to merge, add to config/company_merges.yml:")

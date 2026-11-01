@@ -12,7 +12,14 @@ import logging
 from collections.abc import Sequence
 
 from hiredra.sourcing.provider import CompanyEntry, Provider
-from hiredra.sourcing.providers import AshbyProvider, GreenhouseProvider, LeverProvider, WorkdayProvider
+from hiredra.sourcing.providers import (
+    AshbyProvider,
+    GreenhouseProvider,
+    LeverProvider,
+    OracleProvider,
+    SmartRecruitersProvider,
+    WorkdayProvider,
+)
 
 log = logging.getLogger("hiredra.sourcing.registry")
 
@@ -23,6 +30,8 @@ REGISTRY: tuple[Provider, ...] = (
     LeverProvider(),
     AshbyProvider(),
     WorkdayProvider(),
+    OracleProvider(),
+    SmartRecruitersProvider(),
 )
 
 
