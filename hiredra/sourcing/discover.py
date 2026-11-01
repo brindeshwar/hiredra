@@ -127,11 +127,9 @@ def probe(
     """Try each guess on each provider in ``PROBE_ORDER`` until one answers 200. A 404 means "not here"; anything
     else is recorded and the search goes on (a failed guess must not hide a board under the next one)."""
     result = Probe(candidate)
-    by_name = {p.name: p for p in providers}
-    for name in PROBE_ORDER:
-        provider = by_name.get(name)
-        if provider is None:
-            continue
+    rank = {name: i for i, name in enumerate(PROBE_ORDER)}
+    for provider in sorted(providers, key=lambda p: rank.get(p.name, len(rank))):
+        name = provider.name
         for slug in candidate.slugs:
             sleep(pause)
             entry = CompanyEntry(name=candidate.name, provider=name, extra={"slug": slug})
@@ -164,6 +162,14 @@ _BOARD_LINKS = (
     ("lever", re.compile(r"(?:^|[^A-Za-z0-9])jobs\.(?:eu\.)?lever\.co/([a-z0-9][a-z0-9-]*)")),
     ("ashby", re.compile(r"(?:^|[^A-Za-z0-9])jobs\.ashbyhq\.com/([a-z0-9][a-z0-9-]*)")),
 )  # fmt: skip
+#: Workday: ``tenant.wdN.myworkdayjobs.com/[locale/]Site/...`` -> ``host/Site``; on the shared host,
+#: ``wdN.myworkdaysite.com/[locale/]recruiting/tenant/site`` -> ``host/tenant/site``. The site keeps its case.
+_WORKDAY_LINKS = (
+    re.compile(
+        r"(?i)\b([a-z0-9-]+\.wd\d+\.myworkdayjobs\.com)/(?:[a-z]{2}-[A-Z]{2}/)?(?!job/|details/|wday/)([A-Za-z0-9_-]+)"
+    ),
+    re.compile(r"(?i)\b(wd\d+\.myworkdaysite\.com)/(?:[a-z]{2}-[A-Z]{2}/)?recruiting/([A-Za-z0-9_-]+/[A-Za-z0-9_-]+)"),
+)
 _RESERVED = frozenset({"embed", "demo"})  # "demo": an embed placeholder seen on a real careers page
 #: Where a company keeps its careers page, tried after its homepage (freehire's careerPaths and careerHostPrefixes).
 CAREER_PATHS = ("/careers", "/jobs", "/career", "/vacancies", "/employment", "/about/careers", "/join-us")
@@ -174,12 +180,16 @@ _DEEPER = re.compile(r"(?i)(vacan|opening|apply|position|current-|search.?job|jo
 
 
 def detect_board(html: str) -> tuple[str, str] | None:
-    """The first Greenhouse, Lever or Ashby board a page links to or embeds, as ``(provider, slug)``."""
+    """The first Greenhouse, Lever or Ashby board a page links to or embeds, else a Workday one, as
+    ``(provider, slug)``."""
     for provider, pattern in _BOARD_LINKS:
         for m in pattern.finditer(html):
             slug = m.group(1).lower()
             if slug not in _RESERVED:
                 return provider, slug
+    for pattern in _WORKDAY_LINKS:
+        if m := pattern.search(html):
+            return "workday", f"{m.group(1).lower()}/{m.group(2)}"
     return None
 
 
@@ -266,7 +276,6 @@ class Robots:
 #: Apply links that show a company uses an ATS we have no adapter for yet (build step 3). Such a company is not
 #: guessed on Greenhouse/Lever/Ashby, where it could only meet a namesake; it is counted for step 3 instead.
 OTHER_ATS = (
-    ("workday", re.compile(r"\.myworkday(?:jobs|site)\.com")),
     ("oracle", re.compile(r"\.oraclecloud\.com")),
     ("smartrecruiters", re.compile(r"smartrecruiters\.com")),
     ("icims", re.compile(r"\.icims\.com")),

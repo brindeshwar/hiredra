@@ -212,6 +212,11 @@ def _company_id(conn: psycopg.Connection, name: str) -> int | None:
     return conn.execute("SELECT id FROM companies WHERE slug = %s", (key,)).fetchone()[0]
 
 
+def job_stored(conn: psycopg.Connection, job_id: str) -> bool:
+    """Is ``job_id`` (``source:raw_id``) in the store? A hydrating provider asks before fetching a detail (D3.4)."""
+    return conn.execute("SELECT 1 FROM jobs WHERE job_key = %s", (job_id,)).fetchone() is not None
+
+
 def record_alias(conn: psycopg.Connection, name: str, company_id: int) -> bool:
     """Record ``name`` as another spelling of ``company_id`` (build slice 2.6), unless that spelling already reaches
     a company: then the two are one employer under two rows, a merge for the owner, not an alias. True if

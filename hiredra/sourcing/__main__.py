@@ -90,6 +90,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             sink_factory=lambda run_id: ScoringSink(conn, run_id),
             run_store=run_store,
             resume=args.resume,
+            seen=lambda job_id: db.job_stored(conn, job_id),
         )
         _print_report(report)
         return 0 if report.status != "failed" else 1
@@ -358,7 +359,7 @@ def _cmd_boards_discover_orphans(args: argparse.Namespace) -> int:
     funnel = load_filter_config()
     conn = db.connect(args.db)
     http = HttpClient(HttpConfig())
-    ctx = FetchContext(http=http)
+    ctx = FetchContext(http=http, seen=lambda job_id: True)  # a probe lists a board: never a detail request
 
     def text(url: str) -> str | None:
         try:
@@ -369,7 +370,10 @@ def _cmd_boards_discover_orphans(args: argparse.Namespace) -> int:
     robots = discover.Robots(text, http.config.user_agent)
     try:
         db.init_db(conn)
-        worklist = discover.orphans(conn.execute(_ORPHAN_JOBS).fetchall())[: args.limit or None]
+        worklist = discover.orphans(conn.execute(_ORPHAN_JOBS).fetchall())
+        if args.links_only:
+            worklist = [o for o in worklist if o.board or o.short_links]
+        worklist = worklist[: args.limit or None]
         print(f"discover-orphans: {len(worklist)} companies seen only on JobSpy")
         tally: dict[str, int] = {}
         other_ats: dict[str, int] = {}
@@ -388,6 +392,9 @@ def _cmd_boards_discover_orphans(args: argparse.Namespace) -> int:
             if board is None and o.other_ats:
                 other_ats[o.other_ats] = other_ats.get(o.other_ats, 0) + 1
                 tally["uses another ATS"] = tally.get("uses another ATS", 0) + 1
+                continue
+            if board is None and args.links_only:
+                tally["no board in its links"] = tally.get("no board in its links", 0) + 1
                 continue
             providers = REGISTRY if board is None else [p for p in REGISTRY if p.name == board[0]]
             slugs = o.slugs if board is None else (board[1],)
@@ -508,6 +515,7 @@ def main(argv: list[str] | None = None) -> int:
     p_or = boards_sub.add_parser("discover-orphans", help="find boards for companies seen only on JobSpy (D2.2)")
     p_or.add_argument("--limit", type=int, default=0, help="check only the first N companies")
     p_or.add_argument("--pause", type=float, default=0.5, help="seconds between probe requests")
+    p_or.add_argument("--links-only", action="store_true", help="only companies whose links name a board: no guessing")
     p_or.add_argument("--dry-run", action="store_true", help="report only; write no board")
     p_or.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
     p_or.set_defaults(func=_cmd_boards_discover_orphans)
