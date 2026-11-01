@@ -99,6 +99,17 @@ def test_confirm_tells_the_company_from_a_namesake():
             ("workday", "wd1.myworkdaysite.com/snapchat/snap"),
         ),
         ("https://acme.wd5.myworkdayjobs.com/job/Pune/X", None),  # no site in the link
+        (
+            "https://broadcom.wd1.myworkdayjobs.com/es/External_Career/job/IND-Hyderabad/R_1",
+            ("workday", "broadcom.wd1.myworkdayjobs.com/External_Career"),
+        ),  # a bare language segment
+        ("https://acme.wd1.myworkdayjobs.com/Ext", ("workday", "acme.wd1.myworkdayjobs.com/Ext")),
+        (
+            "https://eeho.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/jobsearch/job/123",
+            ("oracle", "eeho.fa.us2.oraclecloud.com/jobsearch"),
+        ),
+        ("https://jobs.smartrecruiters.com/Visa/744000067-engineer", ("smartrecruiters", "Visa")),
+        ("https://jobs.smartrecruiters.com/oneclick-ui/company/x", None),
         ('<a href="https://boards.greenhouse.io/embed/">x</a>', None),  # "embed" is never a board
         ('<a href="https://notjobs.lever.cool/x">', None),
         ("<p>We are hiring!</p>", None),

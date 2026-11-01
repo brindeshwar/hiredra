@@ -164,11 +164,19 @@ _BOARD_LINKS = (
 )  # fmt: skip
 #: Workday: ``tenant.wdN.myworkdayjobs.com/[locale/]Site/...`` -> ``host/Site``; on the shared host,
 #: ``wdN.myworkdaysite.com/[locale/]recruiting/tenant/site`` -> ``host/tenant/site``. The site keeps its case.
-_WORKDAY_LINKS = (
-    re.compile(
-        r"(?i)\b([a-z0-9-]+\.wd\d+\.myworkdayjobs\.com)/(?:[a-z]{2}-[A-Z]{2}/)?(?!job/|details/|wday/)([A-Za-z0-9_-]+)"
-    ),
-    re.compile(r"(?i)\b(wd\d+\.myworkdaysite\.com)/(?:[a-z]{2}-[A-Z]{2}/)?recruiting/([A-Za-z0-9_-]+/[A-Za-z0-9_-]+)"),
+#: Oracle: ``host.oraclecloud.com/hcmUI/CandidateExperience/<lang>/sites/CX_1`` -> ``host/CX_1``.
+#: SmartRecruiters: ``jobs.`` or ``careers.smartrecruiters.com/<CompanyId>`` -> ``CompanyId``.
+_HOST_SITE_LINKS = (
+    ("workday", re.compile(
+        r"(?i)\b([a-z0-9-]+\.wd\d+\.myworkdayjobs\.com)/(?:[a-z]{2}(?:-[a-z]{2})?/(?=[A-Za-z0-9_-]+/))?"
+        r"(?!job/|details/|wday/)([A-Za-z0-9_-]+)")),
+    ("workday", re.compile(
+        r"(?i)\b(wd\d+\.myworkdaysite\.com)/(?:[a-z]{2}-[A-Z]{2}/)?recruiting/([A-Za-z0-9_-]+/[A-Za-z0-9_-]+)")),
+    ("oracle", re.compile(
+        r"(?i)\b([a-z0-9.-]+\.oraclecloud\.com)/hcmUI/CandidateExperience/[a-z-]+/sites/([A-Za-z0-9_]+)")),
+)  # fmt: skip
+_SMARTRECRUITERS_LINK = re.compile(
+    r"(?i)\b(?:jobs|careers)\.smartrecruiters\.com/(?!oneclick|sr-jobs/)([A-Za-z0-9_.-]+)"
 )
 _RESERVED = frozenset({"embed", "demo"})  # "demo": an embed placeholder seen on a real careers page
 #: Where a company keeps its careers page, tried after its homepage (freehire's careerPaths and careerHostPrefixes).
@@ -180,16 +188,18 @@ _DEEPER = re.compile(r"(?i)(vacan|opening|apply|position|current-|search.?job|jo
 
 
 def detect_board(html: str) -> tuple[str, str] | None:
-    """The first Greenhouse, Lever or Ashby board a page links to or embeds, else a Workday one, as
-    ``(provider, slug)``."""
+    """The first Greenhouse, Lever or Ashby board a page links to or embeds, else a Workday, Oracle or
+    SmartRecruiters one, as ``(provider, slug)``."""
     for provider, pattern in _BOARD_LINKS:
         for m in pattern.finditer(html):
             slug = m.group(1).lower()
             if slug not in _RESERVED:
                 return provider, slug
-    for pattern in _WORKDAY_LINKS:
+    for provider, pattern in _HOST_SITE_LINKS:
         if m := pattern.search(html):
-            return "workday", f"{m.group(1).lower()}/{m.group(2)}"
+            return provider, f"{m.group(1).lower()}/{m.group(2)}"
+    if m := _SMARTRECRUITERS_LINK.search(html):
+        return "smartrecruiters", m.group(1)
     return None
 
 
@@ -273,9 +283,11 @@ class Robots:
 # Our additions, from slices 2.4-2.5: an aggregator job's own apply link is read first (it names the board, no
 # guess), and a guessed board is kept only when it lists a job title we saw on the aggregator for that company.
 
-#: Apply links that show a company uses an ATS we have no adapter for yet (build step 3). Such a company is not
-#: guessed on Greenhouse/Lever/Ashby, where it could only meet a namesake; it is counted for step 3 instead.
+#: Apply links that show a company uses an ATS other than Greenhouse/Lever/Ashby. Its board comes from the link when
+#: ``detect_board`` reads one; otherwise it is counted, never guessed on our three name-keyed ATSs, where it could
+#: only meet a namesake.
 OTHER_ATS = (
+    ("workday", re.compile(r"\.myworkday(?:jobs|site)\.com")),
     ("oracle", re.compile(r"\.oraclecloud\.com")),
     ("smartrecruiters", re.compile(r"smartrecruiters\.com")),
     ("icims", re.compile(r"\.icims\.com")),

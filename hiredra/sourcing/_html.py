@@ -29,7 +29,9 @@ def html_to_text(value: str | None) -> str:
     """Best-effort plain text from (possibly double-encoded) HTML. ``""`` for falsy input."""
     if not value:
         return ""
-    text = html.unescape(str(value))  # entity-escaped markup -> real tags
+    text = str(value)
+    if "<" not in text:  # double-encoded (Greenhouse): entity-escaped markup -> real tags. Real tags present means
+        text = html.unescape(text)  # single-encoded, where "&lt;String&gt;" is text ("List<String>"), kept
     text = _SCRIPT_STYLE.sub("", text)
     text = _NEWLINE_TAGS.sub("\n", text)
     text = _TAG.sub("", text)  # drop remaining tags
