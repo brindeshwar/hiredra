@@ -43,9 +43,15 @@ from tenacity import (
 
 log = logging.getLogger("hiredra.sourcing.http")
 
-_DEFAULT_UA = (
+#: Who we are, so a site owner can see it and reach us (D4.2). The repository is private, so the link is the owner's.
+_DEFAULT_UA = "Hiredra/0.1 (+https://github.com/brindeshwar)"
+#: The browser string every request sent before D4.2. Kept only for the hosts a trial run found refusing our own name
+#: (owner, 2026-11-01: "try our best to get accepted via our name"); each is in ``BROWSER_UA_HOSTS`` with its evidence.
+BROWSER_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
 )
+#: Host suffixes that refused ``_DEFAULT_UA`` in a trial run and answered ``BROWSER_UA`` in earlier runs.
+BROWSER_UA_HOSTS: frozenset[str] = frozenset()
 
 # "The board is blocking us" -- cool the host down, never retry.
 _BLOCK_STATUSES = frozenset({403, 406, 429, 503})
@@ -63,7 +69,8 @@ class HttpConfig:
     backoff_max: float = 30.0
     cooldown_seconds: float = 900.0  # host cooldown after a block (15 min)
     max_cooldown: float = 3600.0  # clamp for a hostile Retry-After
-    user_agent: str = _DEFAULT_UA  # polite, not anti-bot evasion (decisions.md #21)
+    user_agent: str = _DEFAULT_UA  # identifiable (D4.2), not anti-bot evasion (decisions.md #21)
+    browser_ua_hosts: frozenset[str] = BROWSER_UA_HOSTS  # these hosts get BROWSER_UA instead
     proxy: str | None = None  # OFF by default (decisions.md #20)
     follow_redirects: bool = False  # SSRF-safe default; providers opt in per-request
     sniff_challenges: bool = True  # narrow body-pattern bot-challenge detection
@@ -335,6 +342,10 @@ class HttpClient:
         follow = self.config.follow_redirects if follow_redirects is None else follow_redirects
 
         self.cooldowns.check(key, url=url)
+
+        host = (urlsplit(url).hostname or "").lower()
+        if any(host == h or host.endswith("." + h) for h in self.config.browser_ua_hosts):
+            headers = {"User-Agent": BROWSER_UA, **(headers or {})}
 
         req_kwargs: dict[str, Any] = {
             "params": params,

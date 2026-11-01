@@ -10,6 +10,7 @@ import httpx
 import pytest
 
 from hiredra.sourcing.http import (
+    BROWSER_UA,
     Blocked,
     CooldownRegistry,
     FetchError,
@@ -44,6 +45,21 @@ def make_client(handler, clock: Clock | None = None, **cfg):
         now=clock,
     )
     return client, clock, slept
+
+
+# ── who we say we are (D4.2) ───────────────────────────────────────────────
+def test_we_identify_ourselves_except_to_a_host_that_refused_our_name():
+    seen = {}
+
+    def handler(req):
+        seen[req.url.host] = req.headers["user-agent"]
+        return httpx.Response(200, text="ok")
+
+    client, _, _ = make_client(handler, browser_ua_hosts=frozenset({"refuses.example"}))
+    for url in ("https://api.example.com/x", "https://jobs.refuses.example/x", "https://notrefuses.example/x"):
+        client.get_text(url)
+    assert seen["api.example.com"].startswith("Hiredra/") and seen["notrefuses.example"].startswith("Hiredra/")
+    assert seen["jobs.refuses.example"] == BROWSER_UA
 
 
 # ── happy paths ────────────────────────────────────────────────────────────
