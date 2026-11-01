@@ -16,6 +16,7 @@ from hiredra.sourcing.providers import (
     AshbyProvider,
     GreenhouseProvider,
     ICIMSProvider,
+    KekaProvider,
     LeverProvider,
     OracleProvider,
     SmartRecruitersProvider,
@@ -23,6 +24,7 @@ from hiredra.sourcing.providers import (
     TaleoBEProvider,
     WorkableProvider,
     WorkdayProvider,
+    ZohoRecruitProvider,
 )
 
 log = logging.getLogger("hiredra.sourcing.registry")
@@ -40,6 +42,8 @@ REGISTRY: tuple[Provider, ...] = (
     ICIMSProvider(),
     SuccessFactorsProvider(),
     TaleoBEProvider(),
+    KekaProvider(),
+    ZohoRecruitProvider(),
 )
 
 
