@@ -1,0 +1,7 @@
+# config/company_merges.yml — employers the company key cannot join on its own (hand-edited, owner-controlled).
+# Each entry lists two or more names (or slugs) of ONE employer; `python -m hiredra.sourcing companies merge`
+# folds them into one company, the old spellings kept as aliases (D2.4). Dry run by default; --apply writes.
+
+merges:
+  # Fluke Health Solutions is a Fortive company; its jobs link to Fortive's own Eightfold board (owner, 2026-11-02).
+  - [Fortive, Fluke Health Solutions]

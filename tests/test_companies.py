@@ -41,7 +41,19 @@ def test_curated_groups_merge_what_no_rule_reaches_and_unknown_names_are_ignored
     rows = [_row(1, "razorpay", "Razorpay", jobs=5), _row(2, "razorpay-software", "Razorpay Software", jobs=8)]
     assert cm.plan_merges(rows) == ([], [])
     _, groups = cm.plan_merges(rows, [["razorpay", "razorpay-software", "never-seen"]])
-    assert [(g.canon_id, g.slug, g.reason) for g in groups] == [(2, "razorpay-software", "curated")]
+    assert [(g.canon_id, g.slug, g.reason) for g in groups] == [(2, "razorpay", "curated")]  # the first name listed
+
+
+def test_a_curated_group_is_named_by_its_first_name_not_the_wordiest():
+    # a parent and its company: the parent's board is the one both link to (owner, 2026-11-02)
+    rows = [
+        _row(1, "fortive", "Fortive", boards=1),
+        _row(2, "fluke-health-solutions", "Fluke Health Solutions", jobs=1),
+    ]
+    _, [group] = cm.plan_merges(rows, [["fortive", "fluke-health-solutions"]])
+    assert (group.slug, group.name, group.reason) == ("fortive", "Fortive", "curated")
+    _, [group] = cm.plan_merges(rows, [["never-seen", "fortive", "fluke-health-solutions"]])
+    assert group.slug == "fluke-health-solutions"  # a first name we do not hold names nothing: the usual choice
 
 
 def test_distinct_employers_stay_apart():

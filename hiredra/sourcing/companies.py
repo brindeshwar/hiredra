@@ -95,12 +95,15 @@ def plan_merges(
         else:
             by_fold[fold] = i
     curated_members: set[int] = set()
+    named: list[int] = []  # the first name of each curated group: the owner's choice of name for the employer
     for group in curated:
         members = [by_key[k] for k in group if k in by_key]
         for m in members[1:]:
             union(m, members[0])
         if len(members) > 1:
             curated_members.update(members)
+            if by_key.get(group[0]) == members[0]:
+                named.append(members[0])
 
     clusters: dict[int, list[int]] = {}
     for i in range(len(rows)):
@@ -116,7 +119,8 @@ def plan_merges(
             continue
         ranked = sorted(members, key=lambda i: (-(rows[i]["jobs"] + rows[i]["boards"]), rows[i]["id"]))
         canon = rows[ranked[0]]
-        best = min(members, key=lambda i: _readable(rows[i]["key"]))
+        chosen = [i for i in named if i in members]
+        best = chosen[0] if chosen else min(members, key=lambda i: _readable(rows[i]["key"]))
         folds = {rows[i]["key"].replace("-", "") for i in members}
         reason = "curated" if set(members) & curated_members and len(folds) > 1 else "fold"
         groups.append(
