@@ -237,6 +237,22 @@ _CANDIDATE_CUE_RE = re.compile(
     re.I,
 )
 _CLAUSE_BREAK_RE = re.compile(r"[.!?;\n•]")
+# Two more from Keka postings (2026-11-01). A company's size listed beside its years is its history even when worded
+# "of experience": "With 13+ years of experience, 350+ professionals, and 400+ agency partners" dropped an
+# "Associate AI Engineer" asking 1-2 years. And a service agreement's length is no experience: "Agreement Period:
+# 3 Years from the date of joining" dropped a "Full Stack Developer (Fresher)".
+_SCALE_AFTER_RE = re.compile(
+    r"\b\d[\d,]*\+?\s+(?:[\w-]+\s+)?(?:professionals|employees|people|experts|specialists|engineers|developers|"
+    r"team\s+members|clients|customers|partners|projects|countries|offices|brands|businesses|companies|agencies)\b",
+    re.I,
+)
+_WITH_LEAD_RE = re.compile(r"\bwith\s+(?:over\s+|nearly\s+|almost\s+|more\s+than\s+)?$", re.I)
+_AGREEMENT_BEFORE_RE = re.compile(
+    r"\b(?:agreement|bond|lock[- ]?in|service\s+(?:period|commitment)|commitment\s+period|"
+    r"contract\s+(?:period|duration|term|length))\b[^.\n]{0,25}$",
+    re.I,
+)
+_JOINING_AFTER_RE = re.compile(r"^\s*(?:from|after|of)\s+(?:the\s+)?(?:date\s+of\s+)?joining\b", re.I)
 
 
 def _clause_around(text: str, start: int, end: int) -> tuple[str, str]:
@@ -250,15 +266,20 @@ def _clause_around(text: str, start: int, end: int) -> tuple[str, str]:
 def _not_a_requirement(text: str, m: re.Match) -> bool:
     """Is this "N years" figure about something other than the candidate's experience?"""
     before, after = _clause_around(text, m.start(), m.end())
+    clause = before + m.group(0) + after
+    company = _HISTORY_LEAD_RE.search(before) or _WITH_LEAD_RE.search(before) or _COMPANY_CUE_RE.search(clause)
+    if _SCALE_AFTER_RE.search(after) and company and not _CANDIDATE_CUE_RE.search(clause):
+        return True  # "With 13+ years of experience, 350+ professionals, ..."; not "5+ years ... leading 10+ engineers"
     if _EXPERIENCE_AFTER_RE.search(after):
-        return False  # "N years (of relevant) experience" always counts, whatever precedes it
+        return False  # otherwise "N years (of relevant) experience" always counts, whatever precedes it
+    if _AGREEMENT_BEFORE_RE.search(before) or _JOINING_AFTER_RE.search(after):
+        return True  # "Agreement Period: 3 Years from the date of joining", "a service bond of 2 years"
     if _AGE_AFTER_RE.search(after) or _AGE_BEFORE_RE.search(before):
         return True  # "18+ years old", "at least 18 years of age", "Age has to be 18+ years"
     if _SPAN_BEFORE_RE.search(before) or _SPAN_AFTER_RE.search(after):
         return True  # "in the past 25 years", "10 years ago"
     if _BUSINESS_AFTER_RE.search(after):
         return True  # "100 years in business", "50 years of history"
-    clause = before + m.group(0) + after
     return bool(
         _HISTORY_LEAD_RE.search(before) and _COMPANY_CUE_RE.search(clause) and not _CANDIDATE_CUE_RE.search(clause)
     )  # "For nearly 20 years, we've built ...", "for over 40 years, X has helped ..."
@@ -269,8 +290,8 @@ def extract_max_years(text: str | None) -> int | None:
 
     None means unknown -- never a stand-in for zero (docs/repos.md sec 6). Excluded: figures near
     "educational qualification" / "full time education" ("Educational Qualification: 15 years full time
-    education" is a bachelor's degree), age phrases, time spans, company history and business age (see
-    ``_not_a_requirement``), and anything above ``_MAX_BELIEVABLE_YEARS``.
+    education" is a bachelor's degree), age phrases, time spans, company history and size, business age, service
+    agreements (see ``_not_a_requirement``), and anything above ``_MAX_BELIEVABLE_YEARS``.
     """
     if not text:
         return None
