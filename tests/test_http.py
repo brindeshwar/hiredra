@@ -126,7 +126,14 @@ def test_redirect_not_followed_by_default_is_httperror():
     client, _, _ = make_client(handler)
     with pytest.raises(HTTPError) as ei:
         client.get_json("https://api.example.com/x")
-    assert ei.value.status == 302
+    assert (ei.value.status, ei.value.location) == (302, "https://elsewhere.example.com/")
+
+
+def test_a_relative_redirect_location_is_made_absolute():
+    client, _, _ = make_client(lambda req: httpx.Response(301, headers={"location": "/acme/j/C1"}))
+    with pytest.raises(HTTPError) as ei:
+        client.get_text("https://apply.workable.com/j/C1")
+    assert ei.value.location == "https://apply.workable.com/acme/j/C1"
 
 
 def test_redirect_followed_when_provider_opts_in():

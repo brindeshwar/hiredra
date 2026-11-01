@@ -30,7 +30,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urljoin, urlsplit
 
 import httpcore
 import httpx
@@ -79,11 +79,12 @@ class FetchError(Exception):
 
 
 class HTTPError(FetchError):
-    """A non-retryable HTTP response: 4xx, or a redirect we will not follow."""
+    """A non-retryable HTTP response: 4xx, or a redirect we will not follow (``location``: where it points)."""
 
-    def __init__(self, message: str, *, status: int, url: str | None = None) -> None:
+    def __init__(self, message: str, *, status: int, url: str | None = None, location: str | None = None) -> None:
         super().__init__(message, url=url)
         self.status = status
+        self.location = location
 
 
 class TransientError(FetchError):
@@ -401,11 +402,12 @@ class HttpClient:
             )
 
         if not follow and 300 <= status < 400:
-            loc = resp.headers.get("location", "?")
+            loc = resp.headers.get("location")
             raise HTTPError(
-                f"{url}: unexpected redirect (HTTP {status}) to {loc}",
+                f"{url}: unexpected redirect (HTTP {status}) to {loc or '?'}",
                 status=status,
                 url=url,
+                location=urljoin(url, loc) if loc else None,
             )
 
         if status in _TRANSIENT_STATUSES:

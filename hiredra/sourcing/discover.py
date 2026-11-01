@@ -20,7 +20,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlsplit
-from urllib.robotparser import RobotFileParser
 
 from hiredra.sourcing.http import FetchError, HTTPError
 from hiredra.sourcing.identity import company_slug
@@ -178,6 +177,14 @@ _HOST_SITE_LINKS = (
 _SMARTRECRUITERS_LINK = re.compile(
     r"(?i)\b(?:jobs|careers)\.smartrecruiters\.com/(?!oneclick|sr-jobs/)([A-Za-z0-9_.-]+)"
 )
+#: Workable: ``apply.workable.com/<account>``; ``/j/<code>`` is a short link with no account (followed instead), and
+#: ``/oops`` is where the short link of a closed job points.
+_WORKABLE_LINK = re.compile(
+    r"(?i)(?<![A-Za-z0-9.-])apply\.workable\.com/(?!j/|api/|oops(?![a-z0-9_-]))([a-z0-9][a-z0-9_-]*)"
+)
+#: iCIMS: a posting on ``<label>.icims.com/jobs/``. A classic ``careers-<slug>`` label is the board ``slug``; any
+#: other label keeps the whole host (freehire's two board forms).
+_ICIMS_LINK = re.compile(r"(?i)(?<![A-Za-z0-9.-])([a-z0-9][a-z0-9-]*)\.icims\.com/jobs/")
 _RESERVED = frozenset({"embed", "demo"})  # "demo": an embed placeholder seen on a real careers page
 #: Where a company keeps its careers page, tried after its homepage (freehire's careerPaths and careerHostPrefixes).
 CAREER_PATHS = ("/careers", "/jobs", "/career", "/vacancies", "/employment", "/about/careers", "/join-us")
@@ -188,8 +195,8 @@ _DEEPER = re.compile(r"(?i)(vacan|opening|apply|position|current-|search.?job|jo
 
 
 def detect_board(html: str) -> tuple[str, str] | None:
-    """The first Greenhouse, Lever or Ashby board a page links to or embeds, else a Workday, Oracle or
-    SmartRecruiters one, as ``(provider, slug)``."""
+    """The first Greenhouse, Lever or Ashby board a page links to or embeds, else a Workday, Oracle,
+    SmartRecruiters, Workable or iCIMS one, as ``(provider, slug)``."""
     for provider, pattern in _BOARD_LINKS:
         for m in pattern.finditer(html):
             slug = m.group(1).lower()
@@ -200,6 +207,12 @@ def detect_board(html: str) -> tuple[str, str] | None:
             return provider, f"{m.group(1).lower()}/{m.group(2)}"
     if m := _SMARTRECRUITERS_LINK.search(html):
         return "smartrecruiters", m.group(1)
+    if m := _WORKABLE_LINK.search(html):
+        return "workable", m.group(1).lower()
+    if m := _ICIMS_LINK.search(html):
+        label = m.group(1).lower()
+        classic = label.startswith("careers-") and len(label) > len("careers-")
+        return "icims", label.removeprefix("careers-") if classic else f"{label}.icims.com"
     return None
 
 
@@ -257,26 +270,6 @@ def careers_walk(website: str, fetch: Callable[[str], str | None]) -> tuple[str,
     return None
 
 
-class Robots:
-    """robots.txt per host, read once (decision D4.2: respected for every HTML page we read). A host whose
-    robots.txt is missing or unreadable allows everything, as the robots convention says."""
-
-    def __init__(self, fetch_text: Callable[[str], str | None], agent: str) -> None:
-        self._fetch = fetch_text
-        self._agent = agent
-        self._cache: dict[str, RobotFileParser] = {}
-
-    def allowed(self, url: str) -> bool:
-        parts = urlsplit(url)
-        origin = f"{parts.scheme}://{parts.netloc}"
-        parser = self._cache.get(origin)
-        if parser is None:
-            parser = RobotFileParser()
-            parser.parse((self._fetch(origin + "/robots.txt") or "").splitlines())
-            self._cache[origin] = parser
-        return parser.can_fetch(self._agent, url)
-
-
 # ── slice 2.6: companies seen only on an aggregator (JobSpy) ────────────────
 # Ported in idea from freehire's ``cmd/harvest-orphans`` (MIT): the worklist is the companies the store holds only
 # through aggregators, each proposing board ids from its name alone, a candidate two employers propose dropped.
@@ -295,8 +288,9 @@ OTHER_ATS = (
     ("taleo", re.compile(r"\.taleo\.net")),
     ("successfactors", re.compile(r"successfactors\.|\.sapsf\.")),
 )
-#: Greenhouse's short-link host: it redirects to the board (or a careers page embedding it).
-SHORT_LINK_HOSTS = frozenset({"grnh.se"})
+#: Short links that redirect to the board: Greenhouse's ``grnh.se`` (to the board, or a careers page embedding it)
+#: and Workable's account-less ``apply.workable.com/j/<code>`` (to ``/<account>/j/<code>``).
+SHORT_LINKS = re.compile(r"(?i)^https?://(?:grnh\.se/|apply\.workable\.com/j/)")
 #: Words a board id commonly drops that the company key keeps (freehire's ``boardNameTails``).
 _BOARD_NAME_TAILS = re.compile(r"(?i)[\s,]+(?:group|s\.?p\.?a\.?)$")
 #: The shortest guess worth probing (freehire's ``minCandidate``): shorter ids belong to someone else.
@@ -335,7 +329,7 @@ def orphans(rows: Iterable[Sequence[Any]]) -> list[Orphan]:
                 o.board = found
             if o.other_ats is None:
                 o.other_ats = next((ats for ats, pattern in OTHER_ATS if pattern.search(link)), None)
-            if _host(link) in SHORT_LINK_HOSTS and link not in o.short_links:
+            if SHORT_LINKS.match(link) and link not in o.short_links:
                 o.short_links.append(link)
     for o in out:
         tail_off = company_slug(_BOARD_NAME_TAILS.sub("", o.name))
