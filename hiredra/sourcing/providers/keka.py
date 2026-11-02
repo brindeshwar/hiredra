@@ -4,9 +4,12 @@ Ported from freehire's ``internal/ingest/sources/keka.go`` (MIT, see THIRD_PARTY
 suite; the board is the company's subdomain, ``<board>.keka.com/careers``. One request to the API the portal's own
 page calls lists every open posting with its full text: no paging, no detail request.
 
-Two changes from freehire: the company is the board's (our identity), so the portal's display-name lookup is not
-asked; and a posting's every location is kept, joined, where freehire keeps the first (measured 2026-11-01:
-10 of Anblicks' 90 postings name two). A board that does not exist redirects to a "tenant not found" page, read as a
+Three changes from freehire: the company is the board's (our identity), so the portal's display-name lookup is not
+asked; a posting's every location is kept, joined, where freehire keeps the first (measured 2026-11-01:
+10 of Anblicks' 90 postings name two); and the posting's ``experience`` field opens the text as an "Experience: ..."
+line, so the seniority gate reads it as it reads any job's text (owner, 2026-11-02). Keka keeps the years there, often
+nowhere else: of 22 postings passing the funnel, 5 say 3+ years only in the field (SDE 2 roles, "4+ yrs"); with the
+line, they drop and no other changes. A board that does not exist redirects to a "tenant not found" page, read as a
 404 so the board is retired.
 """
 
@@ -24,6 +27,7 @@ _BOARD = re.compile(r"^[a-z0-9][a-z0-9-]*$")
 _TIMEOUT_S = 30.0
 #: ``jobType`` as the portal's own script renders it: 2 is "Full Time", 1 "Part time"; anything else stays unknown.
 _JOB_TYPE = {2: "fulltime", 1: "parttime"}
+_YEARS_WORD = re.compile(r"year|yr", re.I)
 
 
 def _board(entry: CompanyEntry) -> str:
@@ -62,6 +66,15 @@ class KekaProvider:
         return [j for j in jobs if j is not None]
 
 
+def experience(posting: dict) -> str | None:
+    """The ``experience`` field as a text line: "Experience: 5+ years". Keka often writes a bare figure ("5+",
+    "0-1", "10"); "years" is added then, as the field's own meaning, so the gate reads the figure as years."""
+    value = clean(posting.get("experience"))
+    if not value:
+        return None
+    return f"Experience: {value}" + ("" if _YEARS_WORD.search(value) else " years")
+
+
 def to_job(company: str, board: str, posting: dict) -> Job | None:
     title, pid = clean(posting.get("title")), posting.get("id")
     if not title or not isinstance(pid, int) or isinstance(pid, bool):
@@ -76,7 +89,8 @@ def to_job(company: str, board: str, posting: dict) -> Job | None:
         title=title,
         company=company,
         source="keka",
-        description=html_to_text(posting.get("description")) or None,
+        description="\n\n".join(p for p in (experience(posting), html_to_text(posting.get("description"))) if p)
+        or None,
         location=location,
         date_posted=iso_date(posting.get("publishedOn")),
         job_type=_JOB_TYPE.get(posting.get("jobType")),

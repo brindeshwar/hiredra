@@ -48,6 +48,28 @@ def test_one_request_lists_the_board_with_its_text():
     assert (support.job_type, support.is_remote, support.description) == (None, True, None)
 
 
+@pytest.mark.parametrize(
+    ("experience", "want"),
+    [("5+", "Experience: 5+ years"), ("0-1", "Experience: 0-1 years"), ("4+ yrs", "Experience: 4+ yrs"),
+     ("5 Years+", "Experience: 5 Years+"), ("  ", None), (None, None)],
+)  # fmt: skip
+def test_the_experience_field_opens_the_text(experience, want):
+    [job] = _fetch(_Http([{"id": 1, "title": "SDE 2", "description": "<p>Build.</p>", "experience": experience}]))
+    assert job.description == (f"{want}\n\nBuild." if want else "Build.")
+
+
+def test_the_gate_reads_the_experience_field():
+    from hiredra.filter import load_filter_config, passes_seniority_gate
+
+    cfg = load_filter_config()
+    [senior, fresher] = _fetch(_Http([
+        {"id": 1, "title": "Software Development Engineer 2", "description": "<p>Build.</p>", "experience": "3"},
+        {"id": 2, "title": "Software Engineer", "description": "<p>Build.</p>", "experience": "0-1"},
+    ]))  # fmt: skip
+    assert not passes_seniority_gate(senior.title, senior.description, cfg).keep
+    assert passes_seniority_gate(fresher.title, fresher.description, cfg).keep
+
+
 def test_a_posting_without_a_title_or_id_is_skipped():
     assert _fetch(_Http([{"id": 1}, {"title": "No id"}, {"id": True, "title": "Bool id"}, "x"])) == []
 
