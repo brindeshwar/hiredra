@@ -231,7 +231,7 @@ def test_run_funnel_flags_onsite_unknown_place_via_job_events(pg_url):
             "company": "Acme",
             "source": "ashby",
             "location": None,
-            "description": "No years stated.",
+            "description": "No years stated here either.",  # its own role: one text is one role (D6.3)
         },
     )
 

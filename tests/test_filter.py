@@ -407,7 +407,8 @@ def test_a_crash_keeps_the_committed_chunks_and_leaves_the_rest_fetched(pg_url, 
     stay 'fetched' for the next run."""
     conn = connect(pg_url)
     for n in range(5):
-        upsert_job(conn, _job(job_id=f"greenhouse:j{n}", url=f"u{n}"))
+        # five roles, not five copies of one (D6.3 would drop the copies as duplicates)
+        upsert_job(conn, _job(job_id=f"greenhouse:j{n}", url=f"u{n}", description=f"We need backend engineer {n}."))
     monkeypatch.setattr(funnel, "COMMIT_EVERY", 2)
     real = funnel.set_status
 

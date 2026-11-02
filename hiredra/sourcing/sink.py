@@ -18,7 +18,7 @@ import psycopg
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
-from hiredra.sourcing.dedup import dedup
+from hiredra.sourcing.dedup import load_seen_index, SeenIndex, dedup
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.persist import persist_jobs
 from hiredra.storage import db
@@ -57,6 +57,7 @@ class ScoringSink:
         self._matched = 0
         self._new = 0
         self._touched = 0
+        self._index: SeenIndex | None = None
 
     def consume(
         self,
@@ -67,11 +68,17 @@ class ScoringSink:
         provenance: str = "orphan",
     ) -> None:
         self._fetched += len(jobs)
-        result = dedup(self._conn, jobs)
+        if self._index is None:  # the store read once per run, not once per board (6.4 s on 118k jobs)
+            self._index = load_seen_index(self._conn)
+        result = dedup(self._conn, jobs, index=self._index)
         self._collapsed += result.collapsed_in_run
         self._matched += result.matched_in_store
         pr = persist_jobs(self._conn, result.new, run_id=self._run_id)
         self._new += pr.inserted
+        for job in result.new:
+            self._index.add(job.job_id, job.url, job.apply_url, job.company, job.title, job.source, job.location)
+        for job, aggregator_copy in result.supersedes:  # D6.4: the company's own copy is the role's canonical one
+            db.mark_duplicate(self._conn, aggregator_copy, of=job.job_id)
         for job_id in result.seen:
             db.touch_job(self._conn, job_id, run_id=self._run_id)
         self._touched += len(result.seen)

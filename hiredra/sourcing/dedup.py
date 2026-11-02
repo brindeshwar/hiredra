@@ -59,6 +59,8 @@ class DedupResult:
     matched_in_store: int  # distinct stored jobs re-matched (== len(seen))
     merges: list[MergeTrace] = field(default_factory=list)  # intra-run, for inspection
     store_matches: list[tuple[Job, str]] = field(default_factory=list)  # (incoming, stored job_id)
+    # D6.4: (incoming ATS job, stored aggregator job_id) -- the ATS copy is stored, the aggregator row points at it
+    supersedes: list[tuple[Job, str]] = field(default_factory=list)
 
 
 # ── url normalization ──────────────────────────────────────────────────────
@@ -176,8 +178,21 @@ def _norm_role(title: str) -> str:
 
 
 # ── winner selection ("ATS wins" -- sec. 8) ────────────────────────────────
+@lru_cache(maxsize=1)
+def _aggregator_sources() -> frozenset[str]:
+    """Every source whose postings name many employers: the feeds and boards that copy other companies' jobs
+    (a provider with ``many_companies``: RemoteOK, Himalayas, The Muse, Hacker News, ...), and JobSpy (prefix)."""
+    from hiredra.sourcing.registry import REGISTRY  # here, not at import: the registry imports the providers
+
+    return frozenset(p.name for p in REGISTRY if getattr(p, "many_companies", False))
+
+
+def is_aggregator_source(source: str) -> bool:
+    return source.startswith(_AGG_PREFIX) or source in _aggregator_sources()
+
+
 def _is_aggregator(job: Job) -> bool:
-    return job.source.startswith(_AGG_PREFIX)
+    return is_aggregator_source(job.source)
 
 
 @lru_cache(maxsize=65536)
@@ -187,7 +202,7 @@ def _countries(location: str | None, title: str | None) -> frozenset[str]:
 
 def _same_role(a_source: str, a_countries: frozenset[str], b_source: str, b_countries: frozenset[str]) -> bool:
     """May two jobs with the same (company, role) key be merged? See the module docstring."""
-    one_ats_board = a_source == b_source and not a_source.startswith(_AGG_PREFIX)
+    one_ats_board = a_source == b_source and not is_aggregator_source(a_source)
     return not one_ats_board and a_countries == b_countries
 
 
@@ -251,7 +266,7 @@ def _collapse(jobs: list[Job], trace: list[MergeTrace]) -> tuple[list[Job], int]
 
 
 # ── cross-run index ────────────────────────────────────────────────────────
-class _SeenIndex:
+class SeenIndex:
     __slots__ = ("by_job_id", "by_url", "by_ct")
 
     def __init__(self) -> None:
@@ -259,53 +274,68 @@ class _SeenIndex:
         self.by_url: dict[str, str] = {}
         self.by_ct: dict[tuple[str, str], list[tuple[str, str, frozenset[str]]]] = {}
 
-    def match(self, job: Job) -> str | None:
+    def match(self, job: Job) -> tuple[str, str | None] | None:
+        """``(stored job_id, how)``: ``how`` is ``None`` for the same posting (id or url), else the stored copy's
+        source when only the (company, role) key matched."""
         if job.job_id in self.by_job_id:
-            return job.job_id
+            return job.job_id, None
         for candidate in (_norm_url(job.url), _norm_url(job.apply_url)):
             if candidate and candidate in self.by_url:
-                return self.by_url[candidate]
+                return self.by_url[candidate], None
         ct = (_norm_company(job.company), _norm_role(job.title))
         if ct[0] and ct[1]:
             here = _job_countries(job)
             for jid, source, countries in self.by_ct.get(ct, ()):
                 if _same_role(source, countries, job.source, here):
-                    return jid
+                    return jid, source
         return None
 
+    def add(self, jid: str, url: str | None, apply_url: str | None, company: str, title: str, source: str,
+            location: str | None) -> None:  # fmt: skip
+        """A job just stored, so the rest of the run matches against it without reading the store again."""
+        self.by_job_id.add(jid)
+        for candidate in (_norm_url(url), _norm_url(apply_url)):
+            if candidate:
+                self.by_url.setdefault(candidate, jid)
+        ct = (_norm_company(company), _norm_role(title))
+        if ct[0] and ct[1]:
+            self.by_ct.setdefault(ct, []).append((jid, source, _countries(location, title)))
 
-def _load_seen_index(conn: psycopg.Connection) -> _SeenIndex:
-    idx = _SeenIndex()
+
+def load_seen_index(conn: psycopg.Connection) -> SeenIndex:
+    idx = SeenIndex()
     # Insertion order, as SQLite gave it: the first stored job claims a url / role key (setdefault, first match).
     rows = conn.execute("SELECT job_key, url, apply_url, company, title, source, location FROM jobs ORDER BY id")
     for row in rows:
-        jid = row["job_key"]
-        idx.by_job_id.add(jid)
-        for candidate in (_norm_url(row["url"]), _norm_url(row["apply_url"])):
-            if candidate:
-                idx.by_url.setdefault(candidate, jid)
-        ct = (_norm_company(row["company"]), _norm_role(row["title"]))
-        if ct[0] and ct[1]:
-            idx.by_ct.setdefault(ct, []).append((jid, row["source"], _countries(row["location"], row["title"])))
+        idx.add(row["job_key"], row["url"], row["apply_url"], row["company"], row["title"], row["source"],
+                row["location"])  # fmt: skip
     return idx
 
 
 # ── entry point ────────────────────────────────────────────────────────────
-def dedup(conn: psycopg.Connection, jobs: Iterable[Job]) -> DedupResult:
+def dedup(conn: psycopg.Connection, jobs: Iterable[Job], *, index: SeenIndex | None = None) -> DedupResult:
+    """``index``: the store's index, built once per run by the caller (``ScoringSink``) and kept current with
+    ``index.add`` as jobs are stored. Building it reads every stored job: 6.4 s on 118k (2026-11-02), once per board
+    without it."""
     trace: list[MergeTrace] = []
     unique, collapsed = _collapse(list(jobs), trace)
 
-    idx = _load_seen_index(conn)
+    idx = index if index is not None else load_seen_index(conn)
     new: list[Job] = []
     seen: list[str] = []
     store_matches: list[tuple[Job, str]] = []
+    supersedes: list[tuple[Job, str]] = []
     for job in unique:
         hit = idx.match(job)
         if hit is None:
             new.append(job)
+        elif hit[1] is not None and is_aggregator_source(hit[1]) and not _is_aggregator(job):
+            # D6.4: the company's own posting of a role an aggregator copy stored first: keep the company's
+            new.append(job)
+            supersedes.append((job, hit[0]))
         else:
-            seen.append(hit)
-            store_matches.append((job, hit))
+            seen.append(hit[0])
+            store_matches.append((job, hit[0]))
 
     seen_unique = list(dict.fromkeys(seen))
     return DedupResult(
@@ -315,4 +345,5 @@ def dedup(conn: psycopg.Connection, jobs: Iterable[Job]) -> DedupResult:
         matched_in_store=len(seen_unique),
         merges=trace,
         store_matches=store_matches,
+        supersedes=supersedes,
     )
