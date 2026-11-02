@@ -19,7 +19,7 @@ import re
 from urllib.parse import urlsplit
 
 from hiredra.sourcing._html import html_to_text
-from hiredra.sourcing.http import FetchError
+from hiredra.sourcing.http import FetchError, HTTPError
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
 from hiredra.sourcing.providers._common import (
@@ -99,7 +99,17 @@ class LeverProvider:
             raise FetchError(f"lever: cannot resolve a board for {entry.name!r}")
         assert_allowed_url(base, _ALLOWED_HOSTS, self.name)
 
-        payload = ctx.http.get_json(base)  # a bare JSON array
+        try:
+            payload = ctx.http.get_json(base)  # a bare JSON array
+        except HTTPError as err:
+            # A board provisioned in Lever's EU data region answers 404 on the default host and 200 on the EU one
+            # (measured 2026-11-02: silverfin, coinspaid). freehire reads the EU host when a board is configured
+            # for it; ours asks it once whenever the default host has no such board, so an EU board found through
+            # a link needs no region of its own. A board on neither host is still a 404.
+            eu = base.replace("https://api.lever.co/", "https://api.eu.lever.co/", 1)
+            if err.status != 404 or eu == base:
+                raise
+            payload = ctx.http.get_json(eu)
         if not isinstance(payload, list):
             return []
 

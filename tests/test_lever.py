@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import httpx
+from urllib.parse import urlsplit
 import pytest
 
 from hiredra.sourcing.http import Blocked, FetchError, HTTPError
@@ -84,6 +85,17 @@ def test_non_https_api_refused(http_factory):
     http = http_factory(lambda req: httpx.Response(200, json=[]))
     with pytest.raises(FetchError):
         LV.fetch(CompanyEntry(name="A", api="http://api.lever.co/v0/postings/a"), FetchContext(http=http))
+
+
+def test_a_board_missing_on_the_default_host_is_asked_on_the_eu_host(http_factory):
+    asked = []
+
+    def handler(req):
+        asked.append(str(req.url))
+        return httpx.Response(200, json=[]) if req.url.host == "api.eu.lever.co" else httpx.Response(404)
+
+    assert LV.fetch(_entry(), FetchContext(http=http_factory(handler))) == []
+    assert [urlsplit(u).hostname for u in asked] == ["api.lever.co", "api.eu.lever.co"]
 
 
 def test_404_and_429(http_factory):
