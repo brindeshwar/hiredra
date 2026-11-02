@@ -371,7 +371,7 @@ def import_board(
     *,
     provider: str,
     board: str,
-    name: str,
+    name: str | None,
     provenance: str,
     source_name: str,
     list_tag: str | None = None,
@@ -381,7 +381,8 @@ def import_board(
 ) -> str:
     """Write one company-list entry into ``boards`` (``boards import``). With ``alias``, a known board filed under
     another spelling gets ``name`` recorded as an alias of its company (``record_alias``): for discovery whose
-    match was checked (slices 2.4-2.6), never for a list taken on trust. Returns what happened:
+    match was checked (slices 2.4-2.6), never for a list taken on trust. ``name`` is ``None`` for a feed of many
+    employers' jobs (a remote board): the board has no company, each job names its own. Returns what happened:
 
     ``new``        not stored yet: added as ``pending`` (D5.5), with its company.
     ``known``      already stored: only blank fields are filled; provenance and status never change (the first
@@ -405,18 +406,20 @@ def import_board(
         conn.execute(
             "INSERT INTO boards (provider, board, company_id, careers_url, status, provenance, list_tag) "
             "VALUES (%s, %s, %s, %s, 'pending', %s, %s)",
-            (provider, board, _company_id(conn, name), careers_url, provenance, list_tag),
+            (provider, board, _company_id(conn, name) if name else None, careers_url, provenance, list_tag),
         )
         return "new"
     # A known board keeps its company. Only a board without one looks the list's name up: looking it up anyway
     # would mint a company row nothing points at for every spelling the list differs on ("1910" vs "1910 Genetics").
-    company_id = row["company_id"] if row["company_id"] is not None else _company_id(conn, name)
+    company_id = row["company_id"]
+    if company_id is None and name:
+        company_id = _company_id(conn, name)
     conn.execute(
         "UPDATE boards SET company_id = %s, careers_url = COALESCE(careers_url, %s), "
         "list_tag = COALESCE(list_tag, %s) WHERE id = %s",
         (company_id, careers_url, list_tag, row["id"]),
     )
-    if alias and company_id is not None:
+    if alias and name and company_id is not None:
         record_alias(conn, name, company_id)
     if row["status"] == "retired" and row["status_reason"] == reason:
         conn.execute("UPDATE boards SET status = 'pending', status_reason = NULL WHERE id = %s", (row["id"],))

@@ -128,6 +128,18 @@ def test_cli_boards_import(tmp_path, capsys, pg_url):
     assert main(["boards", "import", str(path), "--db", pg_url]) == 0  # idempotent
     assert "new" not in capsys.readouterr().out.split("->")[1]
 
+    # a remote board's feed names many employers: it is stored with no company and runs under its own name
+    feeds = _write(tmp_path, "companies:\n  - {name: RemoteOK, slug: remoteok.com, provider: remoteok}\n", "f.yml")
+    assert main(["boards", "import", str(feeds), "--db", pg_url, "--provenance", "curated"]) == 0
+    conn = db.connect(pg_url)
+    try:
+        [row] = [r for r in db.load_boards(conn, ("curated",)) if r["provider"] == "remoteok"]
+        assert (row["board"], row["name"]) == ("remoteok.com", None)
+        assert conn.execute("SELECT count(*) FROM companies WHERE name = 'RemoteOK'").fetchone()[0] == 0
+    finally:
+        conn.close()
+    capsys.readouterr()
+
     bad = _write(tmp_path, "companies:\n  - {name: Mystery, careers_url: 'https://example.com/jobs'}\n", "bad.yml")
     assert main(["boards", "import", str(bad), "--db", pg_url]) == 1
     assert "no provider or board slug for 1: Mystery" in capsys.readouterr().out
@@ -185,6 +197,49 @@ def test_cli_run_crawls_the_boards_the_config_names(tmp_path, monkeypatch, capsy
     assert main(["run", "--config", str(wide), "--db", pg_url]) == 0
     assert [e.name for e in recorder.entries] == ["Acme", "Ramp"]
     assert "-> OK" in capsys.readouterr().out
+
+
+class _Feed:
+    """A remote board's feed: one board, no company, every job naming its own employer."""
+
+    name = "remoteok"
+
+    def detect(self, entry):
+        return entry.provider == self.name
+
+    def board_url(self, entry):
+        return None
+
+    def fetch(self, entry, ctx):
+        from hiredra.sourcing.job import Job
+
+        return [
+            Job(job_id=f"remoteok:{i}", url=f"https://remoteok.com/remote-jobs/{i}", title="Backend Engineer",
+                company=company, source="remoteok", is_remote=True)
+            for i, company in ((1, "Askable"), (2, "Mirantis"))
+        ]  # fmt: skip
+
+
+def test_a_run_over_a_feed_board_stores_each_job_under_its_own_employer(tmp_path, monkeypatch, pg_url):
+    from hiredra.sourcing import __main__ as cli
+
+    conn = db.connect(pg_url)
+    try:
+        db.init_db(conn)
+        _board(conn, "remoteok", "remoteok.com", "curated")  # no company
+        real_run = cli.run_orchestrator
+        monkeypatch.setattr("hiredra.sourcing.orchestrator.JobSpySource", _NoJobSpy)
+        monkeypatch.setattr(cli, "run_orchestrator", lambda config, **kw: real_run(config, registry=(_Feed(),), **kw))
+        config = _write(tmp_path, "kind: scoring\nboards: [curated]\njobspy: {sites: []}\n", "scoring.yml")
+        assert cli.main(["run", "--config", str(config), "--db", pg_url]) == 0
+        rows = conn.execute(
+            "SELECT j.job_key, c.name FROM jobs j JOIN companies c ON c.id = j.company_id ORDER BY 1"
+        ).fetchall()
+        assert rows == [("remoteok:1", "Askable"), ("remoteok:2", "Mirantis")]
+        boards = conn.execute("SELECT provider, board, company_id FROM boards").fetchall()
+        assert boards == [("remoteok", "remoteok.com", None)]  # the feed's board only: none made for its name
+    finally:
+        conn.close()
 
 
 # ── public ATS-company lists (slice 2.3) ────────────────────────────────────
