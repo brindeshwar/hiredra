@@ -33,6 +33,7 @@ from hiredra.sourcing.providers import (
     SuccessFactorsProvider,
     TaleoBEProvider,
     TeamtailorProvider,
+    TheMuseProvider,
     WeWorkRemotelyProvider,
     WorkableProvider,
     WorkdayProvider,
@@ -70,6 +71,7 @@ REGISTRY: tuple[Provider, ...] = (
     WorkingNomadsProvider(),
     WeWorkRemotelyProvider(),
     HackerNewsProvider(),
+    TheMuseProvider(),
 )
 
 
