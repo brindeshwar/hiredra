@@ -5,6 +5,7 @@ from hiredra.sourcing.providers.apple import AppleProvider
 from hiredra.sourcing.providers.ashby import AshbyProvider
 from hiredra.sourcing.providers.eightfold import EightfoldProvider
 from hiredra.sourcing.providers.greenhouse import GreenhouseProvider
+from hiredra.sourcing.providers.hackernews import HackerNewsProvider
 from hiredra.sourcing.providers.ibm import IBMProvider
 from hiredra.sourcing.providers.icims import ICIMSProvider
 from hiredra.sourcing.providers.keka import KekaProvider
@@ -39,6 +40,7 @@ __all__ = [
     "AshbyProvider",
     "EightfoldProvider",
     "GreenhouseProvider",
+    "HackerNewsProvider",
     "IBMProvider",
     "ICIMSProvider",
     "KekaProvider",
