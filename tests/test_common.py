@@ -10,7 +10,10 @@ from hiredra.sourcing.providers._common import (
     clean,
     infer_remote,
     iso_date,
+    salary_period,
+    salary_range,
     sitemap_locs,
+    work_mode,
 )
 
 _HOSTS = frozenset({"api.lever.co"})
@@ -119,3 +122,32 @@ def test_sitemap_locs_reads_both_shapes():
 def test_sitemap_locs_rejects_anything_else(body):
     with pytest.raises(FetchError):
         sitemap_locs(body)
+
+
+# ── structured fields (03-adapters.md §1) ───────────────────────────────────
+@pytest.mark.parametrize(
+    ("value", "want"),
+    [("Remote", "remote"), ("OnSite", "onsite"), ("on_site", "onsite"), ("On-site", "onsite"), ("In office", "onsite"),
+     ("Hybrid", "hybrid"), ("fully", "remote"), ("unspecified", None), ("", None), (None, None)],
+)  # fmt: skip
+def test_work_mode(value, want):
+    assert work_mode(value) == want
+
+
+@pytest.mark.parametrize(
+    ("value", "want"),
+    [("per-year-salary", "year"), ("1 YEAR", "year"), ("annual", "year"), ("per-month-salary", "month"),
+     ("per-hour-wage", "hour"), ("1 HOUR", "hour"), ("NONE", None), ("fortnightly", None), (None, None)],
+)  # fmt: skip
+def test_salary_period(value, want):
+    assert salary_period(value) == want
+
+
+def test_salary_range_takes_the_stated_range_as_given():
+    assert salary_range(8, 10, "inr", "per-year-salary") == {
+        "salary_min": 8, "salary_max": 10, "salary_currency": "INR", "salary_period": "year"
+    }  # fmt: skip
+    assert salary_range(None, 175000, "USD", "1 YEAR")["salary_min"] is None  # one bound is a range
+    assert salary_range(None, None, "USD", "1 YEAR") == {}  # no bound states nothing
+    assert salary_range("8", -1, "rupees", None) == {}  # not numbers
+    assert salary_range(5, 9, "rupees", None)["salary_currency"] is None  # not a currency code

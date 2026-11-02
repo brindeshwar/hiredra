@@ -24,7 +24,7 @@ from hiredra.sourcing._html import html_to_text, ld_job_posting
 from hiredra.sourcing.http import FetchError, HttpConfig
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
-from hiredra.sourcing.providers._common import DETAIL_BUDGET, Robots, clean, hydrate, infer_remote, iso_date
+from hiredra.sourcing.providers._common import DETAIL_BUDGET, clean, hydrate, infer_remote, iso_date, Robots, work_mode
 from hiredra.sourcing.providers.remoteboards import job_type
 
 SITE = "www.ycombinator.com"
@@ -131,5 +131,6 @@ def to_job(row: dict, page: str | None) -> Job | None:
         location=location,
         date_posted=iso_date(posting.get("datePosted")),
         job_type=job_type(row.get("type")),
+        work_mode=work_mode(workplace),
         is_remote=infer_remote(location or "", workplace_type=workplace),
     )

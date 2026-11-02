@@ -13,7 +13,7 @@ from hiredra.sourcing._html import html_to_text
 from hiredra.sourcing.http import FetchError
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
-from hiredra.sourcing.providers._common import assert_allowed_url, clean, infer_remote, iso_date
+from hiredra.sourcing.providers._common import assert_allowed_url, clean, infer_remote, iso_date, work_mode
 
 API = "https://apply.workable.com/api/v1/widget/accounts"
 _ALLOWED_HOSTS = frozenset({"apply.workable.com"})
@@ -83,5 +83,6 @@ def to_job(company: str, entries: list[dict]) -> Job | None:
         location=location,
         date_posted=iso_date(posting.get("published_on")),
         job_type=_JOB_TYPE.get(clean(posting.get("type")) or ""),
+        work_mode=work_mode(workplace),
         is_remote=infer_remote(f"{location or ''} {title}", workplace_type=workplace),
     )

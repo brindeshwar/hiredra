@@ -99,6 +99,44 @@ def infer_remote(text: str, *, workplace_type: str | None = None) -> bool | None
     return True if _REMOTE_RE.search(text) else None
 
 
+_WORK_MODE = {
+    "remote": "remote", "fullyremote": "remote", "fully": "remote", "telecommute": "remote", "wfh": "remote",
+    "hybrid": "hybrid",
+    "onsite": "onsite", "inoffice": "onsite", "office": "onsite", "inperson": "onsite",
+}  # fmt: skip
+
+
+def work_mode(workplace_type: str | None) -> str | None:
+    """A platform's own workplace field as ``remote`` / ``hybrid`` / ``onsite`` ("OnSite", "on_site", "In office",
+    Teamtailor's "fully"); ``None`` for an absent or unknown value ("unspecified"). Never read from free text: a
+    location that says "Remote" stays ``infer_remote``'s, a guess."""
+    return _WORK_MODE.get(re.sub(r"[\s_-]+", "", (workplace_type or "").lower()))
+
+
+_PERIODS = (("year", "year"), ("annual", "year"), ("month", "month"), ("week", "week"), ("day", "day"),
+            ("daily", "day"), ("hour", "hour"))  # fmt: skip
+
+
+def salary_period(value: str | None) -> str | None:
+    """A platform's pay interval as ``year`` / ``month`` / ``week`` / ``day`` / ``hour``: Lever's "per-year-salary",
+    Ashby's "1 YEAR", Himalayas' "annual"; ``None`` for anything else ("NONE", "fortnightly")."""
+    text = (value or "").lower()
+    return next((period for word, period in _PERIODS if word in text), None)
+
+
+def salary_range(low: Any, high: Any, currency: Any, period: Any) -> dict[str, Any]:
+    """The four ``Job`` salary fields from a platform's stated range, as given (an Indian "8-10 per year" is 8-10
+    LPA); a bound that is no number, or a range with no bound at all, states nothing."""
+    bounds = [v if isinstance(v, (int, float)) and not isinstance(v, bool) and v >= 0 else None for v in (low, high)]
+    if bounds == [None, None]:
+        return {}
+    code = clean(currency)
+    return {
+        "salary_min": bounds[0], "salary_max": bounds[1],
+        "salary_currency": code.upper() if code and len(code) == 3 else None, "salary_period": salary_period(period),
+    }  # fmt: skip
+
+
 #: Detail requests per board per run for a hydrating provider (D3.4): a stored posting needs none, and a huge new
 #: board drains over runs instead of eating one (Workday's ABB, 2,035 postings, took 29 min one at a time).
 DETAIL_BUDGET = 200

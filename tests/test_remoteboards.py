@@ -121,7 +121,8 @@ def _him_url(page):
 
 def test_himalayas_reads_the_country_search_until_an_empty_page():
     http = _Http({
-        _him_url(1): {"jobs": [_himalayas("a"), _himalayas("b", companyName="name", companySlug="talentcross")]},
+        _him_url(1): {"jobs": [_himalayas("a", minSalary=1200000, maxSalary=1800000, currency="INR"),
+                              _himalayas("b", companyName="name", companySlug="talentcross")]},
         _him_url(2): {"jobs": [_himalayas("b"), _himalayas("c", guid="https://elsewhere.com/x")]},
         _him_url(3): {"jobs": []},
     })  # fmt: skip
@@ -130,6 +131,9 @@ def test_himalayas_reads_the_country_search_until_an_empty_page():
         "himalayas:acme/jobs/a", "https://himalayas.app/companies/acme/jobs/a", "Acme", "India; Philippines", "intern"
     )  # fmt: skip
     assert (a.description, a.date_posted, a.is_remote) == ("Build it.", "2026-11-02", True)  # the trailer cut
+    assert (a.work_mode, a.employment_type) == ("remote", "internship")  # a remote-only board
+    assert (a.salary_min, a.salary_max, a.salary_currency, a.salary_period) == (1200000, 1800000, "INR", "year")
+    assert b.salary_min is None
     assert b.company == "talentcross"  # the unresolved "name" falls back to the slug; the repeat on page 2 is dropped
 
 

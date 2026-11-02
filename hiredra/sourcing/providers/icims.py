@@ -22,12 +22,13 @@ from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
 from hiredra.sourcing.providers._common import (
     DETAIL_BUDGET,
-    Robots,
     clean,
     hydrate,
     infer_remote,
     iso_date,
+    Robots,
     sitemap_locs,
+    work_mode,
 )
 
 _SLUG = re.compile(r"^[a-z0-9][a-z0-9-]*$")
@@ -160,5 +161,6 @@ def to_job(company: str, site: str, loc: str, page: str) -> Job | None:
         description=html_to_text(posting.get("description")) or None,
         location=location,
         date_posted=iso_date(posting.get("datePosted")),
+        work_mode=work_mode(workplace),
         is_remote=infer_remote(f"{location or ''} {title}", workplace_type=workplace),
     )

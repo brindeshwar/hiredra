@@ -21,6 +21,7 @@ from hiredra.sourcing.providers._common import (
     hydrate,
     infer_remote,
     iso_date,
+    work_mode,
 )
 
 API = "https://api.smartrecruiters.com/v1/companies"
@@ -116,5 +117,6 @@ def to_job(company: str, posting: dict, detail: dict) -> Job | None:
         location=location,
         date_posted=iso_date(posting.get("releasedDate")),
         job_type=_JOB_TYPE.get(employment.get("id") or ""),
+        work_mode=work_mode(workplace),
         is_remote=infer_remote(location or "", workplace_type=workplace),
     )

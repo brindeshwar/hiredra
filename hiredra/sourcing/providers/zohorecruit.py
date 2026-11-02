@@ -182,5 +182,6 @@ def to_job(company: str, site: str, opening: dict, page: str | None) -> Job | No
         location=location,
         date_posted=posted,
         job_type=_JOB_TYPE.get((clean(opening.get("Job_Type")) or "").lower()),
+        work_mode="remote" if remote else None,
         is_remote=infer_remote(location or "", workplace_type="remote" if remote else None),
     )

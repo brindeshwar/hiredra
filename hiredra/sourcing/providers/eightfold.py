@@ -25,7 +25,7 @@ from hiredra.sourcing._html import html_to_text
 from hiredra.sourcing.http import Blocked, FetchError, HTTPError
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
-from hiredra.sourcing.providers._common import DETAIL_BUDGET, clean, hydrate, infer_remote, iso_date, log
+from hiredra.sourcing.providers._common import DETAIL_BUDGET, clean, hydrate, infer_remote, iso_date, log, work_mode
 
 _HOST = re.compile(r"^[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+$")
 #: The tenant domain as the careers page states it (``"domain": "paypal.com"``).
@@ -159,5 +159,6 @@ def to_job(company: str, host: str, domain: str, position: dict, detail: dict | 
         description=description,
         location=location,
         date_posted=iso_date(posted * 1000) if isinstance(posted, int) and posted > 0 else None,
+        work_mode=work_mode(workplace),
         is_remote=infer_remote(location or "", workplace_type=workplace),
     )

@@ -78,6 +78,7 @@ def lever_payload() -> list:
             "descriptionPlain": "Build backend systems.",
             "createdAt": 1_726_000_000_000,
             "workplaceType": "hybrid",
+            "salaryRange": {"min": 8, "max": 10, "currency": "INR", "interval": "per-year-salary"},
         },
         {
             "id": "bbbb-2222",
@@ -118,7 +119,19 @@ def ashby_payload() -> dict:
                 "publishedAt": "2026-08-20T12:00:00.000Z",
                 "employmentType": "FullTime",
                 "workplaceType": "Onsite",
-                "compensation": {"compensationTierSummary": "$180K - $220K"},
+                "compensation": {
+                    "compensationTierSummary": "$180K - $220K",
+                    "summaryComponents": [
+                        {"compensationType": "EquityPercentage", "interval": "NONE", "minValue": None},
+                        {
+                            "compensationType": "Salary",
+                            "interval": "1 YEAR",
+                            "currencyCode": "USD",
+                            "minValue": 180000,
+                            "maxValue": 220000,
+                        },
+                    ],
+                },
             },
             {
                 "id": "job_002",

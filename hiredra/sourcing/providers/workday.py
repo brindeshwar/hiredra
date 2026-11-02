@@ -30,6 +30,7 @@ from hiredra.sourcing.providers._common import (
     hydrate,
     infer_remote,
     iso_date,
+    work_mode,
 )
 
 log = logging.getLogger("hiredra.sourcing.workday")
@@ -219,5 +220,6 @@ def to_job(company: str, board: Board, posting: dict, detail: dict) -> Job | Non
         location=location,
         date_posted=iso_date(info.get("startDate")),
         job_type=_employment_type(info.get("timeType")),
+        work_mode=work_mode(remote_type),
         is_remote=True if "remote" in remote_type else infer_remote(location or ""),
     )

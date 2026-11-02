@@ -112,6 +112,40 @@ def test_from_row_ignores_non_job_columns(pg_url):
     conn.close()
 
 
+# ── structured fields (03-adapters.md §1) ───────────────────────────────────
+def test_the_structured_fields_survive_a_storage_round_trip(pg_url):
+    conn = db.connect(pg_url)
+    db.init_db(conn)
+    original = Job(**_kwargs(job_id="greenhouse:gh-2", work_mode="hybrid", salary_min=8, salary_max=10.5,
+                             salary_currency="INR", salary_period="year"))  # fmt: skip
+    db.upsert_job(conn, original.to_dict())
+    rebuilt = Job.from_row(db.get_job(conn, "greenhouse:gh-2"))
+    assert rebuilt == original  # a numeric comes back as a Decimal: read as a float
+    assert (rebuilt.employment_type, rebuilt.salary_max) == ("full_time", 10.5)  # from job_type "fulltime"
+    conn.close()
+
+
+@pytest.mark.parametrize(
+    ("job_type", "want"),
+    [("fulltime", "full_time"), ("Full-time Employment", "full_time"), ("Part Time", "part_time"),
+     ("intern", "internship"), ("Contract Full time", "contract"), ("Freelance-Remote", "contract"),
+     ("Full time or Part time", None), ("On- roll", None), ("Remote", None), (None, None)],
+)  # fmt: skip
+def test_employment_type_is_read_from_the_platforms_job_type(job_type, want):
+    assert Job(**_kwargs(job_type=job_type)).employment_type == want
+    assert Job(**_kwargs(job_type="intern", employment_type="contract")).employment_type == "contract"  # stated wins
+
+
+@pytest.mark.parametrize(
+    "over",
+    [{"work_mode": "Remote"}, {"employment_type": "fulltime"}, {"salary_period": "annual"}, {"salary_min": -1},
+     {"salary_max": "10"}, {"salary_min": True}],
+)  # fmt: skip
+def test_a_structured_field_outside_its_vocabulary_is_refused(over):
+    with pytest.raises((TypeError, ValueError)):
+        Job(**_kwargs(**over))
+
+
 # ── Provider protocol ──────────────────────────────────────────────────────
 class _FakeProvider:
     name = "fake"

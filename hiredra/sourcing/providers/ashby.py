@@ -15,10 +15,12 @@ from hiredra.sourcing.http import FetchError
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
 from hiredra.sourcing.providers._common import (
+    salary_range,
     assert_allowed_url,
     clean,
     infer_remote,
     iso_date,
+    work_mode,
 )
 
 log = logging.getLogger("hiredra.sourcing.ashby")
@@ -62,6 +64,19 @@ def _salary(job: dict) -> str | None:
         if summary:
             return summary
     return None
+
+
+def _salary_range(job: dict) -> dict:
+    """The ``Salary`` component of ``compensation.summaryComponents`` (equity and bonus are not pay) as the Job
+    salary fields."""
+    comp = job.get("compensation")
+    parts = comp.get("summaryComponents") if isinstance(comp, dict) else None
+    for part in parts if isinstance(parts, list) else ():
+        if isinstance(part, dict) and part.get("compensationType") == "Salary":
+            return salary_range(
+                part.get("minValue"), part.get("maxValue"), part.get("currencyCode"), part.get("interval")
+            )
+    return {}
 
 
 class AshbyProvider:
@@ -123,6 +138,8 @@ class AshbyProvider:
                         job_type=clean(j.get("employmentType")),
                         salary=_salary(j),
                         apply_url=apply_url,
+                        work_mode=work_mode(j.get("workplaceType")),
+                        **_salary_range(j),
                         is_remote=infer_remote(
                             f"{location or ''} {title}",
                             workplace_type=j.get("workplaceType"),

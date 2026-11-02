@@ -98,6 +98,12 @@ _JOB_COLUMNS: tuple[str, ...] = (
     "salary",
     "apply_url",
     "is_remote",
+    "work_mode",
+    "employment_type",
+    "salary_min",
+    "salary_max",
+    "salary_currency",
+    "salary_period",
 )
 
 _REQUIRED_JOB_FIELDS = ("url", "title", "company", "source")
@@ -108,6 +114,7 @@ _REQUIRED_JOB_FIELDS = ("url", "title", "company", "source")
 _JOB_SELECT = """
 SELECT j.job_key AS job_id, j.id, j.source, j.external_id, j.url, j.apply_url, j.title, j.company, j.location,
        j.countries, j.is_remote, j.work_mode, j.date_posted, j.job_type, j.employment_type, j.salary,
+       j.salary_min, j.salary_max, j.salary_currency, j.salary_period,
        j.description, j.content_hash, j.role_fingerprint, j.duplicate_of, j.years_required,
        j.status, j.status_detail, j.status_changed_at,
        j.domain_bucket, j.legitimacy, j.extraction_confidence, j.extraction_version, j.dictionary_version,
