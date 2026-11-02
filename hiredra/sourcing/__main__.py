@@ -122,7 +122,7 @@ def _cmd_boards_import(args: argparse.Namespace) -> int:
                     conn,
                     provider=provider.name,
                     board=slug,
-                    name=entry.name,
+                    name=None if getattr(provider, "many_companies", False) else entry.name,
                     provenance=str(entry.extra["provenance"]),
                     source_name=Path(args.path).name,
                     list_tag=entry.extra.get("tag"),

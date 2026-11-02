@@ -18,18 +18,23 @@ from hiredra.sourcing.providers import (
     AshbyProvider,
     EightfoldProvider,
     GreenhouseProvider,
+    HimalayasProvider,
     IBMProvider,
     ICIMSProvider,
+    JobicyProvider,
     KekaProvider,
     LeverProvider,
     OracleProvider,
+    RemoteOKProvider,
     RipplingProvider,
     SmartRecruitersProvider,
     SuccessFactorsProvider,
     TaleoBEProvider,
     TeamtailorProvider,
+    WeWorkRemotelyProvider,
     WorkableProvider,
     WorkdayProvider,
+    WorkingNomadsProvider,
     ZohoRecruitProvider,
 )
 
@@ -56,6 +61,11 @@ REGISTRY: tuple[Provider, ...] = (
     AmazonProvider(),
     IBMProvider(),
     AppleProvider(),
+    RemoteOKProvider(),
+    JobicyProvider(),
+    HimalayasProvider(),
+    WorkingNomadsProvider(),
+    WeWorkRemotelyProvider(),
 )
 
 
