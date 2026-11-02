@@ -1402,7 +1402,11 @@ TZ_CODES = {
 
 def _split(loc: str) -> list[str]:
     """Hyphenated forms: "Mexico-Remote", "US - Remote (...)", "IND-Pune-Smartworks" -> split on
-    hyphens too when a side is a known country/code (keeps "Winston-Salem" intact)."""
+    hyphens too when a side is a known country/code (keeps "Winston-Salem" intact). The word "only" goes first:
+    "Remote - US Only", "USA Only", "Remote (US-only)" state the place as plainly as "US" does, and a segment
+    "US Only" matched nothing, so the line read as unknown and was kept (46 stored jobs, 2026-11-02; Hiredra's
+    addition, not freehire's)."""
+    loc = re.sub(r"[-–]?\bonly\b", " ", loc, flags=re.I)
 
     def hy(m: re.Match) -> str:
         a, b = m.group(1), m.group(2)
@@ -1432,7 +1436,8 @@ def _split(loc: str) -> list[str]:
     # upstream "•" (bullet) alone doesn't catch it. Case-insensitive -- "OR"/
     # "AND" (all-caps, common in real postings: "Beijing OR Shanghai") must
     # split the same as lowercase "or"/"and".
-    parts = re.split(r"\s*(?:;|\||/|:|\bor\b|\band\b|&|•|·)\s*", loc, flags=re.I)  # ":" too: "US: PST or EST"
+    # ":" too: "US: PST or EST"; a spaced "+" too: "Remote (US + Canada Only)" (never "C++")
+    parts = re.split(r"\s*(?:;|\||/|:|\bor\b|\band\b|&|•|·|\s\+\s)\s*", loc, flags=re.I)
     return [p.strip(" -–,") for p in parts if p and p.strip(" -–,")]
 
 

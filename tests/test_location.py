@@ -436,6 +436,24 @@ def test_a_restriction_in_the_title_counts_when_the_location_is_bare(title, ok):
     assert eligibility("India", "Remote", "", title)[0] is ok
 
 
+@pytest.mark.parametrize(
+    ("location", "ok"),
+    [
+        ("USA Only", False),  # was unknown, so kept: "only" made the segment match nothing
+        ("Remote - US Only", False),
+        ("Remote (US-only)", False),
+        ("Remote, California Only", False),
+        ("Remote - Europe Only", False),
+        ("Remote (US + Canada Only)", False),  # a spaced "+" separates, like "&"
+        ("Remote (India + Singapore)", True),
+        ("Remote (India - Bangalore ONLY)", True),
+        ("India only", True),
+    ],
+)
+def test_the_word_only_does_not_hide_the_place(location, ok):
+    assert eligibility("India", location, "", "Engineer")[0] is ok
+
+
 def test_the_title_never_overrides_a_stated_location():
     assert eligibility("India", "Bengaluru, India", "", "Backend Engineer [Remote-US]")[0] is True
 
