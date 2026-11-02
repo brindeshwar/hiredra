@@ -220,7 +220,8 @@ class _Feed:
         ]  # fmt: skip
 
 
-def test_a_run_over_a_feed_board_stores_each_job_under_its_own_employer(tmp_path, monkeypatch, pg_url):
+@pytest.mark.parametrize("workers", [1, 2])  # 2: the pool, with seen on a connection of its own (D4.1)
+def test_a_run_over_a_feed_board_stores_each_job_under_its_own_employer(tmp_path, monkeypatch, pg_url, workers):
     from hiredra.sourcing import __main__ as cli
 
     conn = db.connect(pg_url)
@@ -230,7 +231,8 @@ def test_a_run_over_a_feed_board_stores_each_job_under_its_own_employer(tmp_path
         real_run = cli.run_orchestrator
         monkeypatch.setattr("hiredra.sourcing.orchestrator.JobSpySource", _NoJobSpy)
         monkeypatch.setattr(cli, "run_orchestrator", lambda config, **kw: real_run(config, registry=(_Feed(),), **kw))
-        config = _write(tmp_path, "kind: scoring\nboards: [curated]\njobspy: {sites: []}\n", "scoring.yml")
+        body = f"kind: scoring\nboards: [curated]\njobspy: {{sites: []}}\npacing: {{workers: {workers}}}\n"
+        config = _write(tmp_path, body, "scoring.yml")
         assert cli.main(["run", "--config", str(config), "--db", pg_url]) == 0
         rows = conn.execute(
             "SELECT j.job_key, c.name FROM jobs j JOIN companies c ON c.id = j.company_id ORDER BY 1"

@@ -6,6 +6,10 @@ are injected, so nothing here actually waits.
 
 from __future__ import annotations
 
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+
 import httpx
 import pytest
 
@@ -73,6 +77,40 @@ def test_we_offer_gzip_and_deflate_only():
     client, _, _ = make_client(handler)
     client.get_text("https://api.example.com/x")
     assert seen["accept-encoding"] == "gzip, deflate"
+
+
+# ── at most per_host requests to one host at once, across threads (D4.2) ─────
+def _peak_in_flight(client, urls):
+    lock, state = threading.Lock(), {"now": 0, "peak": {}}
+
+    def handler(req):
+        host = req.url.host
+        with lock:
+            state["now"] += 1
+            state.setdefault(host, 0)
+            state[host] += 1
+            state["peak"][host] = max(state["peak"].get(host, 0), state[host])
+        time.sleep(0.05)
+        with lock:
+            state[host] -= 1
+        return httpx.Response(200, text="ok")
+
+    client._client._transport = httpx.MockTransport(handler)
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(client.get_text, urls))
+    return state["peak"]
+
+
+def test_a_host_gets_at_most_per_host_requests_at_once_and_another_host_is_not_held_up():
+    client, _, _ = make_client(lambda req: httpx.Response(200))
+    urls = [f"https://a.example/{i}" for i in range(8)] + [f"https://b.example/{i}" for i in range(4)]
+    assert _peak_in_flight(client, urls) == {"a.example": 2, "b.example": 2}
+
+
+def test_a_host_limit_overrides_per_host():
+    client, _, _ = make_client(lambda req: httpx.Response(200), per_host=1, host_limits={"a.example": 3})
+    urls = [f"https://a.example/{i}" for i in range(8)] + [f"https://b.example/{i}" for i in range(4)]
+    assert _peak_in_flight(client, urls) == {"a.example": 3, "b.example": 1}
 
 
 # ── happy paths ────────────────────────────────────────────────────────────

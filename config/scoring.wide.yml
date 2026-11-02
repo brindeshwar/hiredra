@@ -11,12 +11,18 @@ boards: all
 
 pacing:
   between_companies: 1.0      # base seconds between company fetches
-  jitter: 0.5                 # + up to this many random seconds
+  jitter: 0.5                 # + up to this many random seconds (one worker only)
+  workers: 16                 # boards fetched at once (D4.1); past 1, http.per_host paces a host
 
 http:
   timeout: 15.0
   cooldown_seconds: 900.0     # default block cooldown (ATS hosts): 15 min
   proxy: null                 # OFF (docs/decisions.md #20)
+  per_host: 2                 # requests in flight to one host at once (D4.2)
+  host_limits:                # measured 2026-11-02: 4 on these held, 150 boards in 61 s, no 429
+    boards-api.greenhouse.io: 4
+    api.lever.co: 4
+    api.ashbyhq.com: 4
 
 jobspy:
   sites: [indeed, linkedin]     # google OFF (M0.2, 2026-10-17): 0 rows on 4 query phrasings

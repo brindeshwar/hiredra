@@ -27,7 +27,7 @@ import socket
 import threading
 import time
 from collections.abc import Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from email.utils import parsedate_to_datetime
 from typing import Any
 from urllib.parse import urljoin, urlsplit
@@ -74,6 +74,8 @@ class HttpConfig:
     proxy: str | None = None  # OFF by default (decisions.md #20)
     follow_redirects: bool = False  # SSRF-safe default; providers opt in per-request
     sniff_challenges: bool = True  # narrow body-pattern bot-challenge detection
+    per_host: int = 2  # requests in flight to one host at once, across all workers (D4.2)
+    host_limits: Mapping[str, int] = field(default_factory=dict, hash=False)  # per-host overrides of per_host
 
 
 # ── exceptions ──────────────────────────────────────────────────────────────
@@ -296,6 +298,8 @@ class HttpClient:
         self.config = config or HttpConfig()
         self._sleep = sleep if sleep is not None else time.sleep
         self.cooldowns = CooldownRegistry(now)  # None → time.time (wall-clock epoch)
+        self._slots: dict[str, threading.BoundedSemaphore] = {}
+        self._slots_lock = threading.Lock()
 
         kwargs: dict[str, Any] = {
             "timeout": self.config.timeout,
@@ -360,7 +364,8 @@ class HttpClient:
 
         def _attempt() -> httpx.Response:
             try:
-                resp = self._client.request(method, url, **req_kwargs)
+                with self._slot(host):  # held for the request only, never across a retry's wait
+                    resp = self._client.request(method, url, **req_kwargs)
             except httpx.TransportError as err:
                 raise TransientError(f"{method} {url}: {type(err).__name__}", url=url) from err
             except httpx.RequestError as err:
@@ -383,6 +388,16 @@ class HttpClient:
         return self.request("GET", url, **kw).text
 
     # internals ---------------------------------------------------------
+    def _slot(self, host: str) -> threading.BoundedSemaphore:
+        """The host's request slots (D4.2): ``per_host`` at once, or its ``host_limits`` entry, shared by every
+        thread using this client, so a pool of workers never puts more than that on one host."""
+        with self._slots_lock:
+            slot = self._slots.get(host)
+            if slot is None:
+                slot = threading.BoundedSemaphore(max(1, self.config.host_limits.get(host, self.config.per_host)))
+                self._slots[host] = slot
+            return slot
+
     @staticmethod
     def _as_json(resp: httpx.Response, url: str) -> Any:
         try:
