@@ -72,6 +72,6 @@ def test_registry_contents():
         "greenhouse", "lever", "ashby", "workday", "oracle", "smartrecruiters", "workable", "icims",
         "successfactors", "taleobe", "keka", "zohorecruit", "teamtailor", "rippling", "eightfold", "amazon", "ibm",
         "apple", "remoteok", "remotive", "jobicy", "himalayas", "workingnomads", "weworkremotely",
-        "hackernews",
+        "hackernews", "themuse",
     ]  # fmt: skip
     assert all(isinstance(p, Provider) for p in REGISTRY)

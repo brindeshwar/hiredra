@@ -24,6 +24,7 @@ from hiredra.sourcing.providers.smartrecruiters import SmartRecruitersProvider
 from hiredra.sourcing.providers.successfactors import SuccessFactorsProvider
 from hiredra.sourcing.providers.taleobe import TaleoBEProvider
 from hiredra.sourcing.providers.teamtailor import TeamtailorProvider
+from hiredra.sourcing.providers.themuse import TheMuseProvider
 from hiredra.sourcing.providers.workable import WorkableProvider
 from hiredra.sourcing.providers.workday import WorkdayProvider
 from hiredra.sourcing.providers.zohorecruit import ZohoRecruitProvider
@@ -51,6 +52,7 @@ __all__ = [
     "SuccessFactorsProvider",
     "TaleoBEProvider",
     "TeamtailorProvider",
+    "TheMuseProvider",
     "WorkableProvider",
     "WorkdayProvider",
     "ZohoRecruitProvider",
