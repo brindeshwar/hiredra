@@ -54,6 +54,29 @@ def test_remoteok_skips_the_legal_notice_and_postings_without_a_company():
     )  # fmt: skip
 
 
+def test_remotive_reads_its_one_feed_with_salary_and_type():
+    feed = {
+        "0-legal-notice": "please link back",
+        "jobs": [
+            {"id": 2091165, "url": "https://remotive.com/remote-jobs/software-development/full-stack-developer-2091165",
+             "title": "Full-Stack Developer", "company_name": "Fluence", "candidate_required_location": "Worldwide",
+             "description": "<p>Ship.</p>", "publication_date": "2026-10-29T18:22:41", "job_type": "full_time",
+             "salary": "$3.5k–$5k/month"},
+            {"id": 3, "url": "https://remotive.com/remote-jobs/x-3", "title": "X", "company_name": ""},
+        ],
+    }  # fmt: skip
+    [job] = _fetch(rb.RemotiveProvider(), _Http({"https://remotive.com/api/remote-jobs": feed}), "remotive.com")
+    assert (job.job_id, job.company, job.location, job.description) == (
+        "remotive:2091165", "Fluence", "Worldwide", "Ship."
+    )  # fmt: skip
+    assert (job.date_posted, job.job_type, job.salary, job.is_remote) == (
+        "2026-10-29",
+        "fulltime",
+        "$3.5k–$5k/month",
+        True,
+    )
+
+
 def _jobicy(i, **over):
     return {"id": i, "url": f"https://jobicy.com/jobs/{i}-x", "jobTitle": f"Job {i}", "companyName": "Binance",
             "jobGeo": "APAC", "jobDescription": "<p>Do it.</p>", "pubDate": "2026-11-02T04:33:31+00:00",
@@ -156,7 +179,8 @@ def test_weworkremotely_splits_company_and_role_and_lists_a_posting_once():
 
 @pytest.mark.parametrize(
     ("provider", "good", "bad"),
-    [(rb.RemoteOKProvider(), "remoteok.com", "remotive.com"), (rb.JobicyProvider(), "jobicy.com", ""),
+    [(rb.RemoteOKProvider(), "remoteok.com", "remotive.com"), (rb.RemotiveProvider(), "remotive.com", "remoteok.com"),
+     (rb.JobicyProvider(), "jobicy.com", ""),
      (rb.WorkingNomadsProvider(), "workingnomads.com", "x"), (rb.WeWorkRemotelyProvider(), "weworkremotely.com", "x"),
      (rb.HimalayasProvider(), "IN", "India")],
 )  # fmt: skip

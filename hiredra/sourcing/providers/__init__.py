@@ -14,6 +14,7 @@ from hiredra.sourcing.providers.remoteboards import (
     HimalayasProvider,
     JobicyProvider,
     RemoteOKProvider,
+    RemotiveProvider,
     WeWorkRemotelyProvider,
     WorkingNomadsProvider,
 )
@@ -30,6 +31,7 @@ __all__ = [
     "WorkingNomadsProvider",
     "WeWorkRemotelyProvider",
     "RemoteOKProvider",
+    "RemotiveProvider",
     "JobicyProvider",
     "HimalayasProvider",
     "AmazonProvider",

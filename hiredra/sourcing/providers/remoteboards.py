@@ -1,6 +1,7 @@
-"""Remote-job boards -- RemoteOK, Jobicy, Himalayas, Working Nomads and We Work Remotely (build step 3, wave 3).
+"""Remote-job boards -- RemoteOK, Remotive, Jobicy, Himalayas, Working Nomads and We Work Remotely (build step 3,
+wave 3).
 
-Ported from freehire's ``remoteok.go``, ``jobicy.go``, ``himalayas.go``, ``workingnomads.go`` and
+Ported from freehire's ``remoteok.go``, ``remotive.go``, ``jobicy.go``, ``himalayas.go``, ``workingnomads.go`` and
 ``weworkremotely.go`` (MIT, see THIRD_PARTY_NOTICES.md). Each is one public feed with every posting's text inline (no
 detail request) and many employers: each job carries its own company, and the board is the feed, stored with no
 company of its own. A feed is the board's recent window, not its whole history, so a posting missing from it is not
@@ -13,8 +14,9 @@ Two changes from freehire, both measured 2026-11-02:
 - Himalayas: the board is a country, the documented search (``country=IN`` includes worldwide roles open to India:
   6,726), not the whole browse feed (116,708), of which freehire reads the newest 2,400 a run.
 
-Remotive is not here: its robots.txt disallows ``/api/*`` while its API README grants access to developers (an owner
-decision). These are JSON or RSS feeds, not HTML pages; each feed URL is allowed by its robots.txt.
+These are JSON or RSS feeds, not HTML pages, each allowed by its robots.txt but one: Remotive's disallows ``/api/*``
+while its API README grants developers access (one feed, at most 4 reads a day, a link back). The owner chose to read
+it (2026-11-02); a run reads it once.
 """
 
 from __future__ import annotations
@@ -105,6 +107,31 @@ class RemoteOKProvider(_Feed):
                 self.name, _id(p.get("id")), p.get("url"), p.get("position"), p.get("company"),
                 description=html_to_text(p.get("description")) or None, location=clean(p.get("location")),
                 date_posted=iso_date(p.get("date")),
+            )
+            for p in feed if isinstance(p, dict)
+        )  # fmt: skip
+        return once(j for j in jobs if j)
+
+
+class RemotiveProvider(_Feed):
+    """``/api/remote-jobs``: every active posting, 24 hours delayed, in one response (Remotive asks for at most 4
+    reads a day)."""
+
+    name = "remotive"
+    site = "remotive.com"
+
+    def fetch(self, entry: CompanyEntry, ctx: FetchContext) -> list[Job]:
+        self._check(entry)
+        data = ctx.http.get_json("https://remotive.com/api/remote-jobs", timeout=_TIMEOUT_S)
+        feed = data.get("jobs") if isinstance(data, dict) else None
+        if not isinstance(feed, list):
+            raise FetchError("remotive: the feed has no jobs list")
+        jobs = (
+            _remote_job(
+                self.name, _id(p.get("id")), p.get("url"), p.get("title"), p.get("company_name"),
+                description=html_to_text(p.get("description")) or None,
+                location=clean(p.get("candidate_required_location")), date_posted=iso_date(p.get("publication_date")),
+                job_type=job_type(p.get("job_type")), salary=clean(p.get("salary")),
             )
             for p in feed if isinstance(p, dict)
         )  # fmt: skip
