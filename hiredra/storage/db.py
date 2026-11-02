@@ -355,10 +355,11 @@ def fill_provenance(
             )
 
 
-def load_boards(conn: psycopg.Connection, provenances: Sequence[str]) -> list[Row]:
+def load_boards(conn: psycopg.Connection, provenances: Sequence[str], *, due_only: bool = False) -> list[Row]:
     """The boards a run crawls (decision D2.1): status pending or active, of the given provenances (``("all",)``
     = every provenance), each with its company's display name. Ordered by provider, then board, so a run and its
-    ``--resume`` walk the same list."""
+    ``--resume`` walk the same list. ``due_only`` (``crawl``, D5.1): only boards whose ``next_due_at`` has come and
+    that are not resting after repeated failures (D5.2)."""
     if not provenances:
         return []
     sql = (
@@ -366,6 +367,11 @@ def load_boards(conn: psycopg.Connection, provenances: Sequence[str]) -> list[Ro
         "FROM boards b LEFT JOIN companies c ON c.id = b.company_id "
         "WHERE b.status IN ('pending', 'active')"
     )
+    if due_only:
+        sql += (
+            " AND b.next_due_at <= now() AND NOT EXISTS (SELECT 1 FROM board_health h"
+            " WHERE h.board_id = b.id AND h.cooldown_until > now())"
+        )
     params: tuple = ()
     if tuple(provenances) != ("all",):
         sql += " AND b.provenance = ANY(%s)"
@@ -826,7 +832,8 @@ def record_board_run(conn: psycopg.Connection, run_id: str, result: Any) -> int:
     listing, ``partial`` for one that saw part of it, the reason in ``error``), its status (D5.5: ``pending`` becomes
     ``active`` on a clean crawl, a board that answers 404 is ``retired`` with the reason), and, after a crawl that
     saw the whole listing, its open jobs unlisted for ``CLOSE_AFTER`` soft-closed (D5.3: ``closed_at``, a note
-    event; never deleted, reopened when listed again). Returns how many jobs it closed."""
+    event; never deleted, reopened when listed again). Then the board's health (D5.2), cadence (D2.3) and next
+    due time (D5.1). Returns how many jobs it closed."""
     closed = 0
     now = _now()
     with conn.transaction():
@@ -853,16 +860,85 @@ def record_board_run(conn: psycopg.Connection, run_id: str, result: Any) -> int:
             result.status, "failed"
         )
         seconds = result.seconds or 0.0
+        eligible = getattr(result, "eligible", 0)
         conn.execute(
-            "INSERT INTO board_crawls (run_id, board_id, started_at, duration_ms, status, fetched, new, closed, error)"
-            " VALUES (%s, %s, %s::timestamptz - make_interval(secs => %s), %s, %s, %s, %s, %s, %s)"
+            "INSERT INTO board_crawls (run_id, board_id, started_at, duration_ms, status, fetched, new, closed,"
+            " eligible, error) VALUES (%s, %s, %s::timestamptz - make_interval(secs => %s), %s, %s, %s, %s, %s, %s, %s)"
             " ON CONFLICT (run_id, board_id) DO UPDATE SET started_at = excluded.started_at,"
             " duration_ms = excluded.duration_ms, status = excluded.status, fetched = excluded.fetched,"
-            " new = excluded.new, closed = excluded.closed, error = excluded.error",
+            " new = excluded.new, closed = excluded.closed, eligible = excluded.eligible, error = excluded.error",
             (run_id, result.board_id, now, seconds, round(seconds * 1000), status, result.jobs, result.new, closed,
-             result.detail),
+             eligible, result.detail),
         )  # fmt: skip
+        _board_health(conn, result.board_id, status, result.jobs, result.detail, now)
+        if status in ("ok", "partial"):
+            _board_cadence(conn, result.board_id, eligible, now)
+        _board_due(conn, result.board_id, now)
     return closed
+
+
+#: D5.2 (freehire's rule): a board's crawl failing 3 times in a row rests it 6 h, doubling each further failure, at
+#: most 24 h; one clean crawl heals it. Never permanent: a board that keeps failing is still tried daily.
+REST_AFTER_FAILURES = 3
+REST_BASE_HOURS = 6
+REST_MAX_HOURS = 24
+#: D2.3 (b): a board whose last ``SLOW_AFTER_CRAWLS`` crawls listed no India/remote-eligible posting is crawled
+#: weekly; one eligible posting brings it back to daily. 3 is Hiredra's choice: the plan leaves N open.
+SLOW_AFTER_CRAWLS = 3
+#: How long after a crawl a board is due again, a little under the cadence so a daily trigger never just misses it.
+_DUE_AFTER = {"daily": "20 hours", "weekly": "6 days 20 hours"}
+
+
+def _board_health(conn: psycopg.Connection, board_id: int, status: str, jobs: int, error: str | None, now: str) -> None:
+    if status in ("ok", "partial"):
+        conn.execute(
+            "INSERT INTO board_health (board_id, consecutive_failures, cooldown_until, last_success_at, last_yield_at)"
+            " VALUES (%s, 0, NULL, %s, CASE WHEN %s > 0 THEN %s::timestamptz END)"
+            " ON CONFLICT (board_id) DO UPDATE SET consecutive_failures = 0, cooldown_until = NULL,"
+            " last_success_at = excluded.last_success_at,"
+            " last_yield_at = COALESCE(excluded.last_yield_at, board_health.last_yield_at)",
+            (board_id, now, jobs, now),
+        )
+    elif status in ("failed", "blocked"):
+        failures = conn.execute(
+            "INSERT INTO board_health (board_id, consecutive_failures, last_failure_at, last_error)"
+            " VALUES (%s, 1, %s, %s) ON CONFLICT (board_id) DO UPDATE SET"
+            " consecutive_failures = board_health.consecutive_failures + 1,"
+            " last_failure_at = excluded.last_failure_at, last_error = excluded.last_error"
+            " RETURNING consecutive_failures",
+            (board_id, now, error),
+        ).fetchone()[0]
+        if failures >= REST_AFTER_FAILURES:
+            hours = min(REST_BASE_HOURS * 2 ** (failures - REST_AFTER_FAILURES), REST_MAX_HOURS)
+            conn.execute(
+                "UPDATE board_health SET cooldown_until = %s::timestamptz + make_interval(hours => %s)"
+                " WHERE board_id = %s",
+                (now, hours, board_id),
+            )
+
+
+def _board_cadence(conn: psycopg.Connection, board_id: int, eligible: int, now: str) -> None:
+    if eligible:
+        conn.execute("UPDATE boards SET cadence = 'daily', last_eligible_at = %s WHERE id = %s", (now, board_id))
+        return
+    recent = conn.execute(
+        "SELECT eligible FROM board_crawls WHERE board_id = %s AND status IN ('ok', 'partial')"
+        " ORDER BY started_at DESC LIMIT %s",
+        (board_id, SLOW_AFTER_CRAWLS),
+    ).fetchall()
+    if len(recent) == SLOW_AFTER_CRAWLS and not any(r[0] for r in recent):
+        conn.execute("UPDATE boards SET cadence = 'weekly' WHERE id = %s", (board_id,))
+
+
+def _board_due(conn: psycopg.Connection, board_id: int, now: str) -> None:
+    """The board's next crawl: its cadence after this one, or later while it rests (D5.1, D5.2)."""
+    conn.execute(
+        "UPDATE boards b SET next_due_at = GREATEST("
+        " %s::timestamptz + (CASE b.cadence WHEN 'weekly' THEN %s ELSE %s END)::interval,"
+        " COALESCE((SELECT h.cooldown_until FROM board_health h WHERE h.board_id = b.id), '-infinity'))"
+        " WHERE b.id = %s",
+        (now, _DUE_AFTER["weekly"], _DUE_AFTER["daily"], board_id),
+    )
 
 
 def clear_cooldown(conn: psycopg.Connection, key: str | None = None) -> None:

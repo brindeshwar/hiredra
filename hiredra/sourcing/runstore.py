@@ -42,6 +42,7 @@ class BoardResult:
     new: int = 0
     seen: int = 0
     complete: bool = False
+    eligible: int = 0  # India/remote-eligible postings in the listing (D2.3: the board's cadence)
     detail: str | None = None
     seconds: float | None = None
 
