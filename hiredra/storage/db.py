@@ -224,6 +224,20 @@ def job_stored(conn: psycopg.Connection, job_id: str) -> bool:
     return conn.execute("SELECT 1 FROM jobs WHERE job_key = %s", (job_id,)).fetchone() is not None
 
 
+def mark_duplicate(conn: psycopg.Connection, job_id: str, *, of: str) -> bool:
+    """D6.4: ``job_id`` (an aggregator's copy, stored first) is a copy of ``of`` (the company's own posting): hidden
+    behind it, a note event says so. A job already pointing at a canonical copy is left alone. True if marked."""
+    row = conn.execute(
+        "UPDATE jobs SET duplicate_of = (SELECT id FROM jobs WHERE job_key = %s), updated_at = %s"
+        " WHERE job_key = %s AND duplicate_of IS NULL AND job_key <> %s RETURNING id",
+        (of, _now(), job_id, of),
+    ).fetchone()
+    if row is None:
+        return False
+    _add_event(conn, row[0], "note", detail=f"duplicate: the company's own posting is {of}")
+    return True
+
+
 def record_alias(conn: psycopg.Connection, name: str, company_id: int) -> bool:
     """Record ``name`` as another spelling of ``company_id`` (build slice 2.6), unless that spelling already reaches
     a company: then the two are one employer under two rows, a merge for the owner, not an alias. True if
@@ -288,17 +302,24 @@ def upsert_job(
         if row is None:
             title, company = job["title"], job["company"]
             countries = sorted(parse_location(job.get("location") or "", "", title)["countries"])
+            fingerprint = role_fingerprint(company_key(company), title, job.get("description"), countries)
+            # D6.3: a role already stored and open (a copy per city, a repost) -> this copy points at it
+            canonical = conn.execute(
+                "SELECT id FROM jobs WHERE role_fingerprint = %s AND closed_at IS NULL AND duplicate_of IS NULL"
+                " ORDER BY id LIMIT 1",
+                (fingerprint,),
+            ).fetchone()
             values = [job.get(c) for c in _JOB_COLUMNS]
             if values[_JOB_COLUMNS.index("is_remote")] is not None:  # a 0/1 from an older caller is a bool
                 values[_JOB_COLUMNS.index("is_remote")] = bool(values[_JOB_COLUMNS.index("is_remote")])
             values += [
                 job_id[len(source) + 1 :], _company_id(conn, company), countries,
                 content_hash(title, company, job.get("location"), job.get("description")),
-                role_fingerprint(company_key(company), title, job.get("description"), countries),
+                fingerprint, canonical[0] if canonical else None,
                 now, now, now, now, first_seen_run,
             ]  # fmt: skip
             cols = (*_JOB_COLUMNS, "external_id", "company_id", "countries", "content_hash", "role_fingerprint",
-                    "status_changed_at", "first_seen_at", "last_seen_at", "updated_at", "first_seen_run")  # fmt: skip
+                    "duplicate_of", "status_changed_at", "first_seen_at", "last_seen_at", "updated_at", "first_seen_run")  # fmt: skip
             try:
                 with conn.transaction():
                     new_id = conn.execute(

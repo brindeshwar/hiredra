@@ -353,6 +353,7 @@ def passes_role_type(title: str | None, config: FilterConfig) -> RoleTypeResult:
 @dataclass
 class FunnelStats:
     seen: int = 0
+    dropped_duplicate: int = 0  # another copy of a role already stored (D6.3): never judged twice
     dropped_location: int = 0
     dropped_seniority: int = 0
     dropped_role_type: int = 0
@@ -389,6 +390,11 @@ def _judge(conn, job, config: FilterConfig, stats: FunnelStats) -> None:
     """The three text stages for one job: advance it to 'filtered' or drop it, counting into ``stats``."""
     stats.seen += 1
     job_id = job["job_id"]
+
+    if job.get("duplicate_of"):  # D6.3: the role's canonical copy is judged; this one never spends a stage
+        set_status(conn, job_id, "dropped", detail=f"duplicate: the same role as job {job['duplicate_of']}")
+        stats.dropped_duplicate += 1
+        return
 
     location = passes_location(job["title"], job["location"], job["description"], config)
     if location.reason == "unknown":
@@ -435,7 +441,7 @@ def main(argv: list[str] | None = None) -> int:
         conn.close()
 
     print(
-        f"seen={stats.seen} kept={stats.kept} "
+        f"seen={stats.seen} kept={stats.kept} dropped_duplicate={stats.dropped_duplicate} "
         f"dropped_location={stats.dropped_location} "
         f"dropped_seniority={stats.dropped_seniority} "
         f"dropped_role_type={stats.dropped_role_type} "
