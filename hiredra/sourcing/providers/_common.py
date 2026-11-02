@@ -12,8 +12,7 @@ from collections.abc import Callable, Iterable
 from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, TypeVar
-from urllib.parse import urlsplit
-from urllib.robotparser import RobotFileParser
+from urllib.parse import quote, urlsplit
 from xml.etree import ElementTree
 
 from hiredra.sourcing.http import FetchError
@@ -140,24 +139,98 @@ def hydrate(
     return jobs
 
 
+#: The robots.txt rule and URL spelling compared: every character a path or query may carry literally stays, the
+#: rest is percent-encoded (UTF-8), so ``/café`` and ``/caf%C3%A9`` are one path.
+_URL_SAFE = "/?=&;:@!$'()*+,-._~[]%"
+_PERCENT = re.compile(r"%[0-9a-fA-F]{2}")
+#: The product token of a user-agent: "Hiredra/0.1 (+https://...)" is ``hiredra``.
+_TOKEN = re.compile(r"[A-Za-z_-]+")
+
+Rule = tuple[str, bool]  # (path pattern, allow)
+
+
+def _encode(value: str) -> str:
+    return _PERCENT.sub(lambda m: m.group(0).upper(), quote(value, safe=_URL_SAFE))
+
+
+def _token(agent: str) -> str:
+    m = _TOKEN.match(agent.strip())
+    return m.group(0).lower() if m else ""
+
+
+def robots_rules(text: str, agent: str) -> list[Rule]:
+    """The rules robots.txt sets for ``agent`` (RFC 9309): every group naming its product token, case-insensitively,
+    combined; else every ``*`` group combined; else none. Consecutive ``User-agent`` lines share one group, a blank
+    line ends nothing, and lines other than ``User-agent``/``Allow``/``Disallow`` are ignored. An empty rule path
+    sets nothing (an empty ``Disallow:`` allows everything)."""
+    token = _token(agent)
+    groups: list[tuple[list[str], list[Rule]]] = []
+    in_agents = False
+    for raw in text.splitlines():
+        key, sep, value = raw.split("#", 1)[0].partition(":")
+        key, value = key.strip().lower(), value.strip()
+        if not sep:
+            continue
+        if key == "user-agent":
+            if not in_agents:
+                groups.append(([], []))
+                in_agents = True
+            groups[-1][0].append(value.lower())
+        elif key in ("allow", "disallow"):
+            in_agents = False
+            if groups and value:
+                groups[-1][1].append((_encode(value), key == "allow"))
+    for wanted in (lambda a: bool(token) and _token(a) == token, lambda a: a == "*"):
+        chosen = [group for agents, group in groups if any(wanted(a) for a in agents)]
+        if chosen:  # a group of ours with no rules allows everything: no fall back to ``*``
+            return [rule for group in chosen for rule in group]
+    return []
+
+
+def _matches(pattern: str, target: str) -> bool:
+    """``*`` matches any run of characters and a final ``$`` ends the match; anything else is a prefix match."""
+    anchored = pattern.endswith("$")
+    body = pattern[:-1] if anchored else pattern
+    regex = ".*".join(re.escape(part) for part in body.split("*"))
+    return re.match(regex + (r"\Z" if anchored else ""), target, re.S) is not None
+
+
+def robots_allows(rules: list[Rule], url: str) -> bool:
+    """RFC 9309 matching on the URL's path AND query: the longest matching pattern decides, ``Allow`` winning a tie;
+    no match allows. ``/robots.txt`` is always allowed."""
+    parts = urlsplit(url)
+    target = _encode((parts.path or "/") + (f"?{parts.query}" if parts.query else ""))
+    if target == "/robots.txt":
+        return True
+    best: Rule | None = None
+    for pattern, allow in rules:
+        if _matches(pattern, target) and (
+            best is None or len(pattern) > len(best[0]) or (len(pattern) == len(best[0]) and allow)
+        ):
+            best = (pattern, allow)
+    return best is None or best[1]
+
+
 class Robots:
     """robots.txt per host, read once (decision D4.2: respected for every HTML page we read). A host whose
-    robots.txt is missing or unreadable allows everything, as the robots convention says."""
+    robots.txt is missing or unreadable allows everything, as the robots convention says. Matched by RFC 9309
+    (``robots_rules``, ``robots_allows``), not ``urllib.robotparser``: that reads ``Disallow: /?`` as ``Disallow: /``,
+    compares the path without the query and knows no ``*`` or ``$``, so it both blocks pages a site allows and
+    lets through pages a site forbids (found on Google's careers site, 2026-11-02)."""
 
     def __init__(self, fetch_text: Callable[[str], str | None], agent: str) -> None:
         self._fetch = fetch_text
         self._agent = agent
-        self._cache: dict[str, RobotFileParser] = {}
+        self._cache: dict[str, list[Rule]] = {}
 
     def allowed(self, url: str) -> bool:
         parts = urlsplit(url)
         origin = f"{parts.scheme}://{parts.netloc}"
-        parser = self._cache.get(origin)
-        if parser is None:
-            parser = RobotFileParser()
-            parser.parse((self._fetch(origin + "/robots.txt") or "").splitlines())
-            self._cache[origin] = parser
-        return parser.can_fetch(self._agent, url)
+        rules = self._cache.get(origin)
+        if rules is None:
+            rules = robots_rules(self._fetch(origin + "/robots.txt") or "", self._agent)
+            self._cache[origin] = rules
+        return robots_allows(rules, url)
 
 
 def sitemap_locs(xml: str) -> tuple[list[tuple[str, str | None]], list[str]]:
