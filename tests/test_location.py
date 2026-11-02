@@ -454,6 +454,14 @@ def test_the_word_only_does_not_hide_the_place(location, ok):
     assert eligibility("India", location, "", "Engineer")[0] is ok
 
 
+@pytest.mark.parametrize(
+    "location", ["Remote (EU)", "EU - Remote", "Remote-EU", "EU", "European Union", "Remote - European Union"]
+)
+def test_eu_is_europe(location):
+    assert eligibility("India", location, "", "Engineer")[0] is False
+    assert eligibility("India", "Remote (EU or India)", "", "Engineer")[0] is True
+
+
 def test_the_title_never_overrides_a_stated_location():
     assert eligibility("India", "Bengaluru, India", "", "Backend Engineer [Remote-US]")[0] is True
 

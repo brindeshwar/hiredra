@@ -1266,6 +1266,8 @@ _REGION_ALIASES = {
     "middle east": "Mena",
     "cis": "Cis",
     "central asia": "Cis",
+    "eu": "Europe",  # "Remote (EU)", "EU - Remote": read as Europe, as "Europe" is (19 stored jobs, 2026-11-02)
+    "european union": "Europe",
 }
 
 
