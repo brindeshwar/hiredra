@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import json
 import logging
+import queue
 import random
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -19,6 +21,7 @@ from datetime import datetime, timezone
 from hiredra.sourcing.config import RunConfig
 from hiredra.sourcing.http import Blocked, FetchError, HTTPError, HttpClient
 from hiredra.sourcing.jobspy_source import JobSpySource, SiteOutcome
+from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext, Provider, company_slug
 from hiredra.sourcing.registry import REGISTRY, route
 from hiredra.sourcing.runstore import RunStore
@@ -142,60 +145,84 @@ def run(
             )
             # companies += discover(config.path2, ctx)  # Path-2 slot
 
-        outcomes: list[CompanyOutcome] = []
-        unroutable: list[str] = []
-        attempted = 0
-        for entry in companies:
-            key = progress_key(entry)
-            if key in companies_done:
-                outcomes.append(CompanyOutcome(entry.name, "skipped", None, 0, "already fetched this run"))
-                continue
-            if attempted:
-                sleep(config.pacing.between_companies + rng.random() * config.pacing.jitter)
-            attempted += 1
-
+        def fetch(entry: CompanyEntry) -> tuple[Provider | None, list[Job] | None, CompanyOutcome | None]:
+            """One board's fetch, safe on a worker thread: no database, no sink. ``(provider, jobs, None)`` on
+            success, ``(provider, None, outcome)`` otherwise."""
             provider = route(entry, registry)
             if provider is None:
-                outcomes.append(CompanyOutcome(entry.name, "unroutable", None, 0))
-                unroutable.append(entry.name)
-            else:
-                try:
-                    jobs_c = provider.fetch(entry, ctx)
-                except Blocked as err:
-                    outcomes.append(CompanyOutcome(entry.name, "blocked", provider.name, 0, str(err)))
-                except HTTPError as err:
-                    # A definitive 404 means the board is gone/renamed -- common with a
-                    # generated company list built from a days-old slug snapshot. Benign,
-                    # like 'unroutable': never a PARTIAL trigger. Any other HTTP status
-                    # (403 without a block marker, 5xx that isn't retried here, etc.) is
-                    # still a real 'error'.
-                    status = "gone" if err.status == 404 else "error"
-                    outcomes.append(CompanyOutcome(entry.name, status, provider.name, 0, str(err)))
-                except FetchError as err:
-                    outcomes.append(CompanyOutcome(entry.name, "error", provider.name, 0, str(err)))
-                except Exception as err:  # noqa: BLE001 -- a provider bug must not kill the run
-                    log.exception("orchestrator: %s.fetch(%r) raised unexpectedly", provider.name, entry.name)
-                    outcomes.append(
-                        CompanyOutcome(
-                            entry.name,
-                            "error",
-                            provider.name,
-                            0,
-                            f"{type(err).__name__}: {err}",
-                        )
-                    )
-                else:
-                    tag = entry.extra.get("tag") if entry.extra else None
-                    sink.consume(
-                        jobs_c,
-                        company_slug=company_slug(provider, entry),
-                        list_tag=str(tag) if tag else None,
-                        provenance=str((entry.extra or {}).get("provenance") or "orphan"),
-                    )
-                    outcomes.append(CompanyOutcome(entry.name, "ok", provider.name, len(jobs_c)))
+                return None, None, CompanyOutcome(entry.name, "unroutable", None, 0)
+            try:
+                return provider, provider.fetch(entry, ctx), None
+            except Blocked as err:
+                return provider, None, CompanyOutcome(entry.name, "blocked", provider.name, 0, str(err))
+            except HTTPError as err:
+                # A definitive 404 means the board is gone/renamed -- common with a
+                # generated company list built from a days-old slug snapshot. Benign,
+                # like 'unroutable': never a PARTIAL trigger. Any other HTTP status
+                # (403 without a block marker, 5xx that isn't retried here, etc.) is
+                # still a real 'error'.
+                status = "gone" if err.status == 404 else "error"
+                return provider, None, CompanyOutcome(entry.name, status, provider.name, 0, str(err))
+            except FetchError as err:
+                return provider, None, CompanyOutcome(entry.name, "error", provider.name, 0, str(err))
+            except Exception as err:  # noqa: BLE001 -- a provider bug must not kill the run
+                log.exception("orchestrator: %s.fetch(%r) raised unexpectedly", provider.name, entry.name)
+                outcome = CompanyOutcome(entry.name, "error", provider.name, 0, f"{type(err).__name__}: {err}")
+                return provider, None, outcome
 
-            companies_done.add(key)
+        by_index: dict[int, CompanyOutcome] = {}
+        unroutable: list[str] = []
+        trips: queue.SimpleQueue = queue.SimpleQueue()
+
+        def record(i: int, entry: CompanyEntry, result: tuple) -> None:
+            """On the main thread: the board's jobs to the sink, its outcome, the checkpoint (per-company persist)."""
+            provider, jobs_c, outcome = result
+            if outcome is None:
+                tag = entry.extra.get("tag") if entry.extra else None
+                sink.consume(
+                    jobs_c,
+                    company_slug=company_slug(provider, entry),
+                    list_tag=str(tag) if tag else None,
+                    provenance=str((entry.extra or {}).get("provenance") or "orphan"),
+                )
+                outcome = CompanyOutcome(entry.name, "ok", provider.name, len(jobs_c))
+            elif outcome.status == "unroutable":
+                unroutable.append(entry.name)
+            by_index[i] = outcome
+            while not trips.empty():  # cooldowns tripped on worker threads, written here (one connection)
+                run_store.save_cooldown(*trips.get())
+            companies_done.add(progress_key(entry))
             run_store.checkpoint(handle.run_id, companies_done=companies_done, jobspy_done=jobspy_done)
+
+        todo: list[tuple[int, CompanyEntry]] = []
+        for i, entry in enumerate(companies):
+            if progress_key(entry) in companies_done:
+                by_index[i] = CompanyOutcome(entry.name, "skipped", None, 0, "already fetched this run")
+            else:
+                todo.append((i, entry))
+
+        workers = max(1, config.pacing.workers)
+        if workers == 1:
+            for n, (i, entry) in enumerate(todo):
+                if n:
+                    sleep(config.pacing.between_companies + rng.random() * config.pacing.jitter)
+                record(i, entry, fetch(entry))
+        else:
+            # D4.1: a pool of threads fetches; this thread alone writes (sink, checkpoints, cooldowns). The HTTP
+            # client's per-host slots (D4.2) pace a host, so there is no pause between companies.
+            ctx.http.cooldowns.on_trip = lambda key, until, reason: trips.put((key, until, reason))
+            pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="fetch")
+            try:
+                futures = {pool.submit(fetch, entry): (i, entry) for i, entry in todo}
+                for future in as_completed(futures):
+                    i, entry = futures[future]
+                    record(i, entry, future.result())
+            finally:
+                pool.shutdown(wait=True, cancel_futures=True)
+                ctx.http.cooldowns.on_trip = run_store.save_cooldown
+                while not trips.empty():
+                    run_store.save_cooldown(*trips.get())
+        outcomes = [by_index[i] for i in sorted(by_index)]  # the list's order, whatever order they finished in
 
         if unroutable and companies and len(unroutable) == len(companies):
             log.warning(

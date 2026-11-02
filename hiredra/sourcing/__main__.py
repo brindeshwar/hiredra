@@ -28,6 +28,7 @@ for _stream in (sys.stdout, sys.stderr):
     if hasattr(_stream, "reconfigure"):
         _stream.reconfigure(errors="replace")
 
+import threading
 import time
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -84,6 +85,15 @@ def _print_report(report: RunReport) -> None:
 def _cmd_run(args: argparse.Namespace) -> int:
     config = load_run_config(args.config)
     conn = db.connect(args.db)
+    # ``seen`` is asked from the fetch workers (D4.1): with more than one, it gets a connection of its own, one
+    # question at a time; the run's connection stays the main thread's (sink, checkpoints, cooldowns).
+    seen_conn = db.connect(args.db) if config.pacing.workers > 1 else conn
+    seen_lock = threading.Lock()
+
+    def seen(job_id: str) -> bool:
+        with seen_lock:
+            return db.job_stored(seen_conn, job_id)
+
     try:
         db.init_db(conn)
         run_store = PgRunStore(conn)
@@ -94,11 +104,13 @@ def _cmd_run(args: argparse.Namespace) -> int:
             sink_factory=lambda run_id: ScoringSink(conn, run_id),
             run_store=run_store,
             resume=args.resume,
-            seen=lambda job_id: db.job_stored(conn, job_id),
+            seen=seen,
         )
         _print_report(report)
         return 0 if report.status != "failed" else 1
     finally:
+        if seen_conn is not conn:
+            seen_conn.close()
         conn.close()
 
 

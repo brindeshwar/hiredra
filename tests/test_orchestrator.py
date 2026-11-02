@@ -6,6 +6,7 @@ via the injected ``HttpClient``/``RunStore``.
 from __future__ import annotations
 
 import random
+import threading
 import time
 
 import pytest
@@ -322,6 +323,72 @@ def test_pacing_sleeps_between_companies_not_before_the_first(tmp_path, ctx):
         rng=random.Random(0),
     )
     assert slept == [2.0, 2.0]
+
+
+# ── a pool of workers (D4.1) ────────────────────────────────────────────────
+class _SlowProvider(FakeProvider):
+    """Records how many fetches run at once and which thread fetches; one board's fetch trips a cooldown."""
+
+    def __init__(self, name, **kw):
+        super().__init__(name, **kw)
+        self.lock = threading.Lock()
+        self.running = self.peak = 0
+        self.threads: set[str] = set()
+
+    def fetch(self, entry, ctx):
+        with self.lock:
+            self.running += 1
+            self.peak = max(self.peak, self.running)
+            self.threads.add(threading.current_thread().name)
+        time.sleep(0.05)
+        if entry.name == "B":
+            ctx.http.cooldowns.trip("b.example", 60, reason="HTTP 429")
+        with self.lock:
+            self.running -= 1
+        return super().fetch(entry, ctx)
+
+
+def test_workers_fetch_at_once_and_only_the_main_thread_writes(tmp_path, ctx):
+    companies = _companies_yaml(tmp_path, [(n, "p") for n in "ABCDEF"])
+    p = _SlowProvider("p", jobs=[_job(job_id="p:1")])
+    sink = RecordingSink()
+    sink_threads: list[str] = []
+    real_consume = sink.consume
+    sink.consume = lambda jobs, **kw: (sink_threads.append(threading.current_thread().name), real_consume(jobs, **kw))
+    store = FakeRunStore()
+    slept: list[float] = []
+    report = run(
+        _config(pacing=Pacing(between_companies=2.0, jitter=0.0, workers=4)),
+        companies=load_companies(companies),
+        sink_factory=lambda r: sink,
+        run_store=store,
+        ctx=ctx,
+        registry=(p,),
+        jobspy_source=FakeJobSpySource(),
+        sleep=slept.append,
+    )
+    assert p.peak > 1 and all(t.startswith("fetch") for t in p.threads)  # boards fetched at once, on workers
+    assert set(sink_threads) == {threading.current_thread().name}  # every write on the main thread
+    assert len(sink_threads) == 7  # six boards and the JobSpy batch
+    assert [c.name for c in report.companies] == list("ABCDEF")  # the list's order, not the finishing order
+    assert slept == []  # the per-host slots pace, not a pause between companies
+    assert [k for k, _, _ in store.saved_cooldowns] == ["b.example"]  # tripped on a worker, written on main
+    assert ctx.http.cooldowns.on_trip == store.save_cooldown and len(store.checkpoints) == 7  # + JobSpy
+
+
+def test_a_worker_failure_is_that_boards_outcome(tmp_path, ctx):
+    companies = _companies_yaml(tmp_path, [("A", "ok"), ("B", "bad")])
+    report = run(
+        _config(pacing=Pacing(workers=2)),
+        companies=load_companies(companies),
+        sink_factory=lambda r: RecordingSink(),
+        run_store=FakeRunStore(),
+        ctx=ctx,
+        registry=(FakeProvider("ok", jobs=[_job()]), FakeProvider("bad", error=FetchError("x"))),
+        jobspy_source=FakeJobSpySource(),
+    )
+    assert [(c.name, c.status) for c in report.companies] == [("A", "ok"), ("B", "error")]
+    assert report.status == "partial"
 
 
 # ── resume ────────────────────────────────────────────────────────────────

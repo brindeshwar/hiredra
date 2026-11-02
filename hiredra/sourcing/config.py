@@ -36,7 +36,8 @@ class ConfigError(ValueError):
 @dataclass(frozen=True, slots=True)
 class Pacing:
     between_companies: float = 1.0  # base seconds between company fetches
-    jitter: float = 0.5  # + up to this many random seconds
+    jitter: float = 0.5  # + up to this many random seconds (between companies, one worker only)
+    workers: int = 1  # boards fetched at once (D4.1); past 1, the per-host limit (http.per_host) paces
 
 
 @dataclass(frozen=True, slots=True)
