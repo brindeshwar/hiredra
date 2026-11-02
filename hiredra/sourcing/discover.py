@@ -271,10 +271,14 @@ def slug_names(company: str, slug: str) -> bool:
     """Does a board slug carry the company's name? One squashed form contains the other ("Bolna AI" ~ ``bolna``,
     "Nourish" ~ ``usenourish``), the shorter one at least 4 characters. Measured 2026-11-01: all 20 boards that
     were really the company's passed, and all 5 that were not (a careers page listing customers' jobs, a site
-    redirected to its acquirer, an embed placeholder) failed."""
-    key, board = company_slug(company).replace("-", ""), slug.replace("-", "")
-    short, long = sorted((key, board), key=len)
-    return len(short) >= 4 and short in long
+    redirected to its acquirer, an embed placeholder) failed. A host-form board (``tenant.wd5.myworkdayjobs.com/site``,
+    ``tenant.zohorecruit.in``) is judged by each of its parts, case aside: SmartRecruiters writes ``AristaNetworks``."""
+    key = company_slug(company).replace("-", "")
+    for part in re.split(r"[./]", slug.lower()):
+        short, long = sorted((key, part.replace("-", "")), key=len)
+        if len(short) >= 4 and short in long:
+            return True
+    return False
 
 
 def _link(html: str, base: str, wanted: Callable[[str], bool]) -> str | None:
@@ -405,3 +409,40 @@ def same_opening(jobs: Iterable[Job], titles: set[str]) -> bool:
     """Does the board list a job with a title we saw on the aggregator for this company? The same opening on both
     is the employer's evidence a namesake can't give (2.4 found three namesakes that a name match let through)."""
     return any(norm_title(j.title) in titles for j in jobs)
+
+
+# ── slice 3.13: the boards behind a VC network's Getro job board ────────────
+# Getro hosts VC portfolio job boards (jobs.accel.com, jobs.3one4capital.com, careers.antler.co). Its search API is
+# closed to us (api.getro.com: robots.txt ``Disallow: /``, 406 to a plain client), but each board's own site allows
+# crawling and its sitemap lists every job page, ``/companies/<company>/jobs/<id>-<title>``. A job page server-renders
+# the job (``__NEXT_DATA__``), whose ``url`` is where it was taken from: for a scraped job, the employer's own ATS
+# posting, which names the board. So a company's board is read from its first job pages, and the jobs themselves are
+# then read from that board by our own adapter, never from Getro (owner, 2026-11-02).
+_GETRO_JOB = re.compile(r"/companies/([^/?#]+)/jobs/[^/?#]+/?$")
+_NEXT_DATA = re.compile(r"""<script\b[^>]*\bid=["']__NEXT_DATA__["'][^>]*>(.*?)</script\s*>""", re.S | re.I)
+
+
+def getro_job_pages(locs: Iterable[str]) -> dict[str, list[str]]:
+    """A Getro sitemap's job pages by company slug, in sitemap order."""
+    pages: dict[str, list[str]] = {}
+    for loc in locs:
+        if m := _GETRO_JOB.search(urlsplit(loc).path):
+            pages.setdefault(m.group(1), []).append(loc)
+    return pages
+
+
+def getro_job(page: str) -> tuple[str, str] | None:
+    """``(employer name, the job's source link)`` from a Getro job page, or ``None`` when the page carries neither."""
+    m = _NEXT_DATA.search(page)
+    try:
+        data = json.loads(m.group(1)) if m else None
+    except json.JSONDecodeError:
+        return None
+    job = (
+        ((((data or {}).get("props") or {}).get("pageProps") or {}).get("initialState") or {}).get("jobs") or {}
+    ).get("currentJob")
+    if not isinstance(job, dict):
+        return None
+    name = ((job.get("organization") or {}).get("name") or "").strip()
+    link = (job.get("url") or "").strip()
+    return (name, link) if name and link else None

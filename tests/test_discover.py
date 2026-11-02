@@ -182,6 +182,11 @@ def test_detect_board(html, want):
         ("Minimum", "novisto78", False),  # the site redirects to its acquirer
         ("Flock Safety", "demo", False),
         ("AI Co", "ai", False),  # too short to mean anything
+        ("Arista Networks", "AristaNetworks", True),  # SmartRecruiters' case
+        ("The Eplane Company", "eplane.zohorecruit.in", True),  # a host-form board: judged by its parts
+        ("Slack", "salesforce.wd12.myworkdayjobs.com/Slack", True),  # its own site on its parent's tenant
+        ("Frame.io", "adobe.wd5.myworkdayjobs.com/external_experienced", False),  # the parent's board (Getro, 3.13)
+        ("OPOWER", "eeho.fa.us2.oraclecloud.com/jobearch", False),
     ],
 )
 def test_slug_names(company, slug, want):
@@ -271,3 +276,29 @@ def test_same_opening_needs_a_shared_title():
         [Job(url="u", title="Backend Engineer (Python) – Bengaluru", company="X", source="lever")], titles
     )
     assert not discover.same_opening([Job(url="u", title="Backend Engineer", company="X", source="lever")], titles)
+
+
+# ── slice 3.13: the boards behind a Getro network ───────────────────────────
+def test_getro_job_pages_group_a_sitemaps_job_pages_by_company():
+    locs = [
+        "https://jobs.3one4capital.com/companies",
+        "https://jobs.3one4capital.com/companies/ayr-energy-2",
+        "https://jobs.3one4capital.com/companies/ayr-energy-2/jobs/93878274-engineer",
+        "https://jobs.3one4capital.com/companies/lokal/jobs/1-sde",
+        "https://jobs.3one4capital.com/companies/ayr-energy-2/jobs/93878275-analyst/",
+    ]
+    assert discover.getro_job_pages(locs) == {
+        "ayr-energy-2": [locs[2], locs[4]],
+        "lokal": [locs[3]],
+    }
+
+
+def test_getro_job_reads_the_employer_and_the_jobs_source_link():
+    data = {"props": {"pageProps": {"initialState": {"jobs": {"currentJob": {
+        "title": "Engineer", "url": "https://ats.rippling.com/ayr-careers/jobs/abc",
+        "organization": {"name": "Ayr Energy"}}}}}}}  # fmt: skip
+    page = f'<html><script id="__NEXT_DATA__" type="application/json">{json.dumps(data)}</script></html>'
+    assert discover.getro_job(page) == ("Ayr Energy", "https://ats.rippling.com/ayr-careers/jobs/abc")
+    assert discover.detect_board(discover.getro_job(page)[1]) == ("rippling", "ayr-careers")
+    assert discover.getro_job("<html>no data</html>") is None
+    assert discover.getro_job(page.replace("Ayr Energy", "")) is None  # no employer: nothing to file it under

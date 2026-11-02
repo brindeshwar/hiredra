@@ -5,6 +5,7 @@
 ``python -m hiredra.sourcing boards discover-yc PATH [--limit N] [--dry-run] [--db URL]``
 ``python -m hiredra.sourcing boards discover-careers PATH [--limit N] [--dry-run] [--db URL]``
 ``python -m hiredra.sourcing boards discover-orphans [--limit N] [--dry-run] [--db URL]``
+``python -m hiredra.sourcing boards discover-getro HOST... [--limit N] [--per-company N] [--dry-run] [--db URL]``
 
 A run crawls the ``boards`` table, picked by the run config's ``boards`` key (decision D2.1). A company list such
 as ``config/companies.yml``, or a public ``name,slug,url`` CSV of one ATS's companies (D2.2, ``--provider``
@@ -36,10 +37,11 @@ from hiredra.sourcing import companies as company_merge
 from hiredra.sourcing import discover
 from hiredra.sourcing.config import INVENTORY_PROVENANCE, board_entry, load_companies, load_inventory, load_run_config
 from hiredra.sourcing.http import FetchError, HttpClient, HttpConfig, HTTPError
+from hiredra.sourcing.identity import company_slug as company_key
 from hiredra.sourcing.orchestrator import RunReport, run as run_orchestrator
 from hiredra.sourcing.provider import FetchContext, company_slug
 from hiredra.sourcing.registry import REGISTRY, route
-from hiredra.sourcing.providers._common import Robots
+from hiredra.sourcing.providers._common import Robots, sitemap_locs
 from hiredra.sourcing.runstore import PgRunStore
 from hiredra.sourcing.sink import ScoringSink
 from hiredra.storage import db
@@ -472,6 +474,109 @@ def _cmd_boards_discover_orphans(args: argparse.Namespace) -> int:
         conn.close()
 
 
+def _cmd_boards_discover_getro(args: argparse.Namespace) -> int:
+    """Slice 3.13: the employers' own boards behind VC networks' Getro job boards (``discover.getro_job``). Per
+    portfolio company, its job pages are read in sitemap order until one's source link names a board on an ATS we
+    have an adapter for (at most ``--per-company``). The board must carry the company's name (``slug_names``: an
+    acquired company's jobs link to its parent's board, Frame.io's to Adobe's), must answer, must not be one we hold,
+    and must list an India- or remote-eligible job: a network's portfolio is global, and a board with none would only cost crawl
+    time. New boards are imported as pending, provenance ``getro``. robots.txt is obeyed; ``--pause`` keeps to the
+    boards' ``Crawl-delay: 1``."""
+    funnel = load_filter_config()
+    conn = db.connect(args.db)
+    http = HttpClient(HttpConfig())
+    ctx = FetchContext(http=http, seen=lambda job_id: True)  # a probe lists a board: never a detail request
+
+    def text(url: str) -> str | None:
+        time.sleep(args.pause)
+        try:
+            return http.get_text(url, follow_redirects=True, timeout=30)
+        except FetchError:
+            return None
+
+    robots = Robots(text, http.config.user_agent)
+    tally: dict[str, int] = {}
+    merges: list[tuple[str, str]] = []
+    found = eligible = kept = 0
+    try:
+        db.init_db(conn)
+        for host in args.hosts:
+            sitemap = f"https://{host}/sitemap.xml"
+            body = text(sitemap) if robots.allowed(sitemap) else None
+            if body is None:
+                print(f"{host}: no sitemap (or robots.txt refuses it)")
+                continue
+            pages, subs = sitemap_locs(body)
+            for sub in subs:
+                if robots.allowed(sub) and (more := text(sub)):
+                    pages += sitemap_locs(more)[0]
+            companies = discover.getro_job_pages(loc for loc, _ in pages)
+            companies = dict(list(companies.items())[: args.limit or None])
+            print(f"{host}: {len(companies)} companies with job pages", flush=True)
+            for i, pages_of in enumerate(companies.values()):
+                if i and i % 50 == 0:
+                    print(f"  .. {i}/{len(companies)} companies, {found} new", flush=True)
+                name = board = None
+                for page_url in pages_of[: args.per_company]:
+                    page = text(page_url) if robots.allowed(page_url) else None
+                    job = discover.getro_job(page) if page else None
+                    if job and (board := discover.detect_board(job[1])):
+                        name = job[0]
+                        break
+                if board is None:
+                    tally["no ATS link in its first jobs"] = tally.get("no ATS link in its first jobs", 0) + 1
+                    continue
+                if not discover.slug_names(name, board[1]):  # an acquired company's jobs on its parent's board
+                    tally["board not named for it: for the owner"] = (
+                        tally.get("board not named for it: for the owner", 0) + 1
+                    )
+                    print(f"  ? {name}: {board[0]}/{board[1]} does not carry its name (a parent's board?)")
+                    continue
+                owner = conn.execute(
+                    "SELECT c.name FROM boards b JOIN companies c ON c.id = b.company_id"
+                    " WHERE b.provider = %s AND lower(b.board) = lower(%s)",
+                    board,
+                ).fetchone()
+                if owner is not None:
+                    tally["board already ours"] = tally.get("board already ours", 0) + 1
+                    if company_key(owner[0]) != company_key(name):
+                        merges.append((name, owner[0]))
+                    continue
+                providers = [p for p in REGISTRY if p.name == board[0]]
+                result = discover.probe(discover.Candidate(name, (board[1],)), providers, ctx)
+                if result.provider is None:
+                    tally["the ATS does not answer"] = tally.get("the ATS does not answer", 0) + 1
+                    print(f"  - {name}: {board[0]}/{board[1]} does not answer")
+                    continue
+                e, k = _funnel_counts(result.jobs, funnel)
+                if not e:
+                    tally["no India/remote-eligible job"] = tally.get("no India/remote-eligible job", 0) + 1
+                    continue
+                found += 1
+                eligible, kept = eligible + e, kept + k
+                tally["new"] = tally.get("new", 0) + 1
+                print(f"  + {name}: {result.provider}/{result.slug} ({len(result.jobs)} jobs, {e} eligible, {k} pass)")
+                if not args.dry_run:
+                    with conn.transaction():
+                        db.import_board(
+                            conn, provider=result.provider, board=result.slug, name=name, provenance="getro",
+                            source_name=host, alias=True,
+                        )  # fmt: skip
+        print("companies: " + (", ".join(f"{v} {k}" for k, v in sorted(tally.items())) or "none"))
+        print(f"new boards {found}: jobs India/remote-eligible {eligible}, passing all three stages {kept}")
+        if merges:  # Getro's spelling is not stored: a better display name, never a second company to merge
+            print(f"a board we hold under another spelling ({len(merges)}): Getro's name, ours")
+            for getro_name, ours in merges:
+                print(f"  - [{getro_name!r}, {ours!r}]")
+        print(
+            "DRY RUN: no board written." if args.dry_run else f"imported {found} board(s) as pending, provenance getro"
+        )
+        return 0
+    finally:
+        http.close()
+        conn.close()
+
+
 def _cmd_runs(args: argparse.Namespace) -> int:
     conn = db.connect(args.db)
     try:
@@ -540,6 +645,14 @@ def main(argv: list[str] | None = None) -> int:
     p_or.add_argument("--dry-run", action="store_true", help="report only; write no board")
     p_or.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
     p_or.set_defaults(func=_cmd_boards_discover_orphans)
+    p_gt = boards_sub.add_parser("discover-getro", help="find the boards behind VC networks' Getro job boards (3.13)")
+    p_gt.add_argument("hosts", nargs="+", help="a network's job board host, e.g. jobs.3one4capital.com")
+    p_gt.add_argument("--limit", type=int, default=0, help="read only the first N companies of each network")
+    p_gt.add_argument("--per-company", type=int, default=3, help="job pages read per company to find its board")
+    p_gt.add_argument("--pause", type=float, default=1.0, help="seconds between Getro page requests (Crawl-delay: 1)")
+    p_gt.add_argument("--dry-run", action="store_true", help="report only; write no board")
+    p_gt.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
+    p_gt.set_defaults(func=_cmd_boards_discover_getro)
 
     p_companies = sub.add_parser("companies", help="one company per employer (D2.4)")
     companies_sub = p_companies.add_subparsers(dest="companies_command", required=True)
