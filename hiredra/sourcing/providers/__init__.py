@@ -1,6 +1,7 @@
 """ATS providers. The registry (``hiredra.sourcing.registry``) assembles these."""
 
 from hiredra.sourcing.providers.amazon import AmazonProvider
+from hiredra.sourcing.providers.apple import AppleProvider
 from hiredra.sourcing.providers.ashby import AshbyProvider
 from hiredra.sourcing.providers.eightfold import EightfoldProvider
 from hiredra.sourcing.providers.greenhouse import GreenhouseProvider
@@ -20,6 +21,7 @@ from hiredra.sourcing.providers.zohorecruit import ZohoRecruitProvider
 
 __all__ = [
     "AmazonProvider",
+    "AppleProvider",
     "AshbyProvider",
     "EightfoldProvider",
     "GreenhouseProvider",
