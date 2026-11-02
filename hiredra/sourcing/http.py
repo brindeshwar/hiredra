@@ -299,7 +299,9 @@ class HttpClient:
 
         kwargs: dict[str, Any] = {
             "timeout": self.config.timeout,
-            "headers": {"User-Agent": self.config.user_agent},
+            # gzip/deflate only: httpx 0.28 offers zstd whenever zstandard is installed (langsmith pulls it in), and
+            # its decoder fails on zstandard 0.25 -- every Amazon search page was a DecodingError (2026-11-02).
+            "headers": {"User-Agent": self.config.user_agent, "Accept-Encoding": "gzip, deflate"},
             "follow_redirects": False,  # per-request opt-in only
         }
         if transport is not None:

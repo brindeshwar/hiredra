@@ -62,6 +62,19 @@ def test_we_identify_ourselves_except_to_a_host_that_refused_our_name():
     assert seen["jobs.refuses.example"] == BROWSER_UA
 
 
+def test_we_offer_gzip_and_deflate_only():
+    # httpx offers zstd when zstandard is installed, and its decoder fails on zstandard 0.25 (Amazon, 2026-11-02)
+    seen = {}
+
+    def handler(req):
+        seen["accept-encoding"] = req.headers["accept-encoding"]
+        return httpx.Response(200, text="ok")
+
+    client, _, _ = make_client(handler)
+    client.get_text("https://api.example.com/x")
+    assert seen["accept-encoding"] == "gzip, deflate"
+
+
 # ── happy paths ────────────────────────────────────────────────────────────
 def test_get_json_ok():
     client, _, _ = make_client(lambda req: httpx.Response(200, json={"jobs": [1, 2]}))
