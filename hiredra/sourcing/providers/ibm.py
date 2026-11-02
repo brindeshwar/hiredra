@@ -18,7 +18,7 @@ import re
 from hiredra.sourcing.http import FetchError
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
-from hiredra.sourcing.providers._common import clean, infer_remote, iso_date
+from hiredra.sourcing.providers._common import clean, infer_remote, iso_date, work_mode
 
 SEARCH = "https://www-api.ibm.com/search/api/v2"
 BOARD = "careers.ibm.com"
@@ -123,5 +123,6 @@ def to_job(company: str, posting: dict) -> Job | None:
         location=place,
         date_posted=iso_date(posting.get("dcdate")),
         job_type="intern" if clean(posting.get("field_keyword_18")) == "Internship" else None,
+        work_mode=work_mode(mode),
         is_remote=infer_remote(place or "", workplace_type=mode),
     )

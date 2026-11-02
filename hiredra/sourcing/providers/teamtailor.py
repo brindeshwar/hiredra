@@ -20,7 +20,7 @@ from hiredra.sourcing._html import html_to_text
 from hiredra.sourcing.http import FetchError
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
-from hiredra.sourcing.providers._common import clean, infer_remote, rss_date, rss_items
+from hiredra.sourcing.providers._common import clean, infer_remote, rss_date, rss_items, work_mode
 
 _HOST = re.compile(r"^[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+$")
 _JOB_ID = re.compile(r"/jobs/(\d+)")
@@ -89,5 +89,6 @@ def to_job(company: str, host: str, item: ElementTree.Element) -> Job | None:
         location=location,
         date_posted=rss_date(clean(item.findtext("pubDate"))),
         # the stated arrangement first; the location only as a fallback, never the title ("Remote ..." role names)
+        work_mode=work_mode(workplace),
         is_remote=infer_remote(location or "", workplace_type=workplace),
     )

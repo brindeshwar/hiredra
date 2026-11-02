@@ -54,6 +54,9 @@ def test_fetch_maps_jobs(http_factory, lever_payload):
     assert j0.date_posted == "2024-09-10"  # epoch-ms -> date
     assert j0.job_type == "Full-time"
     assert j0.is_remote is False  # workplaceType "hybrid" -> explicit False
+    assert (j0.work_mode, j0.employment_type) == ("hybrid", "full_time")
+    assert (j0.salary_min, j0.salary_max, j0.salary_currency, j0.salary_period) == (8, 10, "INR", "year")
+    assert (jobs[1].work_mode, jobs[1].salary_min) == ("remote", None)  # no salaryRange: none
 
 
 def test_remote_from_workplace_type(http_factory, lever_payload):

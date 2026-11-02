@@ -29,7 +29,7 @@ from hiredra.sourcing._html import html_to_text
 from hiredra.sourcing.http import FetchError
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
-from hiredra.sourcing.providers._common import clean, iso_date, log, rss_date, rss_items
+from hiredra.sourcing.providers._common import clean, iso_date, log, rss_date, rss_items, salary_range
 
 _TIMEOUT_S = 40.0
 _JOB_TYPE = {"fulltime": "fulltime", "parttime": "parttime", "contract": "contract", "contractor": "contract",
@@ -57,7 +57,16 @@ def _remote_job(source: str, key: str, url: str | None, title: object, company: 
     title, company, url = clean(title), clean(company), clean(url)
     if not key or not url or not title or not company:
         return None
-    return Job(job_id=f"{source}:{key}", url=url, title=title, company=company, source=source, is_remote=True, **fields)
+    return Job(
+        job_id=f"{source}:{key}",
+        url=url,
+        title=title,
+        company=company,
+        source=source,
+        is_remote=True,
+        work_mode="remote",
+        **fields,
+    )
 
 
 def once(jobs: Iterable[Job]) -> list[Job]:
@@ -229,6 +238,7 @@ class HimalayasProvider(_Feed):
             self.name, key, guid, p.get("title"), company, description=text or None,
             location="; ".join(places) or None, date_posted=iso_date((p.get("pubDate") or 0) * 1000 or None),
             job_type=job_type(p.get("employmentType")),
+            **salary_range(p.get("minSalary"), p.get("maxSalary"), p.get("currency"), p.get("salaryPeriod") or "year"),
         )  # fmt: skip
 
 

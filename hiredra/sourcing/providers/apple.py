@@ -165,5 +165,6 @@ def to_job(company: str, row: dict, text: str | None) -> Job | None:
         description=text,
         location=where,
         date_posted=iso_date(row.get("postDateInGMT")),
+        work_mode="remote" if row.get("homeOffice") is True else None,
         is_remote=infer_remote(where or "", workplace_type="remote" if row.get("homeOffice") is True else None),
     )

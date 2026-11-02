@@ -22,6 +22,7 @@ from hiredra.sourcing.providers._common import (
     hydrate,
     infer_remote,
     iso_date,
+    work_mode,
 )
 
 PAGE = 100
@@ -156,5 +157,6 @@ def to_job(company: str, board: Board, req: dict, detail: dict | None) -> Job | 
         location=location,
         date_posted=iso_date(req.get("PostedDate")),
         job_type=_job_type(detail.get("JobSchedule")),
+        work_mode=work_mode(_WORKPLACE.get(req.get("WorkplaceTypeCode") or "")),
         is_remote=infer_remote(location or "", workplace_type=_WORKPLACE.get(req.get("WorkplaceTypeCode") or "")),
     )

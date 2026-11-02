@@ -23,10 +23,12 @@ from hiredra.sourcing.http import FetchError, HTTPError
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
 from hiredra.sourcing.providers._common import (
+    salary_range,
     assert_allowed_url,
     clean,
     infer_remote,
     iso_date,
+    work_mode,
 )
 
 log = logging.getLogger("hiredra.sourcing.lever")
@@ -65,6 +67,12 @@ def _fold_locations(categories: dict) -> str | None:
         if c and c.lower() not in {p.lower() for p in parts}:
             parts.append(c)
     return "; ".join(parts) or None
+
+
+def _salary_range(stated: object) -> dict:
+    """``salaryRange`` ({min, max, currency, interval: "per-year-salary"}) as the Job salary fields."""
+    s = stated if isinstance(stated, dict) else {}
+    return salary_range(s.get("min"), s.get("max"), s.get("currency"), s.get("interval"))
 
 
 class LeverProvider:
@@ -141,6 +149,8 @@ class LeverProvider:
                         date_posted=iso_date(j.get("createdAt")),
                         job_type=clean(categories.get("commitment")),
                         apply_url=apply_url,
+                        work_mode=work_mode(j.get("workplaceType")),
+                        **_salary_range(j.get("salaryRange")),
                         is_remote=infer_remote(
                             f"{location or ''} {title}",
                             workplace_type=j.get("workplaceType"),

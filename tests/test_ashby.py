@@ -52,6 +52,9 @@ def test_fetch_maps_jobs(http_factory, ashby_payload):
     assert j0.job_type == "FullTime"
     assert j0.salary == "$180K - $220K"
     assert j0.is_remote is False  # workplaceType "Onsite" -> explicit False
+    assert (j0.work_mode, j0.employment_type) == ("onsite", "full_time")
+    assert (j0.salary_min, j0.salary_max, j0.salary_currency, j0.salary_period) == (180000, 220000, "USD", "year")
+    assert (jobs[1].work_mode, jobs[1].salary_min) == ("remote", None)  # equity is not pay; none stated
 
 
 def test_remote_from_workplace_type(http_factory, ashby_payload):
