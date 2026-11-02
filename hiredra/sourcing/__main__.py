@@ -1,4 +1,5 @@
 """``python -m hiredra.sourcing run --config PATH [--db URL] [--resume]``
+``python -m hiredra.sourcing crawl [--config PATH] [--db URL] [--resume]``
 ``python -m hiredra.sourcing runs [--db URL] [--limit N]``
 ``python -m hiredra.sourcing boards import PATH [--provenance NAME] [--provider NAME] [--db URL]``
 ``python -m hiredra.sourcing companies merge [--apply] [--curated PATH] [--db URL]``
@@ -45,6 +46,7 @@ from hiredra.sourcing.registry import REGISTRY, route
 from hiredra.sourcing.providers._common import Robots, sitemap_locs
 from hiredra.sourcing.runstore import PgRunStore
 from hiredra.sourcing.sink import ScoringSink
+from hiredra.lock import LockHeld, RunLock
 from hiredra.storage import db
 
 
@@ -82,8 +84,22 @@ def _print_report(report: RunReport) -> None:
     )
 
 
-def _cmd_run(args: argparse.Namespace) -> int:
+def _cmd_crawl(args: argparse.Namespace) -> int:
+    """D5.1: crawl the boards that are due (``next_due_at`` passed, not resting after failures), under the
+    ``sourcing`` lock so two crawls never overlap; then exit. A scheduler (Windows Task Scheduler, later the desktop
+    app) triggers it; each crawl sets every board's next due time from its cadence (daily, or weekly for a board
+    with no India/remote-eligible posting in its last crawls, D2.3)."""
+    try:
+        with RunLock("sourcing", what="crawl", kind="sourcing", url=args.db):
+            return _cmd_run(args, due_only=True)
+    except LockHeld as err:
+        print(f"crawl: {err}")
+        return 1
+
+
+def _cmd_run(args: argparse.Namespace, *, due_only: bool = False) -> int:
     config = load_run_config(args.config)
+    funnel = load_filter_config()
     conn = db.connect(args.db)
     # ``seen`` is asked from the fetch workers (D4.1): with more than one, it gets a connection of its own, one
     # question at a time; the run's connection stays the main thread's (sink, checkpoints, cooldowns).
@@ -97,7 +113,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
     try:
         db.init_db(conn)
         run_store = PgRunStore(conn)
-        companies = [board_entry(row) for row in db.load_boards(conn, config.boards)]
+        companies = [board_entry(row) for row in db.load_boards(conn, config.boards, due_only=due_only)]
+        if due_only:
+            print(f"crawl: {len(companies)} boards due")
         report = run_orchestrator(
             config,
             companies=companies,
@@ -105,6 +123,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
             run_store=run_store,
             resume=args.resume,
             seen=seen,
+            eligible=lambda jobs: sum(passes_location(j.title, j.location, j.description, funnel).keep for j in jobs),
         )
         _print_report(report)
         return 0 if report.status != "failed" else 1
@@ -616,6 +635,11 @@ def main(argv: list[str] | None = None) -> int:
     p_run.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
     p_run.add_argument("--resume", action="store_true")
     p_run.set_defaults(func=_cmd_run)
+    p_crawl = sub.add_parser("crawl", help="crawl the boards that are due, then exit (D5.1; for a scheduler)")
+    p_crawl.add_argument("--config", default="config/scoring.wide.yml", help="run settings (default: the wide one)")
+    p_crawl.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
+    p_crawl.add_argument("--resume", action="store_true")
+    p_crawl.set_defaults(func=_cmd_crawl)
 
     p_runs = sub.add_parser("runs", help="list recent runs")
     p_runs.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")

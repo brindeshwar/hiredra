@@ -117,11 +117,13 @@ def run(
     sleep: Callable[[float], None] = time.sleep,
     rng: random.Random | None = None,
     seen: Callable[[str], bool] | None = None,
+    eligible: Callable[[list[Job]], int] | None = None,
 ) -> RunReport:
     """Fetch every company in ``companies`` (the caller picks them: the CLI reads the ``boards`` table, D2.1) +
     the JobSpy batch, handing each batch to ``sink.consume()``. Fail-soft per company and per JobSpy site (sec. 5/9) --
     only a config error or a genuine bug raises out of this function. ``seen`` (is a job id already stored?) goes
-    into the fetch context for hydrating providers (D3.4).
+    into the fetch context for hydrating providers (D3.4); ``eligible`` counts a board's India/remote-eligible
+    postings for its cadence (D2.3), injected so the orchestrator stays filter-free.
     """
     rng = rng or random.Random()
     owns_ctx = ctx is None
@@ -187,6 +189,7 @@ def run(
             checkpoint (per-company persist)."""
             provider, jobs_c, outcome, notes, seconds = result
             before = sink.stats()
+            n_eligible = eligible(jobs_c) if eligible is not None and outcome is None else 0
             if outcome is None:
                 tag = entry.extra.get("tag") if entry.extra else None
                 sink.consume(
@@ -209,7 +212,8 @@ def run(
                     BoardResult(
                         board_id=int(board_id), status=outcome.status, jobs=outcome.jobs,
                         new=after.persisted_new - before.persisted_new, seen=after.touched - before.touched,
-                        complete=whole, detail=outcome.detail or ("; ".join(notes) or None), seconds=seconds,
+                        complete=whole, eligible=n_eligible, detail=outcome.detail or ("; ".join(notes) or None),
+                        seconds=seconds,
                     ),
                 )  # fmt: skip
             while not trips.empty():  # cooldowns tripped on worker threads, written here (one connection)
