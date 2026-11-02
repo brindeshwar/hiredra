@@ -7,6 +7,8 @@ description, so each new requisition's detail is one more GET (a hydrating sourc
 
 from __future__ import annotations
 
+from collections.abc import Callable
+
 import re
 from dataclasses import dataclass
 from html import unescape
@@ -115,7 +117,7 @@ class OracleProvider:
             return to_job(entry.name, board, req, items[0] if items and isinstance(items[0], dict) else None)
 
         return hydrate(
-            list_requisitions(get, board),
+            list_requisitions(get, board, short=ctx.incomplete),
             key=lambda req: f"oracle:{board.host}:{req['Id']}",
             seen=ctx.seen,
             listing=lambda req: to_job(entry.name, board, req, {}),
@@ -125,18 +127,23 @@ class OracleProvider:
         )
 
 
-def list_requisitions(get, board: Board) -> list[dict]:  # noqa: ANN001
+def list_requisitions(get, board: Board, short: Callable[[str], None] = lambda reason: None) -> list[dict]:  # noqa: ANN001
     """Page the requisition list until a page is empty or ``TotalJobsCount`` is reached. The list nests under
-    ``items[0]``; the ``expand`` keeps ``requisitionList`` filled."""
+    ``items[0]``; the ``expand`` keeps ``requisitionList`` filled. An empty page before the total (the list stops
+    serving: a huge site) is reported to ``short``: the crawl saw part of the board."""
     out: list[dict] = []
+    total = 0
     while True:
         items = get(list_url(board, len(out))).get("items") or []
         page = items[0] if items and isinstance(items[0], dict) else {}
         reqs = [r for r in page.get("requisitionList") or () if isinstance(r, dict) and r.get("Id")]
         if not reqs:
+            if out and len(out) < total:
+                short(f"{len(out)} of {total} requisitions served")
             return out
         out += reqs
-        if len(out) >= int(page.get("TotalJobsCount") or 0):
+        total = int(page.get("TotalJobsCount") or 0)
+        if len(out) >= total:
             return out
 
 

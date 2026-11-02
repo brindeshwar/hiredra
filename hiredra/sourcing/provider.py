@@ -44,10 +44,15 @@ class FetchContext:
     Carries the http client (retry / backoff / cooldown / proxy) and ``seen``: is a ``job_id`` already stored? A
     hydrating provider (one detail request per posting, D3.4) fetches details only for postings ``seen`` says are
     new; the CLI answers it from the database, so the orchestrator stays DB-free. Default: nothing is stored.
+
+    ``incomplete(reason)``: a provider calls it when this fetch did not see the board's whole listing (a search cap
+    reached, a walk short of its stated count), so the crawl closes nothing (D5.3). The orchestrator gives each board
+    its own; a provider whose listing is a window by design says so once instead (``full_listing = False``).
     """
 
     http: HttpClient
     seen: Callable[[str], bool] = field(default=lambda job_id: False)
+    incomplete: Callable[[str], None] = field(default=lambda reason: None)
 
 
 @runtime_checkable
