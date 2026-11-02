@@ -640,8 +640,10 @@ def touch_job(conn: psycopg.Connection, job_id: str, *, run_id: str | None = Non
 
 
 def _touch(conn: psycopg.Connection, jid: int, *, detail: str, now: str) -> None:
-    conn.execute("UPDATE jobs SET last_seen_at = %s, updated_at = %s WHERE id = %s", (now, now, jid))
-    _add_event(conn, jid, "seen", detail=detail, at=now)
+    """A sighting: ``last_seen_at`` moves, and a job closed earlier (D5.3) is open again -- listed, so offered."""
+    was_closed = conn.execute("SELECT closed_at IS NOT NULL FROM jobs WHERE id = %s", (jid,)).fetchone()[0]
+    conn.execute("UPDATE jobs SET last_seen_at = %s, updated_at = %s, closed_at = NULL WHERE id = %s", (now, now, jid))
+    _add_event(conn, jid, "seen", detail=f"{detail}; reopened" if was_closed else detail, at=now)
 
 
 def _add_event(
@@ -802,10 +804,9 @@ def load_cooldowns(conn: psycopg.Connection) -> dict[str, float]:
 def save_cooldown(conn: psycopg.Connection, key: str, until: float, reason: str | None = None) -> None:
     """Write-through from ``CooldownRegistry.on_trip``. Extends, never shortens.
 
-    NOTE: called on the same thread as the ``trip()`` that produced ``until``.
-    When the fetch loop is parallelized (deferred), a worker thread must NOT call
-    this directly — marshal the save to the main thread. The single-connection /
-    main-thread rule is load-bearing.
+    NOTE: main thread only. The fetch workers (D4.1) queue their trips and the
+    orchestrator writes them here; a worker thread must NOT call this directly.
+    The single-connection / main-thread rule is load-bearing.
     """
     conn.execute(
         "INSERT INTO cooldowns (key, until, tripped_at, reason) VALUES (%s, %s, %s, %s) "
@@ -813,6 +814,55 @@ def save_cooldown(conn: psycopg.Connection, key: str, until: float, reason: str 
         "tripped_at = excluded.tripped_at, reason = excluded.reason",
         (key, until, _now(), reason),
     )
+
+
+#: A job still unlisted this long after a complete crawl of its board is closed (D5.3): a listing that misses a job
+#: once (a flaky page, a re-post) does not close it.
+CLOSE_AFTER = "48 hours"
+
+
+def record_board_run(conn: psycopg.Connection, run_id: str, result: Any) -> int:
+    """One board's crawl (build step 5): its ``board_crawls`` row (D5.4: ``ok`` for a crawl that saw the whole
+    listing, ``partial`` for one that saw part of it, the reason in ``error``), its status (D5.5: ``pending`` becomes
+    ``active`` on a clean crawl, a board that answers 404 is ``retired`` with the reason), and, after a crawl that
+    saw the whole listing, its open jobs unlisted for ``CLOSE_AFTER`` soft-closed (D5.3: ``closed_at``, a note
+    event; never deleted, reopened when listed again). Returns how many jobs it closed."""
+    closed = 0
+    now = _now()
+    with conn.transaction():
+        if result.status == "ok":
+            conn.execute(
+                "UPDATE boards SET status = 'active', status_reason = NULL WHERE id = %s AND status = 'pending'",
+                (result.board_id,),
+            )
+        elif result.status == "gone":
+            conn.execute(
+                "UPDATE boards SET status = 'retired', status_reason = %s WHERE id = %s AND status IN ('pending', 'active')",
+                (f"gone: the board answered 404 ({now[:10]})", result.board_id),
+            )
+        if result.status == "ok" and result.complete:
+            ids = [r[0] for r in conn.execute(
+                "UPDATE jobs SET closed_at = %s, updated_at = %s WHERE board_id = %s AND closed_at IS NULL"
+                f" AND last_seen_at < %s::timestamptz - interval '{CLOSE_AFTER}' RETURNING id",
+                (now, now, result.board_id, now),
+            ).fetchall()]  # fmt: skip
+            for jid in ids:
+                _add_event(conn, jid, "note", detail=f"closed: unlisted {CLOSE_AFTER} after a complete crawl", at=now)
+            closed = len(ids)
+        status = {"ok": "ok" if result.complete else "partial", "gone": "gone", "blocked": "blocked"}.get(
+            result.status, "failed"
+        )
+        seconds = result.seconds or 0.0
+        conn.execute(
+            "INSERT INTO board_crawls (run_id, board_id, started_at, duration_ms, status, fetched, new, closed, error)"
+            " VALUES (%s, %s, %s::timestamptz - make_interval(secs => %s), %s, %s, %s, %s, %s, %s)"
+            " ON CONFLICT (run_id, board_id) DO UPDATE SET started_at = excluded.started_at,"
+            " duration_ms = excluded.duration_ms, status = excluded.status, fetched = excluded.fetched,"
+            " new = excluded.new, closed = excluded.closed, error = excluded.error",
+            (run_id, result.board_id, now, seconds, round(seconds * 1000), status, result.jobs, result.new, closed,
+             result.detail),
+        )  # fmt: skip
+    return closed
 
 
 def clear_cooldown(conn: psycopg.Connection, key: str | None = None) -> None:

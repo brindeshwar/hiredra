@@ -45,6 +45,7 @@ _TIMEOUT_S = 40.0
 class TheMuseProvider:
     name = "themuse"
     many_companies = True  # the board is stored with no company (``boards import``): each posting names its own
+    full_listing = False  # the tech categories within the API's limits: an unlisted posting is not closed (D5.3)
 
     def board_url(self, entry: CompanyEntry) -> str | None:
         if entry.provider and entry.provider != self.name:

@@ -89,3 +89,15 @@ def test_a_stored_requisition_costs_no_detail_and_an_empty_detail_is_skipped():
 def test_a_malformed_or_foreign_board_is_refused(board):
     with pytest.raises(FetchError):
         oracle.parse_board(board)
+
+
+def test_a_list_that_stops_short_of_its_total_is_reported_incomplete():
+    http = _Http(
+        (",offset=0,", _list(_req("1"), _req("2"), total=5)),
+        (",offset=2,", _list(total=5)),  # the site stops serving before its total
+        ("ById", {"items": [{"ExternalDescriptionStr": "<p>desc</p>"}]}),
+    )
+    notes: list[str] = []
+    entry = CompanyEntry(name="Acme", provider="oracle", extra={"slug": BOARD})
+    jobs = oracle.OracleProvider().fetch(entry, FetchContext(http=http, incomplete=notes.append))
+    assert len(jobs) == 2 and notes == ["2 of 5 requisitions served"]

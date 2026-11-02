@@ -53,6 +53,7 @@ def rows(page: str) -> list[dict]:
 class YCJobsProvider:
     name = "ycjobs"
     many_companies = True  # the board is stored with no company (``boards import``): each row names its own
+    full_listing = False  # public samples of Work at a Startup: an unlisted posting is not closed (D5.3)
 
     def board_url(self, entry: CompanyEntry) -> str | None:
         if entry.provider and entry.provider != self.name:

@@ -83,6 +83,7 @@ class _Feed:
     name = ""
     site = ""
     many_companies = True  # the board is stored with no company (``boards import``): each job names its own
+    full_listing = False  # a recent window, not the whole board: an unlisted posting is not closed (D5.3)
 
     def board_url(self, entry: CompanyEntry) -> str | None:
         if entry.provider and entry.provider != self.name:
@@ -128,6 +129,7 @@ class RemotiveProvider(_Feed):
 
     name = "remotive"
     site = "remotive.com"
+    full_listing = True  # every active posting: an unlisted one has closed
 
     def fetch(self, entry: CompanyEntry, ctx: FetchContext) -> list[Job]:
         self._check(entry)

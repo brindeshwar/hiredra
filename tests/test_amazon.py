@@ -84,3 +84,11 @@ def test_the_board_is_one_country_code(bad):
     assert amazon.AmazonProvider().board_url(CompanyEntry(name="A", provider="amazon", extra={"slug": "ind"})) == (
         "https://www.amazon.jobs/en/search?country=IND"
     )
+
+
+def test_the_search_cap_is_reported_incomplete():
+    notes: list[str] = []
+    http = _Http({0: {"hits": 10_000, "jobs": [_posting(1)]}, 100: {"hits": 10_000, "jobs": []}})
+    entry = CompanyEntry(name="Amazon", provider="amazon", extra={"slug": "USA"})
+    amazon.AmazonProvider().fetch(entry, FetchContext(http=http, incomplete=notes.append))
+    assert notes == ["10000 hits: the search's cap"]

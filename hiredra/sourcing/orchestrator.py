@@ -15,7 +15,7 @@ import random
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections.abc import Callable, Sequence
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import datetime, timezone
 
 from hiredra.sourcing.config import RunConfig
@@ -24,7 +24,7 @@ from hiredra.sourcing.jobspy_source import JobSpySource, SiteOutcome
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext, Provider, company_slug
 from hiredra.sourcing.registry import REGISTRY, route
-from hiredra.sourcing.runstore import RunStore
+from hiredra.sourcing.runstore import BoardResult, RunStore
 from hiredra.sourcing.sink import Sink, SinkStats
 
 log = logging.getLogger("hiredra.sourcing.orchestrator")
@@ -145,9 +145,17 @@ def run(
             )
             # companies += discover(config.path2, ctx)  # Path-2 slot
 
-        def fetch(entry: CompanyEntry) -> tuple[Provider | None, list[Job] | None, CompanyOutcome | None]:
-            """One board's fetch, safe on a worker thread: no database, no sink. ``(provider, jobs, None)`` on
-            success, ``(provider, None, outcome)`` otherwise."""
+        def fetch(entry: CompanyEntry) -> tuple:
+            """One board's fetch, safe on a worker thread: no database, no sink. ``(provider, jobs, None, notes,
+            seconds)`` on success, ``(provider, None, outcome, notes, seconds)`` otherwise; ``notes`` are the
+            provider's reasons the listing was incomplete (D5.3), from a context of the board's own."""
+            notes: list[str] = []
+            started = time.monotonic()
+            return (*_fetch(entry, replace(ctx, incomplete=notes.append)), notes, time.monotonic() - started)
+
+        def _fetch(
+            entry: CompanyEntry, ctx: FetchContext
+        ) -> tuple[Provider | None, list[Job] | None, CompanyOutcome | None]:
             provider = route(entry, registry)
             if provider is None:
                 return None, None, CompanyOutcome(entry.name, "unroutable", None, 0)
@@ -175,8 +183,10 @@ def run(
         trips: queue.SimpleQueue = queue.SimpleQueue()
 
         def record(i: int, entry: CompanyEntry, result: tuple) -> None:
-            """On the main thread: the board's jobs to the sink, its outcome, the checkpoint (per-company persist)."""
-            provider, jobs_c, outcome = result
+            """On the main thread: the board's jobs to the sink, its outcome and lifecycle (D5.3-D5.5), the
+            checkpoint (per-company persist)."""
+            provider, jobs_c, outcome, notes, seconds = result
+            before = sink.stats()
             if outcome is None:
                 tag = entry.extra.get("tag") if entry.extra else None
                 sink.consume(
@@ -189,6 +199,19 @@ def run(
             elif outcome.status == "unroutable":
                 unroutable.append(entry.name)
             by_index[i] = outcome
+            if (board_id := (entry.extra or {}).get("board_id")) is not None:
+                after = sink.stats()
+                whole = outcome.status == "ok" and getattr(provider, "full_listing", True) and not notes
+                if outcome.status == "ok" and not whole:
+                    notes = notes or ["the provider's listing is a window, not the whole board"]
+                run_store.board_result(
+                    handle.run_id,
+                    BoardResult(
+                        board_id=int(board_id), status=outcome.status, jobs=outcome.jobs,
+                        new=after.persisted_new - before.persisted_new, seen=after.touched - before.touched,
+                        complete=whole, detail=outcome.detail or ("; ".join(notes) or None), seconds=seconds,
+                    ),
+                )  # fmt: skip
             while not trips.empty():  # cooldowns tripped on worker threads, written here (one connection)
                 run_store.save_cooldown(*trips.get())
             companies_done.add(progress_key(entry))

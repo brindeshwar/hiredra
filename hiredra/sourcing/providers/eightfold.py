@@ -102,6 +102,7 @@ class EightfoldProvider:
                 positions = {**more, **positions}
                 if len(positions) < count:
                     log.info("eightfold %s: %d of %d positions served", host, len(positions), count)
+                    ctx.incomplete(f"{len(positions)} of {count} positions served")
             return list(positions.values())
         raise FetchError(f"eightfold: {host} answers neither list generation for {domain}")
 

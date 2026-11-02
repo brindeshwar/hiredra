@@ -79,6 +79,7 @@ class AmazonProvider:
             if not page or offset >= hits:
                 if hits >= _CAP:
                     log.warning("amazon %s: %d hits, the search's cap: postings past it are not read", country, hits)
+                    ctx.incomplete(f"{hits} hits: the search's cap")
                 return list(jobs.values())
 
 

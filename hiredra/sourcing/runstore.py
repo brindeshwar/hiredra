@@ -4,7 +4,8 @@ Distinct from the ``Sink`` (which owns *job* persistence). The ``RunStore`` owns
 
 * the ``runs`` row lifecycle (``begin`` / ``checkpoint`` / ``finish``), and the
   fresh-start stale sweep;
-* cross-run cooldown durability (``load_cooldowns`` / ``save_cooldown``).
+* cross-run cooldown durability (``load_cooldowns`` / ``save_cooldown``);
+* each board's result and lifecycle (``board_result``, build step 5: D5.3-D5.5).
 
 ``run()`` imports no database driver -- it drives a ``RunStore`` and a ``Sink``,
 both injected. Tests use ``FakeRunStore``.
@@ -30,12 +31,28 @@ class RunHandle:
     resumed: bool = False
 
 
+@dataclass(frozen=True, slots=True)
+class BoardResult:
+    """What one board's crawl did (a ``board_crawls`` row, D5.4). ``complete``: the crawl succeeded and saw the board's
+    whole listing, the one case in which its unlisted jobs may be closed (D5.3)."""
+
+    board_id: int
+    status: str  # ok | blocked | gone | error | unroutable
+    jobs: int = 0
+    new: int = 0
+    seen: int = 0
+    complete: bool = False
+    detail: str | None = None
+    seconds: float | None = None
+
+
 class RunStore(Protocol):
     def begin(self, kind: str, config_name: str | None, *, resume: bool) -> RunHandle: ...
     def checkpoint(self, run_id: str, *, companies_done: set[str], jobspy_done: bool) -> None: ...
     def finish(self, run_id: str, *, status: str, stats: SinkStats, report_json: str) -> None: ...
     def load_cooldowns(self) -> dict[str, float]: ...
     def save_cooldown(self, key: str, until: float, reason: str | None) -> None: ...
+    def board_result(self, run_id: str, result: BoardResult) -> None: ...
 
 
 class PgRunStore:
@@ -92,8 +109,11 @@ class PgRunStore:
         return db.load_cooldowns(self._conn)
 
     def save_cooldown(self, key: str, until: float, reason: str | None) -> None:
-        # See db.save_cooldown's note: same-thread only until fetch is threaded.
+        # Always on the main thread: the orchestrator queues a worker's trip and writes it here (D4.1).
         db.save_cooldown(self._conn, key, until, reason)
+
+    def board_result(self, run_id: str, result: BoardResult) -> None:
+        db.record_board_run(self._conn, run_id, result)
 
 
 class FakeRunStore:
@@ -112,6 +132,7 @@ class FakeRunStore:
         self.checkpoints: list[dict] = []
         self.finished: list[dict] = []
         self.saved_cooldowns: list[tuple[str, float, str | None]] = []
+        self.board_results: list[BoardResult] = []
 
     def begin(self, kind, config_name, *, resume):
         self.begun.append((kind, config_name, resume))
@@ -132,3 +153,6 @@ class FakeRunStore:
 
     def save_cooldown(self, key, until, reason):
         self.saved_cooldowns.append((key, until, reason))
+
+    def board_result(self, run_id, result):
+        self.board_results.append(result)

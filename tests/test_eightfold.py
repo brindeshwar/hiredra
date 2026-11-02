@@ -122,3 +122,17 @@ def test_a_walk_that_repeats_positions_is_joined_with_one_by_date():
     routes.update({date_url.format(s): {"data": {"positions": page, "count": 15}} for s, page in by_date.items()})
     jobs = _fetch(_Http(routes), seen=lambda job_id: True)
     assert sorted(int(j.job_id.rsplit(":", 1)[1]) for j in jobs) == list(range(1, 16))
+
+
+def test_a_walk_still_short_after_both_orders_is_reported_incomplete():
+    rows = [{"id": i, "name": f"Job {i}"} for i in range(1, 11)]
+    routes = {PCSX.format(0): {"data": {"positions": rows, "count": 12}}, PCSX.format(10): {"data": {"positions": [],
+              "count": 12}}}  # fmt: skip
+    date_url = PCSX.replace("relevance", "timestamp")
+    routes.update({date_url.format(0): {"data": {"positions": rows, "count": 12}},
+                   date_url.format(10): {"data": {"positions": [], "count": 12}}})  # fmt: skip
+    notes: list[str] = []
+    entry = CompanyEntry(name="Acme", provider="eightfold", extra={"slug": f"{HOST}/acme.com"})
+    eightfold.EightfoldProvider().fetch(entry, FetchContext(http=_Http(routes), seen=lambda j: True,
+                                                            incomplete=notes.append))  # fmt: skip
+    assert notes == ["10 of 12 positions served"]
