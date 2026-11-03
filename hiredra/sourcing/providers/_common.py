@@ -271,11 +271,44 @@ class Robots:
         return robots_allows(rules, url)
 
 
+_CHAR_REF = re.compile(r"&#(?:[xX]([0-9a-fA-F]{1,8})|([0-9]{1,10}));")
+
+
+def _xml_char(code: int) -> bool:
+    return code in (0x9, 0xA, 0xD) or 0x20 <= code <= 0xD7FF or 0xE000 <= code <= 0xFFFD or 0x10000 <= code <= 0x10FFFF
+
+
+def xml_root(xml: str) -> ElementTree.Element:
+    """The parsed document. A character reference XML forbids is mended first, as Go's decoder reads past it: a
+    UTF-16 surrogate pair written as two references (``&#55356;&#57137;``, an emoji: a Taleo BE feed of 107 jobs
+    failed whole on one, 2026-11-03) is joined into the one character; any other (a lone surrogate, a control
+    character) is dropped. ``ParseError`` for anything still not XML."""
+    refs = list(_CHAR_REF.finditer(xml))
+    if refs and not all(_xml_char(int(m.group(1), 16) if m.group(1) else int(m.group(2))) for m in refs):
+        out, at, pending = [], 0, None  # pending: (start, high surrogate) waiting for its low half
+        for m in refs:
+            code = int(m.group(1), 16) if m.group(1) else int(m.group(2))
+            if pending and pending[0] == m.start() and 0xDC00 <= code <= 0xDFFF:
+                out.append(f"&#{0x10000 + ((pending[1] - 0xD800) << 10) + (code - 0xDC00)};")
+                at, pending = m.end(), None
+                continue
+            pending = None
+            out.append(xml[at : m.start()])
+            at = m.end()
+            if 0xD800 <= code <= 0xDBFF:
+                pending = (m.end(), code)
+            elif _xml_char(code):
+                out.append(m.group(0))
+        out.append(xml[at:])
+        xml = "".join(out)
+    return ElementTree.fromstring(xml.strip().removeprefix(BOM))
+
+
 def sitemap_locs(xml: str) -> tuple[list[tuple[str, str | None]], list[str]]:
     """A sitemap's ``(pages, sub-sitemap locs)``, each page a ``(loc, lastmod)``: a ``<urlset>`` has the first, a
     ``<sitemapindex>`` the second (freehire's ``sitemapDoc``). Anything else is an error, never an empty board."""
     try:
-        root = ElementTree.fromstring(xml.strip().removeprefix(BOM))
+        root = xml_root(xml)
     except ElementTree.ParseError as err:
         raise FetchError(f"sitemap is not XML: {err}") from err
     kind = _local(root.tag).lower()
@@ -302,7 +335,7 @@ def _local(tag: str) -> str:
 def rss_items(feed: str, provider: str) -> list[ElementTree.Element]:
     """An RSS feed's ``<item>`` elements; a body that is not RSS is an error, never an empty board."""
     try:
-        root = ElementTree.fromstring(feed.strip().removeprefix(BOM))
+        root = xml_root(feed)
     except ElementTree.ParseError as err:
         raise FetchError(f"{provider}: the feed is not XML: {err}") from err
     if root.tag != "rss":

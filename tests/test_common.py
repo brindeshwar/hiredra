@@ -10,10 +10,12 @@ from hiredra.sourcing.providers._common import (
     clean,
     infer_remote,
     iso_date,
+    rss_items,
     salary_period,
     salary_range,
     sitemap_locs,
     work_mode,
+    xml_root,
 )
 
 _HOSTS = frozenset({"api.lever.co"})
@@ -122,6 +124,31 @@ def test_sitemap_locs_reads_both_shapes():
 def test_sitemap_locs_rejects_anything_else(body):
     with pytest.raises(FetchError):
         sitemap_locs(body)
+
+
+# ── xml_root: references XML forbids, mended as Go's decoder reads past them ───────────────────────────────────────
+@pytest.mark.parametrize(
+    ("body", "want"),
+    [
+        ("<a>Grow &#55356;&#57137; here</a>", "Grow 🌱 here"),  # a surrogate pair as two refs: one emoji
+        ("<a>&#xD83C;&#xDF31;</a>", "🌱"),
+        ("<a>x&#55356;y&#57137;z</a>", "xyz"),  # lone halves are dropped
+        ("<a>bell&#7;&#0; tab&#9; &#233;t&#233; &amp; &#x1F331;</a>", "bell tab	 été & 🌱"),
+    ],
+)
+def test_xml_root_mends_forbidden_character_references(body, want):
+    assert xml_root(body).text == want
+
+
+def test_a_feed_with_an_emoji_written_as_a_surrogate_pair_is_read():
+    # Taleo BE, GROUPEMONTPETIT (2026-11-03): 107 jobs failed whole on one "&#55356;&#57137;"
+    feed = (
+        "<rss><channel><item><title>A</title><description>Why &#55356;&#57137; us</description></item></channel></rss>"
+    )
+    (item,) = rss_items(feed, "taleobe")
+    assert item.findtext("description") == "Why 🌱 us"
+    with pytest.raises(FetchError, match="not XML"):
+        rss_items("<rss><channel>&#55356;<item></channel>", "taleobe")  # still broken after mending: an error
 
 
 # ── structured fields (03-adapters.md §1) ───────────────────────────────────
