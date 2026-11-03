@@ -7,6 +7,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
+
 from hiredra import filter as funnel
 from hiredra.location import eligibility, parse
 
@@ -37,6 +39,11 @@ def test_onsite_outside_india_is_not_eligible():
 def test_remote_restricted_to_another_country_is_not_eligible():
     ok, reason = eligibility("India", "Remote (US)")
     assert ok is False and "US" in reason
+
+
+@pytest.mark.parametrize("country", ["Turkiye", "Türkiye", "Turkey"])
+def test_turkey_in_every_spelling_restricts_a_remote_job(country):
+    assert eligibility("India", f"Remote ({country})") == (False, "restricted to TR")  # EPAM writes "Turkiye"
 
 
 def test_remote_restricted_via_jd_text_is_not_eligible():
@@ -253,7 +260,6 @@ def test_run_funnel_flags_onsite_unknown_place_via_job_events(pg_url):
 
 
 # --- Hiredra additions (M0.4 finding): workplace words, flag emoji, Washington D.C. ---
-import pytest  # noqa: E402
 
 
 @pytest.mark.parametrize(
