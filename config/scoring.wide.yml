@@ -23,6 +23,8 @@ http:
     boards-api.greenhouse.io: 4
     api.lever.co: 4
     api.ashbyhq.com: 4
+    eightfold.ai: 2             # ONE limit for every *.eightfold.ai tenant: it rate-limits an IP across all
+                                # of them (2026-11-03: 14 of 30 refused at 8 at once, 2 of 30 at 2 shared)
 
 jobspy:
   sites: [indeed, linkedin]     # google OFF (M0.2, 2026-10-17): 0 rows on 4 query phrasings

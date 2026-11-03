@@ -286,3 +286,16 @@ def test_cli_imports_an_inventory_csv(tmp_path, capsys, pg_url):
     other = _write(tmp_path, "name,slug,url\nAcme,acme,https://acme.examplehr.test\n", "examplehr.csv")
     assert main(["boards", "import", str(other), "--db", pg_url]) == 1  # an ATS we have no adapter for
     assert "no provider or board slug for 1: Acme" in capsys.readouterr().out
+
+
+def test_load_inventory_can_read_each_board_from_its_url(tmp_path):
+    from hiredra.sourcing.config import load_inventory
+
+    p = _write(tmp_path, "name,url\nBrewbay,https://abcoffee.keka.com/careers\nNoBoard,https://example.com/jobs\n",
+               "keka.csv")  # fmt: skip
+    [entry] = load_inventory(p, "keka", board_from_url=True)
+    assert (entry.name, entry.extra["slug"], entry.careers_url) == (
+        "Brewbay",
+        "abcoffee",
+        "https://abcoffee.keka.com/careers",
+    )

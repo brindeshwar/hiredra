@@ -440,3 +440,23 @@ def test_the_guard_tries_each_checked_address_in_turn(monkeypatch):
     monkeypatch.setattr(backend._inner, "connect_tcp", connect_tcp)
     assert backend.connect_tcp("two.example", 443) == "stream"
     assert tried == ["93.184.216.34", "93.184.216.35"]
+
+
+def test_a_parent_domain_limit_is_one_set_of_slots_for_every_host_under_it():
+    # Eightfold rate-limits an IP across all its tenants: three tenants share the platform's two slots
+    lock, state = threading.Lock(), {"now": 0, "peak": 0}
+
+    def handler(req):
+        with lock:
+            state["now"] += 1
+            state["peak"] = max(state["peak"], state["now"])
+        time.sleep(0.05)
+        with lock:
+            state["now"] -= 1
+        return httpx.Response(200, text="ok")
+
+    client, _, _ = make_client(handler, host_limits={"eightfold.ai": 2})
+    urls = [f"https://{t}.eightfold.ai/{i}" for t in ("hsbc", "micron", "hp") for i in range(4)]
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(pool.map(client.get_text, urls))
+    assert state["peak"] == 2  # across all three hosts, not 2 each

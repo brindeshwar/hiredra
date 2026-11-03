@@ -151,25 +151,35 @@ def load_companies(
 INVENTORY_PROVENANCE = "ats-inventory"
 
 
-def load_inventory(path: str | Path, provider: str, provenance: str = INVENTORY_PROVENANCE) -> list[CompanyEntry]:
+def load_inventory(
+    path: str | Path, provider: str, provenance: str = INVENTORY_PROVENANCE, *, board_from_url: bool = False
+) -> list[CompanyEntry]:
     """A public ATS-company list (build slice 2.3): one ``name,slug,url`` CSV per ATS, e.g. kalil0321/ats-scrapers'
     ``ats-companies/<provider>.csv`` (MIT). Every row is that one ``provider``; the slug is used as given, so nothing
-    is fetched or detected. Rows without a name or slug are skipped."""
+    is fetched or detected. Rows without a name or slug are skipped.
+
+    ``board_from_url`` (the lists for the step-3 ATSs, whose ``slug`` is not our board: Workday's lacks its data
+    centre, Oracle's its site, Keka's list has none): the board is read from the row's URL by
+    ``discover.board_from_url``, the same detector apply links go through; a row whose URL names no board of this
+    provider is skipped. The ``slug`` column is then optional (an Eightfold ``domain`` column is read)."""
+    from hiredra.sourcing.discover import board_from_url as from_url  # discover imports this module's neighbours
+
     with Path(path).open(encoding="utf-8", newline="") as fh:
         reader = csv.DictReader(fh)
-        missing = {"name", "slug", "url"} - set(reader.fieldnames or ())
+        required = {"name", "url"} if board_from_url else {"name", "slug", "url"}
+        missing = required - set(reader.fieldnames or ())
         if missing:
-            raise ConfigError(f"{path}: missing column(s) {sorted(missing)} (expected name,slug,url)")
-        return [
-            CompanyEntry(
-                name=row["name"].strip(),
-                careers_url=row["url"].strip() or None,
-                provider=provider,
-                extra={"slug": row["slug"].strip(), "provenance": provenance},
-            )
-            for row in reader
-            if row["name"].strip() and row["slug"].strip()
-        ]
+            raise ConfigError(f"{path}: missing column(s) {sorted(missing)} (expected {','.join(sorted(required))})")
+        entries = []
+        for row in reader:
+            name, url = (row.get("name") or "").strip(), (row.get("url") or "").strip()
+            slug = from_url(provider, url, (row.get("domain") or "").strip() or None) if board_from_url else (
+                row.get("slug") or ""
+            ).strip()  # fmt: skip
+            if name and slug:
+                entries.append(CompanyEntry(name=name, careers_url=url or None, provider=provider,
+                                            extra={"slug": slug, "provenance": provenance}))  # fmt: skip
+        return entries
 
 
 def board_entry(row: Mapping[str, Any]) -> CompanyEntry:
