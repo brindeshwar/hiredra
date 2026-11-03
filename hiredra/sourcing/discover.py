@@ -267,6 +267,30 @@ def detect_board(html: str) -> tuple[str, str] | None:
     return None
 
 
+#: Platforms whose board IS the career site's host, so a bare host in a list (no job path for ``detect_board`` to
+#: match) still names it: iCIMS (``careers-<slug>.icims.com`` -> ``slug``, else the host), Teamtailor, SuccessFactors.
+_HOST_BOARDS = frozenset({"icims", "teamtailor", "successfactors"})
+
+
+def board_from_url(provider: str, url: str, domain: str | None = None) -> str | None:
+    """The ``provider`` board a company list's URL names, in the form the adapter reads (build step 3 lists,
+    kalil0321/ats-scrapers): the link detector's answer when it recognises the URL as that provider's, else the host
+    for a host-boarded platform. ``None`` when the URL names another provider's board, or nothing. ``domain``: an
+    Eightfold list's tenant domain, which the board carries (``host/domain``)."""
+    if provider == "eightfold" and domain:
+        url = f"{url}{'&' if '?' in url else '?'}domain={domain}"
+    found = detect_board(url)
+    if found is not None:
+        return found[1] if found[0] == provider else None
+    host = (urlsplit(url).hostname or "").lower()
+    if provider not in _HOST_BOARDS or not host:
+        return None
+    if provider == "icims" and host.endswith(".icims.com"):
+        label = host.removesuffix(".icims.com")
+        return label.removeprefix("careers-") if label.startswith("careers-") and "." not in label else host
+    return host
+
+
 def slug_names(company: str, slug: str) -> bool:
     """Does a board slug carry the company's name? One squashed form contains the other ("Bolna AI" ~ ``bolna``,
     "Nourish" ~ ``usenourish``), the shorter one at least 4 characters. Measured 2026-11-01: all 20 boards that

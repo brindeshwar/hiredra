@@ -390,12 +390,16 @@ class HttpClient:
     # internals ---------------------------------------------------------
     def _slot(self, host: str) -> threading.BoundedSemaphore:
         """The host's request slots (D4.2): ``per_host`` at once, or its ``host_limits`` entry, shared by every
-        thread using this client, so a pool of workers never puts more than that on one host."""
+        thread using this client, so a pool of workers never puts more than that on one host. An entry for a parent
+        domain (``eightfold.ai``) is ONE set of slots for every host under it: a platform that rate-limits an IP
+        across all its tenants (measured 2026-11-03: Eightfold answered 429/503 to 14 of 30 tenants read 8 at once)
+        is paced as one site."""
+        key = next((d for d in self.config.host_limits if host == d or host.endswith("." + d)), host)
         with self._slots_lock:
-            slot = self._slots.get(host)
+            slot = self._slots.get(key)
             if slot is None:
-                slot = threading.BoundedSemaphore(max(1, self.config.host_limits.get(host, self.config.per_host)))
-                self._slots[host] = slot
+                slot = threading.BoundedSemaphore(max(1, self.config.host_limits.get(key, self.config.per_host)))
+                self._slots[key] = slot
             return slot
 
     @staticmethod

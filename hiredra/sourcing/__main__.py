@@ -84,6 +84,14 @@ def _print_report(report: RunReport) -> None:
     )
 
 
+def _known_eligible(job, funnel) -> bool:
+    """For a board's cadence (D2.3): a posting whose READABLE place is India or remote. An unknown location is kept
+    by the funnel but is no evidence: a re-sighted posting from a detail-page adapter carries none at all, so a
+    board counted on it would never go weekly (measured 2026-11-03: iCIMS/SuccessFactors listings, all unknown)."""
+    verdict = passes_location(job.title, job.location, job.description, funnel)
+    return verdict.keep and verdict.reason != "unknown"
+
+
 def _cmd_crawl(args: argparse.Namespace) -> int:
     """D5.1: crawl the boards that are due (``next_due_at`` passed, not resting after failures), under the
     ``sourcing`` lock so two crawls never overlap; then exit. A scheduler (Windows Task Scheduler, later the desktop
@@ -123,7 +131,7 @@ def _cmd_run(args: argparse.Namespace, *, due_only: bool = False) -> int:
             run_store=run_store,
             resume=args.resume,
             seen=seen,
-            eligible=lambda jobs: sum(passes_location(j.title, j.location, j.description, funnel).keep for j in jobs),
+            eligible=lambda jobs: sum(_known_eligible(j, funnel) for j in jobs),
         )
         _print_report(report)
         return 0 if report.status != "failed" else 1
@@ -136,7 +144,9 @@ def _cmd_run(args: argparse.Namespace, *, due_only: bool = False) -> int:
 def _cmd_boards_import(args: argparse.Namespace) -> int:
     if Path(args.path).suffix.lower() == ".csv":
         provider = args.provider or Path(args.path).stem
-        entries = load_inventory(args.path, provider, args.provenance or INVENTORY_PROVENANCE)
+        entries = load_inventory(
+            args.path, provider, args.provenance or INVENTORY_PROVENANCE, board_from_url=args.board_from_url
+        )
     else:
         entries = load_companies(args.path, args.provenance, include_disabled=True)
     counts: dict[str, int] = {}
@@ -656,6 +666,11 @@ def main(argv: list[str] | None = None) -> int:
         help="default: curated for companies.yml, ats-inventory for a CSV, else the file stem",
     )
     p_import.add_argument("--provider", default=None, help="a CSV's ATS (default: the file stem, e.g. lever.csv)")
+    p_import.add_argument(
+        "--board-from-url",
+        action="store_true",
+        help="a CSV: read each board from its URL (the step-3 ATS lists, whose slug is not our board form)",
+    )
     p_import.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
     p_import.set_defaults(func=_cmd_boards_import)
     p_yc = boards_sub.add_parser("discover-yc", help="find boards for YC companies hiring in India/remote (D2.2)")

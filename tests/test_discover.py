@@ -302,3 +302,24 @@ def test_getro_job_reads_the_employer_and_the_jobs_source_link():
     assert discover.detect_board(discover.getro_job(page)[1]) == ("rippling", "ayr-careers")
     assert discover.getro_job("<html>no data</html>") is None
     assert discover.getro_job(page.replace("Ayr Energy", "")) is None  # no employer: nothing to file it under
+
+
+# ── the step-3 ATS company lists: the board read from each row's URL ─────────
+@pytest.mark.parametrize(
+    ("provider", "url", "domain", "want"),
+    [
+        ("workday", "https://23andme.wd5.myworkdayjobs.com/23", None, "23andme.wd5.myworkdayjobs.com/23"),
+        ("oracle", "https://ebwg.fa.us2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX", None,
+         "ebwg.fa.us2.oraclecloud.com/CX"),
+        ("keka", "https://abcoffee.keka.com/careers", None, "abcoffee"),
+        ("eightfold", "https://albemarle.eightfold.ai/careers", "albemarle.com", "albemarle.eightfold.ai/albemarle.com"),
+        ("icims", "https://careers-360care.icims.com", None, "360care"),  # a bare host: the classic label's slug
+        ("icims", "https://globalcareers-msci.icims.com", None, "globalcareers-msci.icims.com"),
+        ("teamtailor", "https://123pousse.teamtailor.com", None, "123pousse.teamtailor.com"),
+        ("successfactors", "https://apply.iav.com", None, "apply.iav.com"),  # its own domain: the host
+        ("workday", "https://jobs.lever.co/acme", None, None),  # another platform's board: not this list's
+        ("smartrecruiters", "not a url", None, None),
+    ],
+)  # fmt: skip
+def test_board_from_url(provider, url, domain, want):
+    assert discover.board_from_url(provider, url, domain) == want
