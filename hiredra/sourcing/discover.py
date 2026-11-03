@@ -22,6 +22,7 @@ from typing import Any
 from html import unescape
 from urllib.parse import parse_qs, urljoin, urlsplit
 
+from hiredra.sourcing._html import next_data
 from hiredra.sourcing.http import FetchError, HTTPError
 from hiredra.sourcing.identity import company_slug
 from hiredra.sourcing.job import Job
@@ -443,7 +444,6 @@ def same_opening(jobs: Iterable[Job], titles: set[str]) -> bool:
 # posting, which names the board. So a company's board is read from its first job pages, and the jobs themselves are
 # then read from that board by our own adapter, never from Getro (owner, 2026-11-02).
 _GETRO_JOB = re.compile(r"/companies/([^/?#]+)/jobs/[^/?#]+/?$")
-_NEXT_DATA = re.compile(r"""<script\b[^>]*\bid=["']__NEXT_DATA__["'][^>]*>(.*?)</script\s*>""", re.S | re.I)
 
 
 def getro_job_pages(locs: Iterable[str]) -> dict[str, list[str]]:
@@ -457,11 +457,7 @@ def getro_job_pages(locs: Iterable[str]) -> dict[str, list[str]]:
 
 def getro_job(page: str) -> tuple[str, str] | None:
     """``(employer name, the job's source link)`` from a Getro job page, or ``None`` when the page carries neither."""
-    m = _NEXT_DATA.search(page)
-    try:
-        data = json.loads(m.group(1)) if m else None
-    except json.JSONDecodeError:
-        return None
+    data = next_data(page)
     job = (
         ((((data or {}).get("props") or {}).get("pageProps") or {}).get("initialState") or {}).get("jobs") or {}
     ).get("currentJob")

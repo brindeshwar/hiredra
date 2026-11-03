@@ -150,6 +150,7 @@ COUNTRIES = {
     "greece": "GR",
     "ukraine": "UA",
     "türkiye": "TR",
+    "turkiye": "TR",  # the ASCII spelling (EPAM, measured 2026-11-03: read as no region, so "Remote (Turkiye)" passed)
     "turkey": "TR",
     "india": "IN",
     "china": "CN",

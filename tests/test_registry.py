@@ -71,7 +71,7 @@ def test_registry_contents():
     assert [p.name for p in REGISTRY] == [
         "greenhouse", "lever", "ashby", "workday", "oracle", "smartrecruiters", "workable", "icims",
         "successfactors", "taleobe", "keka", "zohorecruit", "teamtailor", "rippling", "eightfold", "amazon", "ibm",
-        "apple", "remoteok", "remotive", "jobicy", "himalayas", "workingnomads", "weworkremotely",
+        "apple", "epam", "remoteok", "remotive", "jobicy", "himalayas", "workingnomads", "weworkremotely",
         "hackernews", "themuse", "ycjobs",
     ]  # fmt: skip
     assert all(isinstance(p, Provider) for p in REGISTRY)

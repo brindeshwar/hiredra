@@ -75,6 +75,20 @@ def ld_job_posting(page: str | None) -> dict | None:
     return None
 
 
+_NEXT_DATA = re.compile(r"""<script\b[^>]*\bid=["']__NEXT_DATA__["'][^>]*>(.*?)</script\s*>""", re.S | re.I)
+
+
+def next_data(page: str | None) -> dict | None:
+    """The JSON a Next.js page server-renders in its ``__NEXT_DATA__`` script (Getro job pages, EPAM vacancies), or
+    ``None`` when the page carries none or it is not a JSON object."""
+    m = _NEXT_DATA.search(page or "")
+    try:
+        data = json.loads(m.group(1)) if m else None
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
 def itemprop_html(page: str | None, prop: str) -> list[str]:
     """The inner HTML of each element carrying ``itemprop="<prop>"`` (schema.org microdata), up to its matching
     close tag; a self-closing or never-closed element gives nothing. For pages that mark a posting up in microdata
