@@ -18,6 +18,7 @@ that fails or carries no text is skipped and read next run (D3.4), where freehir
 
 from __future__ import annotations
 
+import html
 import re
 from collections import Counter
 
@@ -64,7 +65,10 @@ class EightfoldProvider:
     def fetch(self, entry: CompanyEntry, ctx: FetchContext) -> list[Job]:
         host, domain = parse_board((entry.extra or {}).get("slug") or "")
         if domain is None:
-            found = Counter(_PAGE_DOMAIN.findall(ctx.http.get_text(f"https://{host}/careers", timeout=_TIMEOUT_S)))
+            # unescaped first: most pages write it HTML-escaped, ``&#34;domain&#34;: &#34;worley.com&#34;`` (parity
+            # step, 2026-11-03: Worley, Dolby, Arcadis named no domain until then)
+            page = html.unescape(ctx.http.get_text(f"https://{host}/careers", timeout=_TIMEOUT_S))
+            found = Counter(_PAGE_DOMAIN.findall(page))
             if not found:
                 raise FetchError(f"eightfold: {host}/careers names no tenant domain")
             domain = found.most_common(1)[0][0]

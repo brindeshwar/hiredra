@@ -99,6 +99,15 @@ def test_the_domain_is_read_off_the_careers_page_when_the_board_has_none():
         _fetch(_Http({f"https://{HOST}/careers": "<html></html>"}), board=HOST)
 
 
+def test_an_html_escaped_domain_on_the_careers_page_is_read():
+    # Worley's page (2026-11-03): the config sits HTML-escaped in an attribute, next to a OneTrust domain script id
+    page = ('<script data-domain-script="0199c901-6074-7a1e"></script><div data-x="{&#34;domain&#34;: '
+            '&#34;acme.com&#34;, &#34;configPath&#34;: &#34;PCS&#34;}"></div>')  # fmt: skip
+    http = _Http({f"https://{HOST}/careers": page, PCSX.format(0): {"data": {"positions": [], "count": 0}}})
+    assert _fetch(http, board=HOST) == []
+    assert "domain=acme.com" in http.asked[1][0]
+
+
 def test_a_stored_position_is_re_sighted_and_one_without_text_waits():
     positions = [{"id": 1, "name": "Stored", "locations": ["Pune"]}, {"id": 2, "name": "Empty detail"}]
     http = _Http({PCSX.format(0): {"data": {"positions": positions, "count": 2}}, **dict([_detail(2, text="")])})
