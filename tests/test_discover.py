@@ -323,3 +323,15 @@ def test_getro_job_reads_the_employer_and_the_jobs_source_link():
 )  # fmt: skip
 def test_board_from_url(provider, url, domain, want):
     assert discover.board_from_url(provider, url, domain) == want
+
+
+def test_phenom_boards_group_a_sites_jobs_by_the_board_they_apply_through():
+    rows = [
+        {"applyUrl": "https://lilly.wd115.myworkdayjobs.com/LLY/job/Bengaluru/Engineer_R-1/apply"},
+        {"applyUrl": "https://lilly.wd115.myworkdayjobs.com/LLY/job/Pune/Analyst_R-2/apply"},
+        {"applyUrl": "https://dpdhlgroup.avature.net/en_US/careers/JobDetail?jobId=7"},  # no adapter of ours
+        {"applyUrl": ""},  # the site's own form
+        {"applyUrl": "https://jobs.lever.co/acme/1234"},  # an adapter not offered here
+    ]
+    groups = discover.phenom_boards(rows, ["workday"])
+    assert {k: len(v) for k, v in groups.items()} == {("workday", "lilly.wd115.myworkdayjobs.com/LLY"): 2, None: 3}

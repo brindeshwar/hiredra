@@ -618,6 +618,93 @@ def _cmd_boards_discover_getro(args: argparse.Namespace) -> int:
         conn.close()
 
 
+def _cmd_boards_discover_phenom(args: argparse.Namespace) -> int:
+    """Phenom career sites (parity step, 2026-11-04): most only front another ATS, so each site's first listing page
+    is read for its apply links (``discover.phenom_boards``). A board behind it on an ATS we read is imported unless
+    we hold it; the site itself is imported as a ``phenom`` board only when most of its jobs apply where we cannot
+    read them. Each needs a job of its own on that page whose READABLE place is India or remote. Unlike Getro's, a
+    board is not checked for the company's name: the site is the employer's own, and its boards are too (GE
+    HealthCare's is ``gehc``, TJX's ``tjx``: the check refused 11 of them). Provenance ``phenom``; robots.txt is
+    obeyed; one request a ``--pause``."""
+    from hiredra.sourcing.providers import phenom
+
+    funnel = load_filter_config()
+    conn = db.connect(args.db)
+    http = HttpClient(HttpConfig())
+    ctx = FetchContext(http=http, seen=lambda job_id: True)
+    pace = phenom.Pace(args.pause)
+
+    def text(url: str) -> str | None:
+        try:
+            return http.get_text(url, timeout=30)
+        except FetchError:
+            return None
+
+    robots = Robots(text, http.config.user_agent)
+    sites = load_inventory(args.path, "phenom", "phenom", board_from_url=False) if args.path.endswith(".csv") else []
+    if not sites:
+        print(f"{args.path}: no sites (a CSV with name, slug, url columns: the slug is the site host)")
+        return 1
+    tally: dict[str, int] = {}
+    imported: list[tuple[str, str, str]] = []
+    try:
+        db.init_db(conn)
+        for entry in sites[: args.limit or None]:
+            host, name = entry.extra["slug"], entry.name
+            if not robots.allowed(f"https://{host}/widgets"):
+                tally["robots.txt refuses"] = tally.get("robots.txt refuses", 0) + 1
+                continue
+            try:
+                rows, total = phenom.listing_page(ctx, host, 0, pace)
+            except FetchError as err:
+                tally["site does not answer"] = tally.get("site does not answer", 0) + 1
+                print(f"  - {name} ({host}): {err}")
+                continue
+
+            def eligible(group: list[dict]) -> int:
+                jobs = (phenom.to_job(name, host, r, None) for r in group)
+                return sum(_known_eligible(j, funnel) for j in jobs if j is not None)
+
+            groups = discover.phenom_boards(rows, (p.name for p in REGISTRY if p.name != "phenom"))
+            wanted = {key: eligible(group) for key, group in groups.items() if key is not None}
+            if len(groups.get(None, ())) * 2 > len(rows):  # most of its jobs reach us only through the site
+                wanted[("phenom", host)] = eligible(groups[None])
+            if not any(wanted.values()):
+                tally["no India/remote job on its first page"] = (
+                    tally.get("no India/remote job on its first page", 0) + 1
+                )
+                continue
+            for (p, b), count in wanted.items():
+                if not count:
+                    tally["board with no India/remote job"] = tally.get("board with no India/remote job", 0) + 1
+                    continue
+                held = conn.execute(
+                    "SELECT 1 FROM boards WHERE provider = %s AND lower(board) = lower(%s)", (p, b)
+                ).fetchone()
+                if held:
+                    tally["board already ours"] = tally.get("board already ours", 0) + 1
+                    continue
+                tally["new"] = tally.get("new", 0) + 1
+                imported.append((name, p, b))
+                print(
+                    f"  + {name}: {p}/{b} ({total} jobs on the site; {count} of its India/remote on page 1)", flush=True
+                )
+                if not args.dry_run:
+                    with conn.transaction():
+                        db.import_board(conn, provider=p, board=b, name=name, provenance="phenom",
+                                        source_name=host, alias=True)  # fmt: skip
+        print("sites and boards: " + (", ".join(f"{v} {k}" for k, v in sorted(tally.items())) or "none"))
+        print(
+            "DRY RUN: no board written."
+            if args.dry_run
+            else f"imported {len(imported)} board(s) as pending, provenance phenom"
+        )
+        return 0
+    finally:
+        http.close()
+        conn.close()
+
+
 def _cmd_runs(args: argparse.Namespace) -> int:
     conn = db.connect(args.db)
     try:
@@ -704,6 +791,13 @@ def main(argv: list[str] | None = None) -> int:
     p_gt.add_argument("--dry-run", action="store_true", help="report only; write no board")
     p_gt.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
     p_gt.set_defaults(func=_cmd_boards_discover_getro)
+    p_ph = boards_sub.add_parser("discover-phenom", help="find the boards behind Phenom career sites (parity step)")
+    p_ph.add_argument("path", help="a CSV of Phenom sites: name, slug (the site host), url")
+    p_ph.add_argument("--limit", type=int, default=0, help="read only the first N sites")
+    p_ph.add_argument("--pause", type=float, default=1.0, help="seconds between Phenom requests (one pace for all)")
+    p_ph.add_argument("--dry-run", action="store_true", help="report only; write no board")
+    p_ph.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
+    p_ph.set_defaults(func=_cmd_boards_discover_phenom)
 
     p_companies = sub.add_parser("companies", help="one company per employer (D2.4)")
     companies_sub = p_companies.add_subparsers(dest="companies_command", required=True)
