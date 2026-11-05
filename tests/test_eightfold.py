@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from hiredra.sourcing.http import Blocked, FetchError, HTTPError
+from hiredra.sourcing.http import Blocked, CooldownRegistry, FetchError, HTTPError
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
 from hiredra.sourcing.providers import eightfold
 
@@ -50,7 +50,7 @@ def _blocked():
 
 def _fetch(http, board=f"{HOST}/acme.com", seen=lambda job_id: False):
     entry = CompanyEntry(name="Acme", provider="eightfold", extra={"slug": board})
-    return eightfold.EightfoldProvider().fetch(entry, FetchContext(http=http, seen=seen))
+    return eightfold.EightfoldProvider(interval=0).fetch(entry, FetchContext(http=http, seen=seen))
 
 
 def test_pcsx_pages_by_the_stated_count_and_details_give_the_text():
@@ -142,6 +142,39 @@ def test_a_walk_still_short_after_both_orders_is_reported_incomplete():
                    date_url.format(10): {"data": {"positions": [], "count": 12}}})  # fmt: skip
     notes: list[str] = []
     entry = CompanyEntry(name="Acme", provider="eightfold", extra={"slug": f"{HOST}/acme.com"})
-    eightfold.EightfoldProvider().fetch(entry, FetchContext(http=_Http(routes), seen=lambda j: True,
+    eightfold.EightfoldProvider(interval=0).fetch(entry, FetchContext(http=_Http(routes), seen=lambda j: True,
                                                             incomplete=notes.append))  # fmt: skip
     assert notes == ["10 of 12 positions served"]
+
+
+def test_a_405_parks_every_tenant_and_the_next_board_waits_without_a_request():
+    # crawl 1 (2026-11-05): 11 minutes into reading 81 tenants, every Eightfold request answered 405
+    http = _Http({PCSX.format(0): HTTPError("405", status=405, url=PCSX.format(0))})
+    http.cooldowns = CooldownRegistry(now=lambda: 1000.0)
+    with pytest.raises(Blocked, match="throttle") as err:
+        _fetch(http)
+    assert err.value.cooldown_key == eightfold.THROTTLE_KEY
+    asked = len(http.asked)
+    with pytest.raises(Blocked, match="cooldown"):  # another tenant, same platform: nothing is sent
+        _fetch(http, board="other.eightfold.ai/other.com")
+    assert len(http.asked) == asked
+
+
+def test_a_405_on_a_detail_leaves_the_boards_other_new_positions_for_the_next_run():
+    positions = [{"id": i, "name": f"Job {i}"} for i in (1, 2, 3)]
+    http = _Http({PCSX.format(0): {"data": {"positions": positions, "count": 3}}, **dict([_detail(1)]),
+                  _detail(2)[0]: HTTPError("405", status=405), **dict([_detail(3)])})  # fmt: skip
+    http.cooldowns = CooldownRegistry(now=lambda: 1000.0)
+    jobs = _fetch(http)
+    assert [j.job_id for j in jobs] == ["eightfold:acme.com:1"]  # 2 throttled, 3 never asked: both new next run
+    assert not any("/jobs/3?" in url for url, _ in http.asked)
+
+
+def test_every_request_waits_on_the_one_pace():
+    provider = eightfold.EightfoldProvider()
+    waited: list[str] = []
+    provider.pace.wait = lambda: waited.append("x")
+    http = _Http({PCSX.format(0): {"data": {"positions": [{"id": 1, "name": "X"}], "count": 1}}, **dict([_detail(1)])})
+    provider.fetch(CompanyEntry(name="Acme", provider="eightfold", extra={"slug": f"{HOST}/acme.com"}),
+                   FetchContext(http=http, seen=lambda j: False))  # fmt: skip
+    assert len(waited) == len(http.asked) == 2

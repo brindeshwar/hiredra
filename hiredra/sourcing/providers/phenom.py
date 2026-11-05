@@ -23,9 +23,6 @@ employer's ATS link is kept as the apply link.
 from __future__ import annotations
 
 import re
-import threading
-import time
-from collections.abc import Callable
 
 from hiredra.sourcing._html import html_to_text
 from hiredra.sourcing.http import FetchError, HttpConfig
@@ -33,6 +30,7 @@ from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
 from hiredra.sourcing.providers._common import (
     DETAIL_BUDGET,
+    Pace,
     Robots,
     clean,
     hydrate,
@@ -54,22 +52,6 @@ def site(entry: CompanyEntry) -> str:
     if not _HOST.match(host):
         raise FetchError(f"phenom: board {host!r} is not a host")
     return host
-
-
-class Pace:
-    """One request at a time, at least ``interval`` seconds apart, for every thread sharing it."""
-
-    def __init__(self, interval: float, sleep: Callable[[float], None] = time.sleep) -> None:
-        self.interval, self._sleep = interval, sleep
-        self._lock = threading.Lock()
-        self._next = 0.0
-
-    def wait(self) -> None:
-        with self._lock:
-            now = time.monotonic()
-            if self._next > now:
-                self._sleep(self._next - now)
-            self._next = max(now, self._next) + self.interval
 
 
 def post(ctx: FetchContext, host: str, body: dict, pace: Pace) -> dict:
