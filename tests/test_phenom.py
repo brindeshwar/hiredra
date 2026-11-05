@@ -141,7 +141,7 @@ def test_every_request_waits_its_turn_on_one_pace():
     slept: list[float] = []
     clock = iter([0.0, 0.2, 0.3, 5.0])
     pace = phenom.Pace(1.0, sleep=slept.append)
-    import hiredra.sourcing.providers.phenom as mod
+    import hiredra.sourcing.providers._common as mod  # the pace lives with the shared helpers
 
     real = mod.time.monotonic
     mod.time.monotonic = lambda: next(clock)

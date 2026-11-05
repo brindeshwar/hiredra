@@ -12,6 +12,11 @@ cools the key down, so each generation's list calls carry their own cooldown key
 itself, and the other is tried. A 403 on a detail is Eightfold's rate limit (freehire measured ~290 requests a
 window) and cools the host, leaving the rest of the board's new positions for the next run.
 
+Eightfold limits an IP across all its tenants, so, as freehire does, every request of this provider waits its turn
+on ONE pace of about one a second, whatever the tenant. Its throttle can also answer 405 (crawl 1, 2026-11-05: 81
+tenants read 2 at once, unpaced; 11 minutes in, every request after answered 405, and 64 boards failed): a 405 parks
+every tenant at once, as a block, so the rest of the run's Eightfold boards wait instead of being refused one by one.
+
 Two changes from freehire: every listed location is kept, joined, where freehire keeps the first; and a detail
 that fails or carries no text is skipped and read next run (D3.4), where freehire stores the posting without text.
 """
@@ -26,7 +31,16 @@ from hiredra.sourcing._html import html_to_text
 from hiredra.sourcing.http import Blocked, FetchError, HTTPError
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
-from hiredra.sourcing.providers._common import DETAIL_BUDGET, clean, hydrate, infer_remote, iso_date, log, work_mode
+from hiredra.sourcing.providers._common import (
+    DETAIL_BUDGET,
+    Pace,
+    clean,
+    hydrate,
+    infer_remote,
+    iso_date,
+    log,
+    work_mode,
+)
 
 _HOST = re.compile(r"^[a-z0-9][a-z0-9-]*(?:\.[a-z0-9][a-z0-9-]*)+$")
 #: The tenant domain as the careers page states it (``"domain": "paypal.com"``).
@@ -34,6 +48,7 @@ _PAGE_DOMAIN = re.compile(r"domain[^a-z0-9]{1,12}([a-z0-9][a-z0-9.-]*\.[a-z]{2,}
 _PAGE = 10  # the server's page, whatever ``num`` asks for
 _MAX_PAGES = 2000
 _TIMEOUT_S = 30.0
+THROTTLE_KEY = "eightfold.ai"  # the one cooldown a 405 sets, for every tenant
 
 
 def parse_board(board: str) -> tuple[str, str | None]:
@@ -51,6 +66,28 @@ def _workplace(value: str | None) -> str | None:
 class EightfoldProvider:
     name = "eightfold"
 
+    def __init__(self, interval: float = 1.0) -> None:
+        self.pace = Pace(interval)  # one for every Eightfold tenant in a run (freehire's ~1 request a second)
+
+    def _get(self, ctx: FetchContext, url: str, *, text: bool = False, cooldown_key: str | None = None):
+        """One request on the shared pace; a 405 (Eightfold's throttle) parks every tenant, raised as a block."""
+        cooldowns = getattr(ctx.http, "cooldowns", None)
+        if cooldowns is not None:
+            cooldowns.check(THROTTLE_KEY, url=url)
+        self.pace.wait()
+        try:
+            if text:
+                return ctx.http.get_text(url, timeout=_TIMEOUT_S)
+            return ctx.http.get_json(url, timeout=_TIMEOUT_S, cooldown_key=cooldown_key)
+        except HTTPError as err:
+            if err.status != 405:
+                raise
+            seconds = getattr(getattr(ctx.http, "config", None), "cooldown_seconds", 900.0)
+            until = cooldowns.trip(THROTTLE_KEY, seconds, reason="HTTP 405") if cooldowns is not None else 0.0
+            log.warning("eightfold: %s answered 405 (throttled) -- every tenant cools down %.0fs", url, seconds)
+            raise Blocked(f"{url}: HTTP 405 (Eightfold's throttle)", cooldown_key=THROTTLE_KEY, until=until,
+                          url=url) from err  # fmt: skip
+
     def board_url(self, entry: CompanyEntry) -> str | None:
         if entry.provider and entry.provider != self.name:
             return None
@@ -67,7 +104,7 @@ class EightfoldProvider:
         if domain is None:
             # unescaped first: most pages write it HTML-escaped, ``&#34;domain&#34;: &#34;worley.com&#34;`` (parity
             # step, 2026-11-03: Worley, Dolby, Arcadis named no domain until then)
-            page = html.unescape(ctx.http.get_text(f"https://{host}/careers", timeout=_TIMEOUT_S))
+            page = html.unescape(self._get(ctx, f"https://{host}/careers", text=True))
             found = Counter(_PAGE_DOMAIN.findall(page))
             if not found:
                 raise FetchError(f"eightfold: {host}/careers names no tenant domain")
@@ -76,7 +113,7 @@ class EightfoldProvider:
 
         def detail(p: dict) -> Job | None:
             url = f"https://{host}/api/apply/v2/jobs/{p['id']}?domain={domain}"
-            d = ctx.http.get_json(url, timeout=_TIMEOUT_S)
+            d = self._get(ctx, url)
             return to_job(entry.name, host, domain, p, d if isinstance(d, dict) else None)
 
         return hydrate(
@@ -120,9 +157,10 @@ class EightfoldProvider:
         for _ in range(_MAX_PAGES):
             url = f"https://{host}/{path}?domain={domain}&query=&start={start}&num={_PAGE}&sort_by={sort}"
             try:
-                data = ctx.http.get_json(url, timeout=_TIMEOUT_S, cooldown_key=f"{host} {generation}")
+                data = self._get(ctx, url, cooldown_key=f"{host} {generation}")
             except (Blocked, HTTPError) as err:
-                if start == 0 and (isinstance(err, Blocked) or err.status == 403):
+                refused = err.cooldown_key != THROTTLE_KEY if isinstance(err, Blocked) else err.status == 403
+                if start == 0 and refused:  # the tenant answers the other generation; a throttle is the platform's
                     return None
                 raise
             body = (data.get("data") if generation == "pcsx" else data) if isinstance(data, dict) else None

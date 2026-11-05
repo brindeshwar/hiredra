@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import logging
 import re
+import threading
+import time
 from collections.abc import Callable, Iterable
 from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
@@ -140,6 +142,23 @@ def salary_range(low: Any, high: Any, currency: Any, period: Any) -> dict[str, A
 #: Detail requests per board per run for a hydrating provider (D3.4): a stored posting needs none, and a huge new
 #: board drains over runs instead of eating one (Workday's ABB, 2,035 postings, took 29 min one at a time).
 DETAIL_BUDGET = 200
+
+
+class Pace:
+    """One request at a time, at least ``interval`` seconds apart, for every thread sharing it: a platform that
+    limits an IP across all its tenants (Phenom, Eightfold) is paced as one site, as freehire does (~1 a second)."""
+
+    def __init__(self, interval: float, sleep: Callable[[float], None] = time.sleep) -> None:
+        self.interval, self._sleep = interval, sleep
+        self._lock = threading.Lock()
+        self._next = 0.0
+
+    def wait(self) -> None:
+        with self._lock:
+            now = time.monotonic()
+            if self._next > now:
+                self._sleep(self._next - now)
+            self._next = max(now, self._next) + self.interval
 
 
 def hydrate(
