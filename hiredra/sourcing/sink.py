@@ -88,6 +88,7 @@ class ScoringSink:
             company_slug=company_slug,
             list_tag=list_tag,
             provenance=provenance,
+            sources={j.source for j in jobs},  # the board's own jobs: a matched copy from elsewhere stays put
         )
 
     def stats(self) -> SinkStats:

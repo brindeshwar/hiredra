@@ -89,3 +89,15 @@ def test_the_sink_reads_the_store_once_a_run(conn, monkeypatch):
     sink.consume([_job("jobspy-indeed:b", "jobspy-indeed", title="Backend Engineer", url="u://b")])
     assert calls == [1]  # one read for the whole run
     assert db.get_job(conn, "jobspy-indeed:b") is None  # matched against the job stored by the first board
+
+
+def test_a_matched_copy_from_another_source_is_not_filed_on_the_board_just_read(conn):
+    # crawl 1 (2026-11-05): reading the RemoteOK feed matched a role stored from a Lever board, and filing the matched
+    # Lever job under the feed's board made a board "lever: remoteok.com"; 35 such boards, none with a job
+    sink = ScoringSink(conn, "R1")
+    sink.consume([_job("lever:pune", "lever")], company_slug="paytm", provenance="curated")
+    sink.consume([_job("remoteok:9", "remoteok", url="https://remoteok.com/9")], company_slug="remoteok.com",
+                 provenance="curated")  # fmt: skip
+    boards = conn.execute("SELECT provider, board FROM boards ORDER BY provider").fetchall()
+    assert [tuple(b) for b in boards] == [("lever", "paytm")]
+    assert db.get_job(conn, "lever:pune")["company_slug"] == "paytm"  # the stored job keeps its own board

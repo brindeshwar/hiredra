@@ -34,7 +34,7 @@ from __future__ import annotations
 import secrets
 import struct
 import time
-from collections.abc import Iterable, Iterator, Mapping, Sequence
+from collections.abc import Collection, Iterable, Iterator, Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -348,10 +348,16 @@ def fill_provenance(
     company_slug: str | None,
     list_tag: str | None,
     provenance: str = "orphan",
+    sources: Collection[str] | None = None,
 ) -> None:
     """Put each ATS job on its board (``provider`` = the job's source, ``board`` = ``company_slug``), where the
     job has no board yet. A board new to the store is created with ``provenance`` (the company list it came
     from) and ``list_tag``; an existing board's tag is filled only if it has none. JobSpy jobs get no board.
+
+    ``sources``: only jobs of these sources are filed -- the board just read's own. A stored copy from another
+    source that the crawl matched (the same role on the company's other board, or on a feed) belongs to its own
+    board; filing it here made a board of that source under this slug (crawl 1, 2026-11-05: 35 boards such as
+    "eightfold: albemarle.wd5.myworkdayjobs.com/external" and "himalayas: remoteok.com", none with a job).
 
     Never overwrites a stored value: the first sighting's provenance wins, so a later fetch
     from a differently tagged list can't rewrite history. Changes no other job column.
@@ -361,7 +367,7 @@ def fill_provenance(
         return
     with conn.transaction():
         for source in {r[0] for r in _sources(conn, job_ids)}:
-            if source.startswith("jobspy-"):
+            if source.startswith("jobspy-") or (sources is not None and source not in sources):
                 continue
             conn.execute(
                 "INSERT INTO boards (provider, board, status, provenance, list_tag) VALUES (%s, %s, 'active', %s, %s) "
