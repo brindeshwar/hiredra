@@ -12,6 +12,7 @@ from hiredra.sourcing.providers.icims import ICIMSProvider
 from hiredra.sourcing.providers.keka import KekaProvider
 from hiredra.sourcing.providers.lever import LeverProvider
 from hiredra.sourcing.providers.oracle import OracleProvider
+from hiredra.sourcing.providers.phenom import PhenomProvider
 from hiredra.sourcing.providers.remoteboards import (
     HimalayasProvider,
     JobicyProvider,
@@ -50,6 +51,7 @@ __all__ = [
     "KekaProvider",
     "LeverProvider",
     "OracleProvider",
+    "PhenomProvider",
     "RipplingProvider",
     "SmartRecruitersProvider",
     "SuccessFactorsProvider",
