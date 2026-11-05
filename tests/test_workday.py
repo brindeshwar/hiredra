@@ -178,6 +178,27 @@ def test_a_board_that_cannot_be_listed_completely_fails():
         _postings([({}, capped)])
 
 
+class _Refusing(_Http):
+    """Every listing page answers one HTTP status, as a tenant gone from its host does (422)."""
+
+    def __init__(self, status):
+        super().__init__()
+        self.status = status
+
+    def request(self, method, url, *, json=None, timeout=None):  # noqa: A002
+        raise HTTPError(f"{url}: HTTP {self.status}", status=self.status, url=url)
+
+
+def test_a_tenant_gone_from_its_host_is_a_gone_board():
+    # crawl 1 (2026-11-05): Comcast moved from wd5 to wd115; its old host answers 422, as a made-up tenant does
+    with pytest.raises(HTTPError, match="not on this host") as err:
+        _fetch(_Refusing(422))
+    assert err.value.status == 404  # the orchestrator's mark of a gone board
+    with pytest.raises(HTTPError) as err:  # any other refusal stays what it was
+        _fetch(_Refusing(401))
+    assert err.value.status == 401
+
+
 def test_only_new_postings_cost_a_detail_and_a_run_fetches_at_most_the_budget(monkeypatch):
     monkeypatch.setattr(workday, "DETAIL_BUDGET", 2)
     listing = {"total": 4, "jobPostings": [{"title": t, "externalPath": f"/job/X/{t}"} for t in "ABCD"]}

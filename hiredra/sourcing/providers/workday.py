@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from hiredra.sourcing._html import html_to_text
-from hiredra.sourcing.http import FetchError
+from hiredra.sourcing.http import FetchError, HTTPError
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
 from hiredra.sourcing.providers._common import (
@@ -169,7 +169,15 @@ def _page_all(post: Callable[[dict], dict], facets: dict, first: dict) -> list[d
 
 
 def list_postings(post: Callable[[dict], dict]) -> list[dict]:
-    first = _page(post, {}, 0)
+    """Every posting on the board. A first page answered 422 is a tenant this host no longer serves -- a made-up
+    tenant gets the same 422, while a missing site of a real tenant gets a 404 -- so the board is gone, as for a
+    404 (crawl 1, 2026-11-05: 30 boards, among them Comcast, moved from wd5 to wd115, and Dell, moved to Oracle)."""
+    try:
+        first = _page(post, {}, 0)
+    except HTTPError as err:
+        if err.status != 422:
+            raise
+        raise HTTPError(f"{err} -- the tenant is not on this host (moved)", status=404, url=err.url) from err
     if first.get("total") != CAP:
         return _page_all(post, {}, first)
     return _split(post, {}, first, set(), 0)
