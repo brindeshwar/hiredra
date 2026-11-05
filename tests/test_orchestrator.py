@@ -376,6 +376,49 @@ def test_workers_fetch_at_once_and_only_the_main_thread_writes(tmp_path, ctx):
     assert ctx.http.cooldowns.on_trip == store.save_cooldown and len(store.checkpoints) == 7  # + JobSpy
 
 
+def test_a_paced_providers_boards_keep_to_their_lane_and_never_hold_the_pool(tmp_path, ctx):
+    # crawl 2 (2026-11-05): Eightfold's boards, listed together, held all 16 workers waiting on its one pace
+    gate = threading.Event()
+
+    class Paced(_SlowProvider):
+        boards_at_once = 1
+
+        def __init__(self, name, **kw):
+            super().__init__(name, **kw)
+            self.released: list[bool] = []
+
+        def fetch(self, entry, ctx):
+            self.released.append(gate.wait(timeout=5))  # waits until the other provider's boards are done
+            return super().fetch(entry, ctx)
+
+    class Fast(FakeProvider):
+        done = 0
+
+        def fetch(self, entry, ctx):
+            jobs = super().fetch(entry, ctx)
+            Fast.done += 1
+            if Fast.done == 3:
+                gate.set()
+            return jobs
+
+    companies = _companies_yaml(
+        tmp_path, [("A", "paced"), ("B", "paced"), ("C", "paced"), ("X", "fast"), ("Y", "fast"), ("Z", "fast")]
+    )
+    paced = Paced("paced", jobs=[])
+    report = run(
+        _config(pacing=Pacing(workers=2)),
+        companies=load_companies(companies),
+        sink_factory=lambda r: RecordingSink(),
+        run_store=FakeRunStore(),
+        ctx=ctx,
+        registry=(paced, Fast("fast", jobs=[])),
+        jobspy_source=FakeJobSpySource(),
+    )
+    assert paced.released == [True, True, True]  # the pool fetched X, Y and Z while the paced lane waited
+    assert paced.peak == 1 and paced.threads == {"fetch-paced_0"}
+    assert [c.status for c in report.companies] == ["ok"] * 6
+
+
 def test_a_worker_failure_is_that_boards_outcome(tmp_path, ctx):
     companies = _companies_yaml(tmp_path, [("A", "ok"), ("B", "bad")])
     report = run(
