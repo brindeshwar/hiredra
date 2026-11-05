@@ -47,7 +47,9 @@ class FetchContext:
 
     ``incomplete(reason)``: a provider calls it when this fetch did not see the board's whole listing (a search cap
     reached, a walk short of its stated count), so the crawl closes nothing (D5.3). The orchestrator gives each board
-    its own; a provider whose listing is a window by design says so once instead (``full_listing = False``).
+    its own; a provider whose listing is a window by design says so once instead (``full_listing = False``). A
+    provider paced as one site across its boards says how many of its boards to fetch at once
+    (``boards_at_once``); the orchestrator gives them a lane of that width beside its pool.
     """
 
     http: HttpClient

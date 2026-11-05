@@ -237,15 +237,26 @@ def run(
         else:
             # D4.1: a pool of threads fetches; this thread alone writes (sink, checkpoints, cooldowns). The HTTP
             # client's per-host slots (D4.2) pace a host, so there is no pause between companies.
+            # A provider paced as one site (``boards_at_once``: Eightfold, Phenom) gets a lane of its own that
+            # many workers wide, beside the pool: in the pool its boards, listed together, would hold every
+            # worker waiting on the one pace (crawl 2, 2026-11-05: 16 Eightfold boards, nothing else, for an hour).
             ctx.http.cooldowns.on_trip = lambda key, until, reason: trips.put((key, until, reason))
-            pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="fetch")
+            pools = {None: ThreadPoolExecutor(max_workers=workers, thread_name_prefix="fetch")}
+            futures = {}
             try:
-                futures = {pool.submit(fetch, entry): (i, entry) for i, entry in todo}
+                for i, entry in todo:
+                    provider = route(entry, registry)
+                    lane = getattr(provider, "boards_at_once", None) if provider is not None else None
+                    key = provider.name if lane else None
+                    if key not in pools:
+                        pools[key] = ThreadPoolExecutor(max_workers=lane, thread_name_prefix=f"fetch-{key}")
+                    futures[pools[key].submit(fetch, entry)] = (i, entry)
                 for future in as_completed(futures):
                     i, entry = futures[future]
                     record(i, entry, future.result())
             finally:
-                pool.shutdown(wait=True, cancel_futures=True)
+                for pool in pools.values():
+                    pool.shutdown(wait=True, cancel_futures=True)
                 ctx.http.cooldowns.on_trip = run_store.save_cooldown
                 while not trips.empty():
                     run_store.save_cooldown(*trips.get())
