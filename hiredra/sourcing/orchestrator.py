@@ -15,7 +15,7 @@ import random
 import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor
 from concurrent.futures import wait as wait_any
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
 from typing import Any
@@ -23,7 +23,7 @@ from urllib.parse import urlsplit
 
 from hiredra.sourcing.belt import OTHER, Belt, Task, lay_out
 from hiredra.sourcing.config import RunConfig
-from hiredra.sourcing.http import Blocked, FetchError, HTTPError, HttpClient
+from hiredra.sourcing.http import Blocked, FetchError, HTTPError, HttpClient, TransientError
 from hiredra.sourcing.jobspy_source import JobSpySource, SiteOutcome
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext, Provider, company_slug
@@ -104,6 +104,26 @@ def progress_key(entry: CompanyEntry) -> str:
 
 #: A board's estimated time when it has no last crawl to go by (seconds): its place on the belt only.
 _UNKNOWN_SECONDS = 30.0
+#: The wait before a task put back after a passing failure (a time-out, a 5xx) is tried again, times its tries so far.
+_RETRY_AFTER_S = 60.0
+
+
+def can_wait(err: BaseException) -> bool:
+    """The owner's rule (2026-11-07): an error that does not mean "this can't be done" goes back on the belt, to be
+    done later in the run. Can wait: a refusal or a host in cooldown (429, 403, 406, 503, a challenge page, Eightfold's
+    405), a time-out or a server error that outlived its quick retries, a 408. Can't be done: the board is gone (404,
+    and Workday's 422, raised as 404) or needs a login (401), any other 4xx, a reply the reader can't use, a bug."""
+    if isinstance(err, (Blocked, TransientError)):
+        return True
+    return isinstance(err, HTTPError) and err.status == 408
+
+
+class _Interrupted(Exception):
+    """A details chunk stopped by an error that can wait: the jobs it read, and the postings still to read."""
+
+    def __init__(self, jobs: list, rest: list, cause: BaseException) -> None:
+        super().__init__(str(cause))
+        self.jobs, self.rest, self.cause = jobs, rest, cause
 
 
 @dataclass(eq=False)
@@ -475,12 +495,37 @@ def _run_belt(
         if not new:
             finish(b)
 
+    def put_back(task: Task, err: BaseException) -> bool:
+        """Back on the belt, later, when the error can wait and the task has tries left: not before the host's
+        cooldown ends (the server's Retry-After, or our 15 minutes), else a growing pause."""
+        if not can_wait(err) or task.tries + 1 >= rules.tries:
+            return False
+        task.tries += 1
+        until = getattr(err, "until", 0.0) or 0.0
+        delay = max(until - time.time(), 0.0) if isinstance(err, Blocked) else _RETRY_AFTER_S * task.tries
+        task.not_before = clock() + max(delay, 1.0)
+        log.info("orchestrator: %s %s put back (try %d), %s; again in %.0fs", task.kind,
+                 task.board.entry.name if task.board else "jobspy", task.tries + 1, err, delay)  # fmt: skip
+        _put(belt, task, clock())
+        return True
+
     def handle(task: Task, status: str, value: Any, seconds: float) -> Any:
         b = task.board
         if task.kind == "jobspy":
             return value
         b.seconds += seconds
         b.open -= 1
+        if status == "err" and isinstance(value, _Interrupted):  # a details chunk: keep what it read
+            b.jobs.extend(value.jobs)
+            task.payload = value.rest
+            if not put_back(task, value.cause):  # out of tries: the rest are still new, read next run (D3.4)
+                log.info("%s %s: %d details left for the next run (%s)", b.provider.name, b.entry.name,
+                         len(value.rest), value.cause)  # fmt: skip
+            if b.open == 0:
+                finish(b)
+            return None
+        if status == "err" and b.failed is None and put_back(task, value):
+            return None
         if task.kind == "board":
             if status == "err":
                 result = (b.provider, None, _outcome_of(value, b.entry, b.provider), b.notes, b.seconds)
@@ -513,8 +558,24 @@ def _run_belt(
         return None
 
     jobspy_result: Any = None
+    watchdog = rules.watchdog_minutes * 60.0
+    last_done = warned = clock()
     pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="fetch")
     running: dict[Any, Task] = {}
+
+    def settle(done: Iterable[Any]) -> None:
+        nonlocal jobspy_result, last_done
+        for future in done:
+            task = running.pop(future)
+            belt.done(task)
+            if future.cancelled():  # never started (a stop): its board is not saved, and is crawled again
+                continue
+            status, value, seconds = future.result()
+            got = handle(task, status, value, seconds)
+            if task.kind == "jobspy":
+                jobspy_result = got if status == "ok" else value
+            last_done = clock()
+
     try:
         while True:
             now = clock()
@@ -536,35 +597,49 @@ def _run_belt(
                 if wait_s is None:  # tasks no rule will ever allow: a config error, not a reason to spin
                     log.error("orchestrator: %d tasks left that no rule allows -- check belt.platforms", len(belt))
                     break
+                log.info("orchestrator: only put-back tasks left; the next in %.0fs", wait_s)
                 sleep(wait_s)
                 continue
-            done, _ = wait_any(running, timeout=belt.next_ready_in(now), return_when=FIRST_COMPLETED)
-            for future in done:
-                task = running.pop(future)
-                belt.done(task)
-                status, value, seconds = future.result()
-                got = handle(task, status, value, seconds)
-                if task.kind == "jobspy":
-                    jobspy_result = got if status == "ok" else value
+            ready = belt.next_ready_in(now)
+            check = max(max(last_done, warned) + watchdog - now, 0.05)  # the watchdog's next look
+            timeout = min(check, ready) if ready is not None else check
+            done, _ = wait_any(running, timeout=timeout, return_when=FIRST_COMPLETED)
+            settle(done)
+            now = clock()
+            if not done and now - last_done >= watchdog and now - warned >= watchdog:
+                warned = now
+                stuck = ", ".join(f"{t.kind} {t.board.entry.name if t.board else 'jobspy'}" for t in running.values())
+                log.warning("orchestrator: watchdog -- no task has finished for %.0f min; in flight: %s",
+                            (now - last_done) / 60, stuck)  # fmt: skip
+    except KeyboardInterrupt:
+        # A clean stop: no new task; the tasks in flight finish and their boards are saved; the run stays unfinished,
+        # so `--resume` goes on from here (a second Ctrl-C stops at once).
+        log.warning("orchestrator: stopping -- waiting for the %d tasks in flight; Ctrl-C again to stop now",
+                    len(running))  # fmt: skip
+        pool.shutdown(wait=False, cancel_futures=True)
+        settle(wait_any(running)[0])
+        raise
     finally:
         pool.shutdown(wait=True, cancel_futures=True)
     return jobspy_result
 
 
-def _put(belt: Belt, task: Task) -> None:
+def _put(belt: Belt, task: Task, now: float = 0.0) -> None:
     if task.board is not None:
         task.board.open += 1
-    belt.put(task)
+    belt.put(task, now)
 
 
 def _details(b: _Board, items: list) -> list[Job]:
     """On a worker: a chunk of a board's new postings, each with its detail. A detail that fails is skipped: still
     new, it is read next run (D3.4)."""
     jobs = []
-    for item in items:
+    for n, item in enumerate(items):
         try:
             job = b.provider.job(b.entry, b.ctx, b.info, item, True)
         except FetchError as err:
+            if can_wait(err):  # the host refuses for now: the rest of the chunk goes back on the belt
+                raise _Interrupted(jobs, items[n:], err) from err
             log.info("%s %s: a detail failed: %s", b.provider.name, b.entry.name, err)
             continue
         if job is not None:
