@@ -86,7 +86,6 @@ def listing_page(ctx: FetchContext, host: str, start: int, pace: Pace) -> tuple[
 
 class PhenomProvider:
     name = "phenom"
-    boards_at_once = 2  # one pace for all of Phenom: two boards keep it busy; more would only wait on it
 
     def __init__(self, interval: float = 1.0) -> None:
         self.pace = Pace(interval)  # outside the belt: one for every Phenom site (freehire's measured ~1 a second)

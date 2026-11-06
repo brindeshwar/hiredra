@@ -22,6 +22,7 @@ from typing import Any, TypeVar
 
 import yaml
 
+from hiredra.sourcing.belt import BeltConfig, Platform
 from hiredra.sourcing.http import HttpConfig
 from hiredra.sourcing.jobspy_source import JobSpyConfig, SiteQuery
 from hiredra.sourcing.provider import CompanyEntry
@@ -49,6 +50,7 @@ class RunConfig:
     http: HttpConfig
     pacing: Pacing
     path2_enabled: bool = False  # the Path-2 discovery slot
+    belt: BeltConfig = BeltConfig()  # the conveyor belt's rules (no platform held to a rate when absent)
 
 
 # ── strict dataclass construction ──────────────────────────────────────────
@@ -188,13 +190,15 @@ def board_entry(row: Mapping[str, Any]) -> CompanyEntry:
     extra: dict[str, Any] = {"slug": row["board"], "provenance": row["provenance"], "board_id": row["id"]}
     if row["list_tag"]:
         extra["tag"] = row["list_tag"]
+    if "last_ms" in row.keys() and row["last_ms"] is not None:
+        extra["last_seconds"] = row["last_ms"] / 1000.0  # its last crawl's time: its place on the belt
     return CompanyEntry(
         name=row["name"] or row["board"], careers_url=row["careers_url"], provider=row["provider"], extra=extra
     )
 
 
 # ── scoring.yml / scoring.wide.yml ─────────────────────────────────────────────
-_RUN_KEYS = {"kind", "boards", "jobspy", "http", "pacing", "path2"}
+_RUN_KEYS = {"kind", "boards", "jobspy", "http", "pacing", "path2", "belt"}
 
 
 def _boards(raw: Any, path: Path) -> tuple[str, ...]:
@@ -205,6 +209,26 @@ def _boards(raw: Any, path: Path) -> tuple[str, ...]:
     if isinstance(raw, list) and raw and all(isinstance(p, str) and p and p != "all" for p in raw):
         return tuple(raw)
     raise ConfigError(f"{path}: 'boards' must be 'all' or a non-empty list of provenances, got {raw!r}")
+
+
+def _belt(raw: Any) -> BeltConfig:
+    """``belt:`` -- ``fill``, ``tries``, ``watchdog_minutes`` and ``platforms: {name: {limit, at_once}}``, strictly."""
+    if raw is None:
+        return BeltConfig()
+    if not isinstance(raw, dict):
+        raise ConfigError("belt: expected a mapping")
+    platforms = raw.get("platforms") or {}
+    if not isinstance(platforms, dict):
+        raise ConfigError("belt.platforms: expected a mapping of platform name to {limit, at_once}")
+    built = {str(name): _build(Platform, spec, f"belt.platforms.{name}") for name, spec in platforms.items()}
+    for name, plat in built.items():
+        if not (isinstance(plat.limit, (int, float)) and plat.limit > 0 and isinstance(plat.at_once, int)
+                and plat.at_once > 0):  # fmt: skip
+            raise ConfigError(f"belt.platforms.{name}: limit must be > 0 and at_once a whole number > 0")
+    belt = _build(BeltConfig, {k: v for k, v in raw.items() if k != "platforms"}, "belt")
+    if not 0 < belt.fill <= 1:
+        raise ConfigError(f"belt.fill: must be above 0 and at most 1, got {belt.fill!r}")
+    return BeltConfig(fill=belt.fill, platforms=built, tries=belt.tries, watchdog_minutes=belt.watchdog_minutes)
 
 
 def load_run_config(path: str | Path) -> RunConfig:
@@ -232,4 +256,5 @@ def load_run_config(path: str | Path) -> RunConfig:
         http=_build(HttpConfig, doc.get("http"), "http"),
         pacing=_build(Pacing, doc.get("pacing"), "pacing"),
         path2_enabled=bool(path2.get("enabled", False)),
+        belt=_belt(doc.get("belt")),
     )

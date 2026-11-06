@@ -394,13 +394,23 @@ class HttpClient:
         domain (``eightfold.ai``) is ONE set of slots for every host under it: a platform that rate-limits an IP
         across all its tenants (measured 2026-11-03: Eightfold answered 429/503 to 14 of 30 tenants read 8 at once)
         is paced as one site."""
-        key = next((d for d in self.config.host_limits if host == d or host.endswith("." + d)), host)
+        key = self.slot_key(host)
         with self._slots_lock:
             slot = self._slots.get(key)
             if slot is None:
-                slot = threading.BoundedSemaphore(max(1, self.config.host_limits.get(key, self.config.per_host)))
+                slot = threading.BoundedSemaphore(self.slot_cap(key))
                 self._slots[key] = slot
             return slot
+
+    def slot_key(self, host: str) -> str:
+        """The key of the slots a request to ``host`` takes: a ``host_limits`` parent domain it falls under, else the
+        host itself. The belt reads it so it never hands a worker a task whose host is full."""
+        host = (host or "").lower()
+        return next((d for d in self.config.host_limits if host == d or host.endswith("." + d)), host)
+
+    def slot_cap(self, key: str) -> int:
+        """How many requests the slots under ``key`` (from ``slot_key``) allow at once."""
+        return max(1, self.config.host_limits.get(key, self.config.per_host))
 
     @staticmethod
     def _as_json(resp: httpx.Response, url: str) -> Any:

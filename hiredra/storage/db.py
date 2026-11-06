@@ -224,6 +224,17 @@ def job_stored(conn: psycopg.Connection, job_id: str) -> bool:
     return conn.execute("SELECT 1 FROM jobs WHERE job_key = %s", (job_id,)).fetchone() is not None
 
 
+def jobs_stored(conn: psycopg.Connection, job_ids: Sequence[str]) -> set[str]:
+    """Which of ``job_ids`` are in the store, asked once for a whole listing (the belt, once a board is listed)."""
+    found: set[str] = set()
+    ids = list(job_ids)
+    for at in range(0, len(ids), 10_000):
+        found.update(
+            r[0] for r in conn.execute("SELECT job_key FROM jobs WHERE job_key = ANY(%s)", (ids[at : at + 10_000],))
+        )
+    return found
+
+
 def mark_duplicate(conn: psycopg.Connection, job_id: str, *, of: str) -> bool:
     """D6.4: ``job_id`` (an aggregator's copy, stored first) is a copy of ``of`` (the company's own posting): hidden
     behind it, a note event says so. A job already pointing at a canonical copy is left alone. True if marked."""
@@ -386,12 +397,15 @@ def load_boards(conn: psycopg.Connection, provenances: Sequence[str], *, due_onl
     """The boards a run crawls (decision D2.1): status pending or active, of the given provenances (``("all",)``
     = every provenance), each with its company's display name. Ordered by provider, then board, so a run and its
     ``--resume`` walk the same list. ``due_only`` (``crawl``, D5.1): only boards whose ``next_due_at`` has come and
-    that are not resting after repeated failures (D5.2)."""
+    that are not resting after repeated failures (D5.2). ``last_ms``: the board's last crawl time, the belt's guide to
+    its place (longest first)."""
     if not provenances:
         return []
     sql = (
-        "SELECT b.id, b.provider, b.board, b.careers_url, b.provenance, b.list_tag, c.name "
+        "SELECT b.id, b.provider, b.board, b.careers_url, b.provenance, b.list_tag, c.name, lc.duration_ms AS last_ms "
         "FROM boards b LEFT JOIN companies c ON c.id = b.company_id "
+        "LEFT JOIN (SELECT DISTINCT ON (board_id) board_id, duration_ms FROM board_crawls"
+        " ORDER BY board_id, started_at DESC) lc ON lc.board_id = b.id "
         "WHERE b.status IN ('pending', 'active')"
     )
     if due_only:

@@ -218,3 +218,18 @@ def test_a_crawl_is_refused_while_another_holds_the_lock(pg_url, capsys, tmp_pat
     with RunLock("sourcing", what="crawl", kind="sourcing", url=pg_url):
         assert main(["crawl", "--config", str(config), "--db", pg_url]) == 1
     assert "another sourcing run is in progress" in capsys.readouterr().out
+
+
+# ── the belt's questions to the store ───────────────────────────────────────
+def test_a_board_carries_its_last_crawl_time_to_the_belt_and_a_listing_is_checked_against_the_store_at_once(conn):
+    from hiredra.sourcing.config import board_entry
+
+    timed, fresh = _board(conn, name="timed"), _board(conn, name="fresh")
+    db.record_board_run(conn, "R1", BoardResult(board_id=timed, status="ok", jobs=1, complete=True, seconds=42.0))
+    entries = {e.extra["slug"]: e for e in map(board_entry, db.load_boards(conn, ("all",)))}
+    assert entries["timed"].extra["last_seconds"] == 42.0  # its place on the belt: longest first
+    assert "last_seconds" not in entries["fresh"].extra  # never crawled: the belt's default estimate
+    _job(conn, "lever:a", timed)
+    _job(conn, "lever:b", timed)
+    assert db.jobs_stored(conn, ["lever:a", "lever:b", "lever:new"]) == {"lever:a", "lever:b"}
+    assert db.jobs_stored(conn, []) == set()

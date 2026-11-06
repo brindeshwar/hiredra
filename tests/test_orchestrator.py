@@ -11,12 +11,14 @@ import time
 
 import pytest
 
+from hiredra.sourcing.belt import BeltConfig, Platform
 from hiredra.sourcing.config import Pacing, RunConfig, load_companies
 from hiredra.sourcing.http import Blocked, FetchError, HTTPError, HttpClient, HttpConfig
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.jobspy_source import JobSpyConfig, JobSpyResult, SiteOutcome, SiteQuery
 from hiredra.sourcing.orchestrator import run
-from hiredra.sourcing.provider import FetchContext
+from hiredra.sourcing.provider import CompanyEntry, FetchContext
+from hiredra.sourcing.providers._common import Listed
 from hiredra.sourcing.runstore import FakeRunStore, RunHandle
 from hiredra.sourcing.sink import SinkStats
 
@@ -376,16 +378,18 @@ def test_workers_fetch_at_once_and_only_the_main_thread_writes(tmp_path, ctx):
     assert ctx.http.cooldowns.on_trip == store.save_cooldown and len(store.checkpoints) == 7  # + JobSpy
 
 
-def test_a_paced_providers_boards_keep_to_their_lane_and_never_hold_the_pool(tmp_path, ctx):
-    # crawl 2 (2026-11-05): Eightfold's boards, listed together, held all 16 workers waiting on its one pace
+def test_a_platform_keeps_to_its_share_and_never_holds_the_belt(tmp_path, ctx):
+    # crawl 2 (2026-11-05): Eightfold's boards, listed together, held all 16 workers waiting on its one pace. On the
+    # belt a platform has its share (at_once); the other boards run beside it.
     gate = threading.Event()
 
     class Paced(_SlowProvider):
-        boards_at_once = 1
-
         def __init__(self, name, **kw):
             super().__init__(name, **kw)
             self.released: list[bool] = []
+
+        def board_url(self, entry):
+            return f"https://{entry.name.lower()}.paced.example/"
 
         def fetch(self, entry, ctx):
             self.released.append(gate.wait(timeout=5))  # waits until the other provider's boards are done
@@ -393,6 +397,9 @@ def test_a_paced_providers_boards_keep_to_their_lane_and_never_hold_the_pool(tmp
 
     class Fast(FakeProvider):
         done = 0
+
+        def board_url(self, entry):
+            return f"https://{entry.name.lower()}.fast.example/"
 
         def fetch(self, entry, ctx):
             jobs = super().fetch(entry, ctx)
@@ -406,7 +413,7 @@ def test_a_paced_providers_boards_keep_to_their_lane_and_never_hold_the_pool(tmp
     )
     paced = Paced("paced", jobs=[])
     report = run(
-        _config(pacing=Pacing(workers=2)),
+        _config(pacing=Pacing(workers=2), belt=BeltConfig(platforms={"paced": Platform(limit=1000.0, at_once=1)})),
         companies=load_companies(companies),
         sink_factory=lambda r: RecordingSink(),
         run_store=FakeRunStore(),
@@ -414,9 +421,125 @@ def test_a_paced_providers_boards_keep_to_their_lane_and_never_hold_the_pool(tmp
         registry=(paced, Fast("fast", jobs=[])),
         jobspy_source=FakeJobSpySource(),
     )
-    assert paced.released == [True, True, True]  # the pool fetched X, Y and Z while the paced lane waited
-    assert paced.peak == 1 and paced.threads == {"fetch-paced_0"}
+    assert paced.released == [True, True, True]  # X, Y and Z were fetched while the paced board waited
+    assert paced.peak == 1  # its share: one at a time
     assert [c.status for c in report.companies] == ["ok"] * 6
+
+
+class _Chunked:
+    """A chunked provider: a board of ``n`` postings, ``page`` to a chunk, each detail one call."""
+
+    name = "chunky"
+
+    def __init__(self, n=7, page=3, fail_chunk=None):
+        self.n, self.page, self.fail_chunk = n, page, fail_chunk
+        self.chunks: list = []
+        self.details: list[str] = []
+        self.threads: set[str] = set()
+        self.lock = threading.Lock()
+
+    def detect(self, entry):
+        return entry.provider == self.name
+
+    def board_url(self, entry):
+        return f"https://{entry.name.lower()}.chunky.example/"
+
+    def fetch(self, entry, ctx):  # pragma: no cover -- the belt reads it by chunks
+        raise AssertionError("a chunked board is read by chunks on the belt")
+
+    def list_chunk(self, entry, ctx, chunk):
+        with self.lock:
+            self.chunks.append(chunk)
+            self.threads.add(threading.current_thread().name)
+        if self.fail_chunk is not None and chunk == self.fail_chunk:
+            raise Blocked("429", cooldown_key="k", until=0.0)
+        start = chunk or 0
+        items = {f"chunky:{entry.name}:{i}": {"i": i} for i in range(start, min(start + self.page, self.n))}
+        more = tuple(range(self.page, self.n, self.page)) if chunk is None else ()
+        return Listed(items, more=more, served=len(items), info={"total": self.n} if chunk is None else None)
+
+    def listed(self, entry, ctx, info, items):
+        if info["served"] < info["total"]:
+            ctx.incomplete("short")
+        return ()
+
+    def job(self, entry, ctx, info, item, detail):
+        if detail:
+            with self.lock:
+                self.details.append(f"{entry.name}:{item['i']}")
+        return _job(job_id=f"chunky:{entry.name}:{item['i']}", description="text" if detail else None)
+
+
+def test_a_chunked_board_is_read_chunk_by_chunk_and_only_its_new_postings_cost_a_detail(tmp_path, ctx):
+    provider = _Chunked(n=7, page=3)
+    asked: list[list[str]] = []
+    store = FakeRunStore()
+    sink = RecordingSink()
+
+    def seen_many(keys):
+        asked.append(sorted(keys))
+        return {k for k in keys if k.endswith((":0", ":1"))}  # two already stored
+
+    report = run(
+        _config(pacing=Pacing(workers=3)),
+        companies=[CompanyEntry(name="A", provider="chunky", extra={"board_id": 1})],
+        sink_factory=lambda r: sink,
+        run_store=store,
+        ctx=ctx,
+        registry=(provider,),
+        jobspy_source=FakeJobSpySource(),
+        seen_many=seen_many,
+    )
+    assert sorted(provider.chunks, key=lambda c: c or 0) == [None, 3, 6]  # the first chunk, then the two it planned
+    assert len(asked) == 1 and len(asked[0]) == 7  # stored? asked once, for the whole listing
+    assert sorted(provider.details) == [f"A:{i}" for i in range(2, 7)]  # a detail for each new posting only
+    assert all(t.startswith("fetch") for t in provider.threads)
+    [result] = store.board_results
+    assert (result.status, result.jobs, result.complete) == ("ok", 7, True)
+    assert report.companies[0].status == "ok" and len(sink.batches[0]) == 7
+
+
+def test_a_failed_chunk_fails_its_board_and_its_other_chunks_are_dropped(tmp_path, ctx):
+    provider = _Chunked(n=30, page=3, fail_chunk=3)
+    store = FakeRunStore()
+    report = run(
+        _config(pacing=Pacing(workers=2)),
+        companies=[CompanyEntry(name="A", provider="chunky", extra={"board_id": 1})],
+        sink_factory=lambda r: RecordingSink(),
+        run_store=store,
+        ctx=ctx,
+        registry=(provider,),
+        jobspy_source=FakeJobSpySource(),
+    )
+    assert report.companies[0].status == "blocked" and store.board_results[0].status == "blocked"
+    assert len(provider.chunks) < 10 and provider.details == []  # nothing read past the failure's notice
+
+
+def test_jobspy_runs_at_minute_zero_beside_the_boards(tmp_path, ctx):
+    order: list[str] = []
+
+    class Spy(FakeJobSpySource):
+        def fetch(self, ctx):
+            order.append("jobspy")
+            return super().fetch(ctx)
+
+    class P(FakeProvider):
+        def fetch(self, entry, ctx):
+            order.append(entry.name)
+            return super().fetch(entry, ctx)
+
+    companies = _companies_yaml(tmp_path, [(n, "p") for n in "ABC"])
+    report = run(
+        _config(pacing=Pacing(workers=1 + 1)),
+        companies=load_companies(companies),
+        sink_factory=lambda r: RecordingSink(),
+        run_store=FakeRunStore(),
+        ctx=ctx,
+        registry=(P("p"),),
+        jobspy_source=Spy(),
+    )
+    assert order[0] == "jobspy" or "jobspy" in order[:2]  # taken first, beside the first board
+    assert report.status == "ok" and len(report.companies) == 3
 
 
 def test_a_worker_failure_is_that_boards_outcome(tmp_path, ctx):
