@@ -101,3 +101,11 @@ def test_a_list_that_stops_short_of_its_total_is_reported_incomplete():
     entry = CompanyEntry(name="Acme", provider="oracle", extra={"slug": BOARD})
     jobs = oracle.OracleProvider().fetch(entry, FetchContext(http=http, incomplete=notes.append))
     assert len(jobs) == 2 and notes == ["2 of 5 requisitions served"]
+
+
+def test_a_big_list_is_planned_as_chunks_of_fifty_pages_after_its_first():
+    reqs = [{"Id": str(i), "Title": "X"} for i in range(100)]
+    got = oracle.read_chunk(lambda url: {"items": [{"requisitionList": reqs, "TotalJobsCount": 12000}]},
+                            oracle.parse_board(BOARD), None)  # fmt: skip
+    assert got.info == {"total": 12000} and got.served == 100
+    assert [(c["offset"], c["end"]) for c in got.more] == [(100, 5100), (5100, 10100), (10100, 12000)]

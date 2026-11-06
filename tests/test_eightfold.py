@@ -178,3 +178,27 @@ def test_every_request_waits_on_the_one_pace():
     provider.fetch(CompanyEntry(name="Acme", provider="eightfold", extra={"slug": f"{HOST}/acme.com"}),
                    FetchContext(http=http, seen=lambda j: False))  # fmt: skip
     assert len(waited) == len(http.asked) == 2
+
+
+def test_a_date_walk_refused_on_its_first_page_keeps_the_relevance_walk_and_reports_it_short():
+    rows = [{"id": i, "name": f"Job {i}"} for i in range(1, 11)]
+    date_url = PCSX.replace("relevance", "timestamp")
+    routes = {PCSX.format(0): {"data": {"positions": rows, "count": 600}}, PCSX.format(10): {"data": {"positions": [],
+              "count": 600}}, PCSX.format(510): {"data": {"positions": [], "count": 600}},
+              date_url.format(0): _blocked()}  # fmt: skip  # each later chunk of the walk asks once, finds it empty
+    notes: list[str] = []
+    entry = CompanyEntry(name="Acme", provider="eightfold", extra={"slug": f"{HOST}/acme.com"})
+    http = _Http(routes)
+    jobs = eightfold.EightfoldProvider(interval=0).fetch(entry, FetchContext(http=http, seen=lambda j: True,
+                                                                   incomplete=notes.append))  # fmt: skip
+    assert len(jobs) == 10 and notes == ["10 of 600 positions served"]
+    assert [u for u, _ in http.asked if "timestamp" in u] == [date_url.format(0)]  # nothing past the refusal
+
+
+def test_a_big_walk_is_planned_as_chunks_of_fifty_pages():
+    provider = eightfold.EightfoldProvider(interval=0)
+    entry = CompanyEntry(name="Acme", provider="eightfold", extra={"slug": f"{HOST}/acme.com"})
+    http = _Http({PCSX.format(0): {"data": {"positions": [{"id": i, "name": "X"} for i in range(10)], "count": 21754}}})
+    first = provider.list_chunk(entry, FetchContext(http=http), None)
+    assert [(c["start"], c["end"]) for c in first.more][:2] == [(10, 510), (510, 1010)]
+    assert first.more[-1]["end"] == 21754 and len(first.more) == 44  # Starbucks' size: read to its end

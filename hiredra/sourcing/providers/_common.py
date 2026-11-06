@@ -10,10 +10,11 @@ import logging
 import re
 import threading
 import time
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass, field
 from datetime import date, datetime, timezone
 from email.utils import parsedate_to_datetime
-from typing import Any, TypeVar
+from typing import Any, Protocol, TypeVar
 from urllib.parse import quote, urlsplit
 from xml.etree import ElementTree
 
@@ -142,6 +143,84 @@ def salary_range(low: Any, high: Any, currency: Any, period: Any) -> dict[str, A
 #: Detail requests per board per run for a hydrating provider (D3.4): a stored posting needs none, and a huge new
 #: board drains over runs instead of eating one (Workday's ABB, 2,035 postings, took 29 min one at a time).
 DETAIL_BUDGET = 200
+
+#: Requests in one chunk, the conveyor belt's unit of work (2026-11-07): a big board is read as many chunks, each of
+#: at most this many listing pages or job details, so no board holds a worker for long and the chunks of one board
+#: can run side by side.
+CHUNK = 50
+
+
+@dataclass(frozen=True, slots=True)
+class Listed:
+    """What one listing chunk read: its postings by job id, in listing order; the board's chunks it found still to read
+    (``more``); how many rows it was served, repeats too (``served``); and, from a board's first chunk only, the facts
+    the board's later steps need (``info``: a stated total, a tenant domain)."""
+
+    items: dict[str, Any] = field(default_factory=dict)
+    more: tuple = ()
+    served: int = 0
+    info: Mapping[str, Any] | None = None
+
+
+def page_ranges(start: int, end: int, page: int, size: int = CHUNK) -> list[tuple[int, int]]:
+    """``[start, end)`` in offsets, cut into chunks of ``size`` pages of ``page`` postings each."""
+    span = page * size
+    return [(at, min(at + span, end)) for at in range(start, end, span)]
+
+
+class ChunkedProvider(Protocol):
+    """A provider whose board is read in chunks (Workday, Oracle, Eightfold, Phenom). The belt runs the chunks on its
+    workers; ``read_board`` runs them one after another, which is what ``fetch`` does."""
+
+    name: str
+
+    def list_chunk(self, entry: Any, ctx: Any, chunk: Any) -> Listed:
+        """One chunk of the listing, on a worker (network); ``None`` is the board's first chunk."""
+        ...
+
+    def listed(self, entry: Any, ctx: Any, info: dict, items: Mapping[str, Any]) -> Sequence[Any]:
+        """Once every chunk is read (no network): more chunks to read (a second pass), or none. Says here when the
+        listing came up short (``ctx.incomplete``), or raises when it can't stand as the board. ``info`` is the first
+        chunk's, with ``served`` set; it may note what was done."""
+        ...
+
+    def job(self, entry: Any, ctx: Any, info: Mapping[str, Any], item: Any, detail: bool) -> Job | None:
+        """A posting as a Job: from the listing alone, or with its detail fetched (one request, on a worker)."""
+        ...
+
+
+def read_listing(provider: ChunkedProvider, entry: Any, ctx: Any) -> tuple[dict, dict[str, Any]]:
+    """A board's whole listing, chunk after chunk, each chunk's further chunks read before the next: ``(info, items)``.
+    The first sighting of a job id keeps its place."""
+    first = provider.list_chunk(entry, ctx, None)
+    info, items, served = dict(first.info or {}), dict(first.items), first.served
+    todo = list(first.more)
+    while True:
+        while todo:
+            got = provider.list_chunk(entry, ctx, todo.pop(0))
+            for key, item in got.items.items():
+                items.setdefault(key, item)
+            served += got.served
+            todo[:0] = got.more
+        info["served"] = served
+        todo = list(provider.listed(entry, ctx, info, items))
+        if not todo:
+            return info, items
+
+
+def read_board(provider: ChunkedProvider, entry: Any, ctx: Any, *, budget: int, label: str) -> list[Job]:
+    """A chunked provider's board start to end on one thread: its listing, then a detail for each new posting, up to
+    ``budget`` (``hydrate``)."""
+    info, items = read_listing(provider, entry, ctx)
+    return hydrate(
+        items.items(),
+        key=lambda kv: kv[0],
+        seen=ctx.seen,
+        listing=lambda kv: provider.job(entry, ctx, info, kv[1], False),
+        detail=lambda kv: provider.job(entry, ctx, info, kv[1], True),
+        budget=budget,
+        label=label,
+    )
 
 
 class Pace:

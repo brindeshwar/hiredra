@@ -13,7 +13,8 @@ BCG's own system, SuccessFactors EU) is crawled here.
 
 All Phenom sites share Phenom's infrastructure, and freehire measured 403s on 45 of ~95 of them under its crawl's
 combined volume, while the same request alone succeeded minutes later. So, as freehire does, every request of this
-provider waits its turn on ONE pace, about one a second, whatever the site.
+provider waits its turn on ONE pace, whatever the site: the belt's (60% of the measured ~1 a second), else about
+one a second.
 
 Two changes from freehire: the place is every location the job lists, each with its country (``multi_location``:
 "Gurgaon, India, 122002"), where freehire keeps the first ``cityState`` ("Gurgaon, Haryāna", no country); and the
@@ -23,6 +24,7 @@ employer's ATS link is kept as the apply link.
 from __future__ import annotations
 
 import re
+from types import SimpleNamespace
 
 from hiredra.sourcing._html import html_to_text
 from hiredra.sourcing.http import FetchError, HttpConfig
@@ -30,12 +32,14 @@ from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
 from hiredra.sourcing.providers._common import (
     DETAIL_BUDGET,
+    Listed,
     Pace,
     Robots,
     clean,
-    hydrate,
     infer_remote,
     iso_date,
+    page_ranges,
+    read_board,
     work_mode,
 )
 from hiredra.sourcing.providers.remoteboards import job_type
@@ -85,7 +89,11 @@ class PhenomProvider:
     boards_at_once = 2  # one pace for all of Phenom: two boards keep it busy; more would only wait on it
 
     def __init__(self, interval: float = 1.0) -> None:
-        self.pace = Pace(interval)  # one for every Phenom site in a run (freehire's measured ~1 request a second)
+        self.pace = Pace(interval)  # outside the belt: one for every Phenom site (freehire's measured ~1 a second)
+
+    def _pace(self, ctx: FetchContext):
+        """The belt's pace for Phenom when it sets one, else this provider's own."""
+        return SimpleNamespace(wait=ctx.pace) if ctx.pace is not None else self.pace
 
     def board_url(self, entry: CompanyEntry) -> str | None:
         if entry.provider and entry.provider != self.name:
@@ -99,48 +107,61 @@ class PhenomProvider:
         return False  # a vanity host names no platform: a board is imported by ``boards discover-phenom``
 
     def fetch(self, entry: CompanyEntry, ctx: FetchContext) -> list[Job]:
+        return read_board(self, entry, ctx, budget=DETAIL_BUDGET, label=f"phenom {site(entry)}")
+
+    def list_chunk(self, entry: CompanyEntry, ctx: FetchContext, chunk: dict | None) -> Listed:
+        """``None``: robots.txt, then the first page, which states the count and plans the rest as page ranges
+        (``{"start", "end"}``); a site that states none is read until a short page, up to the ceiling."""
         host = site(entry)
+        if chunk is None:
 
-        def robots_txt(url: str) -> str | None:
-            try:
-                return ctx.http.get_text(url, timeout=_TIMEOUT_S)
-            except FetchError:
-                return None
+            def robots_txt(url: str) -> str | None:
+                try:
+                    return ctx.http.get_text(url, timeout=_TIMEOUT_S)
+                except FetchError:
+                    return None
 
-        config = getattr(ctx.http, "config", None)
-        if not Robots(robots_txt, getattr(config, "user_agent", HttpConfig().user_agent)).allowed(
-            f"https://{host}/widgets"
-        ):
-            raise FetchError(f"phenom: {host} robots.txt disallows /widgets", url=f"https://{host}/widgets")
-        rows: dict[str, dict] = {}
-        total = None
-        for page in range(_MAX_PAGES):
-            jobs, stated = listing_page(ctx, host, page * PAGE, self.pace)
-            total = stated if total is None else total
-            for j in jobs:
-                rows.setdefault(clean(j["jobSeqNo"]), j)
-            if len(jobs) < PAGE or (total is not None and (page + 1) * PAGE >= total):
+            config = getattr(ctx.http, "config", None)
+            if not Robots(robots_txt, getattr(config, "user_agent", HttpConfig().user_agent)).allowed(
+                f"https://{host}/widgets"
+            ):
+                raise FetchError(f"phenom: {host} robots.txt disallows /widgets", url=f"https://{host}/widgets")
+            jobs, total = listing_page(ctx, host, 0, self._pace(ctx))
+            end = min(total, PAGE * _MAX_PAGES) if total is not None else PAGE * _MAX_PAGES
+            more = tuple({"start": a, "end": b} for a, b in page_ranges(PAGE, end, PAGE)) if len(jobs) == PAGE else ()
+            return Listed(_rows(host, jobs), more=more, served=len(jobs), info={"total": total})
+        rows: list[dict] = []
+        for start in range(chunk["start"], chunk["end"], PAGE):
+            jobs, _ = listing_page(ctx, host, start, self._pace(ctx))
+            rows += jobs
+            if len(jobs) < PAGE:
                 break
-        if not rows and total:
+        return Listed(_rows(host, rows), served=len(rows))
+
+    def listed(self, entry: CompanyEntry, ctx: FetchContext, info: dict, items: dict) -> tuple:
+        host, total = site(entry), info.get("total")
+        if not items and total:
             raise FetchError(f"phenom: {host} states {total} jobs and listed none", url=f"https://{host}/widgets")
-        if total is not None and len(rows) < total:
-            ctx.incomplete(f"phenom {host}: listed {len(rows)} of the {total} jobs it states")
+        if total is not None and len(items) < total:
+            ctx.incomplete(f"phenom {host}: listed {len(items)} of the {total} jobs it states")
+        return ()
 
-        def detail(seq: str) -> Job | None:
-            found = post(ctx, host, {"deviceType": "desktop", "ddoKey": "jobDetail", "pageName": "job-details",
-                                     "jobSeqNo": seq}, self.pace).get("jobDetail")  # fmt: skip
-            job = (((found or {}).get("data") or {}).get("job")) if isinstance(found, dict) else None
-            return to_job(entry.name, host, rows[seq], job if isinstance(job, dict) else {})
+    def job(self, entry: CompanyEntry, ctx: FetchContext, info: dict, item: dict, detail: bool) -> Job | None:
+        host = site(entry)
+        if not detail:
+            return to_job(entry.name, host, item, None)
+        found = post(ctx, host, {"deviceType": "desktop", "ddoKey": "jobDetail", "pageName": "job-details",
+                                 "jobSeqNo": clean(item["jobSeqNo"])}, self._pace(ctx)).get("jobDetail")  # fmt: skip
+        data = ((found or {}).get("data") or {}).get("job") if isinstance(found, dict) else None
+        return to_job(entry.name, host, item, data if isinstance(data, dict) else {})
 
-        return hydrate(
-            rows,
-            key=lambda seq: f"phenom:{host}:{seq}",
-            seen=ctx.seen,
-            listing=lambda seq: to_job(entry.name, host, rows[seq], None),
-            detail=detail,
-            budget=DETAIL_BUDGET,
-            label=f"phenom {host}",
-        )
+
+def _rows(host: str, jobs: list[dict]) -> dict[str, dict]:
+    """Listing rows by job id, the first sighting kept."""
+    rows: dict[str, dict] = {}
+    for j in jobs:
+        rows.setdefault(f"phenom:{host}:{clean(j['jobSeqNo'])}", j)
+    return rows
 
 
 def job_url(host: str, row: dict) -> str:
