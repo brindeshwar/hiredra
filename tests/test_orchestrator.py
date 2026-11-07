@@ -915,3 +915,28 @@ def test_the_belt_logs_a_status_line_of_what_is_in_flight_and_left(ctx, caplog):
     lines = [r.getMessage() for r in caplog.records if r.name == "hiredra.sourcing.status"]
     assert lines and "boards done" in lines[0] and "of 2" in lines[0] and "in flight" in lines[0]
     assert "saves waiting" in lines[0]
+
+
+def test_a_wait_for_put_back_tasks_keeps_the_status_line_and_is_no_stall_to_the_watchdog(ctx, caplog):
+    # live check, 2026-11-07: T-Mobile waited 30 min out Workday's maintenance; the log fell silent for 20 min and
+    # the watchdog then cried "no task has finished for 19 min" over a planned wait
+    provider = _Chunked(n=7, page=3, fail_chunk=3, fail_times=1)  # refused once: put back for a while
+    clock = _Clock()
+    caplog.set_level("INFO", logger="hiredra.sourcing.status")  # the watchdog's warnings are caught as well
+    store = FakeRunStore()
+    provider.error = lambda: Blocked("429", cooldown_key="k", until=time.time() + 3600)  # an hour's cooldown
+    report = run(
+        _config(pacing=Pacing(workers=2), belt=BeltConfig(watchdog_minutes=10, status_minutes=10)),
+        companies=[CompanyEntry(name="A", provider="chunky", extra={"board_id": 1})],
+        sink_factory=lambda r: RecordingSink(),
+        run_store=store,
+        ctx=ctx,
+        registry=(provider,),
+        jobspy_source=FakeJobSpySource(),
+        sleep=clock.sleep,
+        clock=clock,
+    )
+    assert report.companies[0].status == "ok"  # waited out the hour, then read
+    assert max(clock.slept) <= 600.0 + 1e-6  # slept in steps of at most the status interval
+    assert len([r for r in caplog.records if r.name == "hiredra.sourcing.status"]) >= 5
+    assert not any("watchdog" in r.getMessage() for r in caplog.records)

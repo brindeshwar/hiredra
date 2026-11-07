@@ -678,8 +678,14 @@ def _run_belt(
                 if wait_s is None:  # tasks no rule will ever allow: a config error, not a reason to spin
                     log.error("orchestrator: %d tasks left that no rule allows -- check belt.platforms", len(belt))
                     break
+                # Only put-back tasks are left (a host cooling down, Workday's maintenance): a planned wait, not a stall.
+                # Sleep in steps so the status line goes on, and the watchdog counts from the wait's end.
                 log.info("orchestrator: only put-back tasks left; the next in %.0fs", wait_s)
-                sleep(wait_s)
+                sleep(max(min(wait_s, next_status - now), 0.05))
+                now = last_done = warned = clock()
+                if now >= next_status:
+                    status(now)
+                    next_status = now + status_every
                 continue
             ready = belt.next_ready_in(now)
             look = max(max(last_done, warned) + watchdog - now, 0.05)  # the watchdog's next look
