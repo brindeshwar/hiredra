@@ -21,7 +21,7 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 from hiredra.sourcing._html import html_to_text
-from hiredra.sourcing.http import FetchError, HTTPError
+from hiredra.sourcing.http import Blocked, FetchError, HTTPError
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
 from hiredra.sourcing.providers._common import (
@@ -43,6 +43,7 @@ CAP = 2000  # the total a capped board reports
 MAX_FACET_DEPTH = 3
 _HOST = re.compile(r"^(?:[a-z0-9-]+\.wd\d+\.myworkdayjobs\.com|wd\d+\.myworkdaysite\.com)$")
 _TIMEOUT_S = 30.0
+MAINTENANCE_PAUSE_S = 1800.0  # a tenant in maintenance is asked again after this long
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,10 +148,21 @@ def _request(ctx: FetchContext, board: Board, method: str, path: str, body: dict
     assert_allowed_url(url, frozenset({board.host}), "workday")
     if ctx.pace is not None:
         ctx.pace()
-    if method == "POST":
-        data = ctx.http.request("POST", url, json=body, timeout=_TIMEOUT_S).json()
-    else:
-        data = ctx.http.get_json(url, timeout=_TIMEOUT_S)
+    try:
+        if method == "POST":
+            data = ctx.http.request("POST", url, json=body, timeout=_TIMEOUT_S).json()
+        else:
+            data = ctx.http.get_json(url, timeout=_TIMEOUT_S)
+    except HTTPError as err:
+        if not (300 <= err.status < 400 and "maintenance" in (err.location or "").lower()):
+            raise
+        # Workday's maintenance (weekly: Friday 23:00 to Saturday 03:00 Pacific, at most 4 h; a tenant's own now and
+        # then) redirects every call to community.workday.com/maintenance-page. It passes: the tenant pauses and its
+        # task goes back on the belt, never a board that "can't be done" (live check, Saturday 2026-11-07).
+        cooldowns = getattr(ctx.http, "cooldowns", None)
+        until = cooldowns.trip(board.host, MAINTENANCE_PAUSE_S, reason="Workday maintenance") if cooldowns else 0.0
+        raise Blocked(f"{url}: Workday maintenance (redirected to {err.location})", cooldown_key=board.host,
+                      until=until, url=url) from err  # fmt: skip
     return data if isinstance(data, dict) else {}
 
 

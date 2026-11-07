@@ -222,3 +222,31 @@ def test_a_big_board_is_planned_as_chunks_of_fifty_pages_after_its_first():
     got = workday.read_chunk(lambda body: first, None)
     assert len(got.items) == 20 and got.served == 20
     assert [(c["offset"], c["end"]) for c in got.more] == [(20, 1020), (1020, 2020), (2020, 2500)]
+
+
+def test_a_tenant_in_maintenance_is_a_refusal_that_can_wait_not_a_board_that_cant_be_done():
+    # Saturday 2026-11-07, Workday's weekly window: every call is a 303 to community.workday.com/maintenance-page
+    from hiredra.sourcing.http import Blocked, CooldownRegistry
+    from hiredra.sourcing.orchestrator import can_wait
+
+    class Maintenance(_Http):
+        def __init__(self):
+            super().__init__()
+            self.cooldowns = CooldownRegistry(now=lambda: 1000.0)
+
+        def request(self, method, url, *, json=None, timeout=None):  # noqa: A002
+            raise HTTPError(f"{url}: unexpected redirect (HTTP 303)", status=303, url=url,
+                            location="https://community.workday.com/maintenance-page")  # fmt: skip
+
+    http = Maintenance()
+    with pytest.raises(Blocked, match="maintenance") as err:
+        _fetch(http)
+    assert can_wait(err.value) and err.value.cooldown_key == "acme.wd1.myworkdayjobs.com"
+    assert http.cooldowns.active() == {"acme.wd1.myworkdayjobs.com": 1000.0 + workday.MAINTENANCE_PAUSE_S}
+    with pytest.raises(HTTPError):  # any other redirect stays what it was
+
+        class Elsewhere(Maintenance):
+            def request(self, method, url, *, json=None, timeout=None):  # noqa: A002
+                raise HTTPError("redirect", status=302, url=url, location="https://acme.example/careers")
+
+        _fetch(Elsewhere())
