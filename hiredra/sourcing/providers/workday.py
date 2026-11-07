@@ -176,7 +176,7 @@ def _postings(page: dict) -> list[dict]:
 
 def read_chunk(post: Callable[[dict], dict], chunk: dict | None) -> Listed:
     """One chunk of a board's listing, its postings keyed by path. ``None`` is the first page; it says how the rest is
-    read: by page ranges (``{"facets", "offset", "end"}``, ``end`` ``None`` when the board states no total), or, for a
+    read: by page ranges (``{"facets", "offset", "end"}``, ``end`` the cap when the board states no total), or, for a
     board capped at 2,000, by facet slices, each read first by a probe of its first page (``{"facets", "used",
     "depth"}``). A first page answered 422 is a tenant this host no longer serves -- a made-up tenant gets the same 422,
     while a missing site of a real tenant gets a 404 -- so the board is gone, as for a 404 (crawl 1, 2026-11-05: 30
@@ -220,7 +220,9 @@ def _probed(page: dict, facets: dict, used: tuple[str, ...], depth: int) -> List
     elif total:
         more = tuple({"facets": facets, "offset": a, "end": b} for a, b in page_ranges(len(postings), total, PAGE))
     else:
-        more = ({"facets": facets, "offset": len(postings), "end": None},)
+        # no total stated: page on, but never past the cap -- beyond it some boards answer page one again, forever
+        # (adderleydata and glitchbound measured it, 2026-09/10)
+        more = ({"facets": facets, "offset": len(postings), "end": CAP},)
     return Listed({p["externalPath"]: p for p in postings}, more=more, served=len(postings))
 
 

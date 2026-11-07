@@ -250,3 +250,16 @@ def test_a_tenant_in_maintenance_is_a_refusal_that_can_wait_not_a_board_that_can
                 raise HTTPError("redirect", status=302, url=url, location="https://acme.example/careers")
 
         _fetch(Elsewhere())
+
+
+def test_a_board_that_states_no_total_is_never_paged_past_the_cap_where_it_repeats_page_one():
+    # past offset 2,000 some boards answer page one again, forever (adderleydata, glitchbound): stop at the cap
+    first = {"total": 0, "jobPostings": [{"title": "A", "externalPath": f"/job/{i}"} for i in range(20)]}
+    asked: list[int] = []
+
+    def post(body):
+        asked.append(body["offset"])
+        return first  # every offset: page one again, never an empty page
+
+    jobs = workday.list_postings(post)
+    assert len(jobs) == 20 and max(asked) < workday.CAP
