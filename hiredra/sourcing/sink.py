@@ -79,8 +79,7 @@ class ScoringSink:
             self._index.add(job.job_id, job.url, job.apply_url, job.company, job.title, job.source, job.location)
         for job, aggregator_copy in result.supersedes:  # D6.4: the company's own copy is the role's canonical one
             db.mark_duplicate(self._conn, aggregator_copy, of=job.job_id)
-        for job_id in result.seen:
-            db.touch_job(self._conn, job_id, run_id=self._run_id)
+        db.touch_jobs(self._conn, list(result.seen), run_id=self._run_id)  # the board's re-sightings, batched
         self._touched += len(result.seen)
         db.fill_provenance(
             self._conn,

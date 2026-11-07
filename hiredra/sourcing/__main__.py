@@ -118,6 +118,10 @@ def _cmd_run(args: argparse.Namespace, *, due_only: bool = False) -> int:
         with seen_lock:
             return db.job_stored(seen_conn, job_id)
 
+    def stored_many(keys: list[str]) -> set[str]:
+        with seen_lock:
+            return db.jobs_stored(seen_conn, keys)
+
     try:
         db.init_db(conn)
         run_store = PgRunStore(conn)
@@ -132,7 +136,7 @@ def _cmd_run(args: argparse.Namespace, *, due_only: bool = False) -> int:
                 run_store=run_store,
                 resume=args.resume,
                 seen=seen,
-                seen_many=lambda keys: db.jobs_stored(conn, keys),  # asked on the main thread, on the run's connection
+                seen_many=lambda keys: stored_many(keys),  # the dispatcher's question, never on the writer's connection
                 eligible=lambda jobs: sum(_known_eligible(j, funnel) for j in jobs),
             )
         except KeyboardInterrupt:

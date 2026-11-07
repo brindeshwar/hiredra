@@ -350,7 +350,7 @@ class _SlowProvider(FakeProvider):
         return super().fetch(entry, ctx)
 
 
-def test_workers_fetch_at_once_and_only_the_main_thread_writes(tmp_path, ctx):
+def test_workers_fetch_at_once_and_one_writer_thread_writes(tmp_path, ctx):
     companies = _companies_yaml(tmp_path, [(n, "p") for n in "ABCDEF"])
     p = _SlowProvider("p", jobs=[_job(job_id="p:1")])
     sink = RecordingSink()
@@ -370,12 +370,15 @@ def test_workers_fetch_at_once_and_only_the_main_thread_writes(tmp_path, ctx):
         sleep=slept.append,
     )
     assert p.peak > 1 and all(t.startswith("fetch") for t in p.threads)  # boards fetched at once, on workers
-    assert set(sink_threads) == {threading.current_thread().name}  # every write on the main thread
+    assert sink_threads[:6] == ["writer"] * 6  # every board's write on the one writer, never on a fetch worker
+    assert sink_threads[6] == threading.current_thread().name  # JobSpy's batch after the writer is done: one at a time
     assert len(sink_threads) == 7  # six boards and the JobSpy batch
     assert [c.name for c in report.companies] == list("ABCDEF")  # the list's order, not the finishing order
     assert slept == []  # the per-host slots pace, not a pause between companies
-    assert [k for k, _, _ in store.saved_cooldowns] == ["b.example"]  # tripped on a worker, written on main
-    assert ctx.http.cooldowns.on_trip == store.save_cooldown and len(store.checkpoints) == 7  # + JobSpy
+    assert [k for k, _, _ in store.saved_cooldowns] == ["b.example"]  # tripped on a worker, written by the writer
+    assert ctx.http.cooldowns.on_trip == store.save_cooldown
+    assert len(store.checkpoints[-1]["companies_done"]) == 6 and store.checkpoints[-1]["jobspy_done"]
+    assert len(store.checkpoints) < 7  # saved every 30 s and at the end, not after every board
 
 
 def test_a_platform_keeps_to_its_share_and_never_holds_the_belt(tmp_path, ctx):
@@ -871,3 +874,23 @@ def test_report_to_json_round_trips(tmp_path, ctx):
     parsed = json.loads(report.to_json())
     assert parsed["status"] == "ok"
     assert parsed["companies"][0]["name"] == "A"
+
+
+def test_a_failed_write_stops_the_belt_and_the_run_fails_loudly(tmp_path, ctx):
+    class Broken(RecordingSink):
+        def consume(self, jobs, **kw):
+            raise RuntimeError("the database went away")
+
+    store = FakeRunStore()
+    companies = _companies_yaml(tmp_path, [(n, "p") for n in "ABCD"])
+    with pytest.raises(RuntimeError, match="went away"):
+        run(
+            _config(pacing=Pacing(workers=2)),
+            companies=load_companies(companies),
+            sink_factory=lambda r: Broken(),
+            run_store=store,
+            ctx=ctx,
+            registry=(FakeProvider("p", jobs=[_job()]),),
+            jobspy_source=FakeJobSpySource(),
+        )
+    assert store.finished and store.finished[-1]["status"] == "failed"
