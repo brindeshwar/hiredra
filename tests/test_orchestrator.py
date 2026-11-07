@@ -894,3 +894,24 @@ def test_a_failed_write_stops_the_belt_and_the_run_fails_loudly(tmp_path, ctx):
             jobspy_source=FakeJobSpySource(),
         )
     assert store.finished and store.finished[-1]["status"] == "failed"
+
+
+def test_the_belt_logs_a_status_line_of_what_is_in_flight_and_left(ctx, caplog):
+    class Slow(FakeProvider):
+        def fetch(self, entry, ctx):
+            time.sleep(0.3)
+            return []
+
+    caplog.set_level("INFO", logger="hiredra.sourcing.status")
+    run(
+        _config(pacing=Pacing(workers=2), belt=BeltConfig(status_minutes=0.1 / 60)),  # every 0.1 s
+        companies=[CompanyEntry(name=n, provider="slow", extra={"board_id": i}) for i, n in enumerate("AB")],
+        sink_factory=lambda r: RecordingSink(),
+        run_store=FakeRunStore(),
+        ctx=ctx,
+        registry=(Slow("slow"),),
+        jobspy_source=FakeJobSpySource(),
+    )
+    lines = [r.getMessage() for r in caplog.records if r.name == "hiredra.sourcing.status"]
+    assert lines and "boards done" in lines[0] and "of 2" in lines[0] and "in flight" in lines[0]
+    assert "saves waiting" in lines[0]

@@ -46,12 +46,14 @@ class Platform:
 class BeltConfig:
     """``belt:`` in the run config. ``fill``: the share of each platform's limit used (the owner's 50-60%: 60%).
     ``tries``: how many times a refused task is put back on the belt before its board fails for the run.
-    ``watchdog_minutes``: a warning when no task has finished for this long."""
+    ``watchdog_minutes``: a warning when no task has finished for this long. ``status_minutes``: how often the run
+    logs a status line (tasks in flight per platform, on the belt, put back; boards done; saves waiting)."""
 
     fill: float = 0.6
     platforms: Mapping[str, Platform] = field(default_factory=dict, hash=False)
     tries: int = 4
     watchdog_minutes: float = 10.0
+    status_minutes: float = 10.0
 
     def per_second(self, platform: str) -> float | None:
         p = self.platforms.get(platform)
@@ -174,6 +176,11 @@ class Belt:
             queue = self._hosts[line].get(task.host)
             if queue:
                 heapq.heappush(self._heads[line], (queue[0][0], queue[0][1], task.host))
+
+    @property
+    def waiting(self) -> int:
+        """Tasks put back, waiting for their time."""
+        return len(self._waiting)
 
     def next_ready_in(self, now: float) -> float | None:
         """Seconds until the next set-aside task may run, ``None`` when none is set aside."""

@@ -20,6 +20,7 @@ closes it once in a ``finally``. ``ScoringSink`` and ``PgRunStore`` share it.
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 
 # Job titles/companies/detail strings can carry arbitrary Unicode; a Windows
@@ -105,8 +106,20 @@ def _cmd_crawl(args: argparse.Namespace) -> int:
         return 1
 
 
+def _show_status() -> None:
+    """The belt's status line in the crawl's output (stderr, unbuffered), and nothing else of the INFO chatter."""
+    status = logging.getLogger("hiredra.sourcing.status")
+    if not status.handlers:
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setFormatter(logging.Formatter("%(asctime)s %(message)s", "%H:%M:%S"))
+        status.addHandler(handler)
+        status.setLevel(logging.INFO)
+        status.propagate = False
+
+
 def _cmd_run(args: argparse.Namespace, *, due_only: bool = False) -> int:
     config = load_run_config(args.config)
+    _show_status()
     funnel = load_filter_config()
     conn = db.connect(args.db)
     # ``seen`` is asked from the fetch workers (D4.1): with more than one, it gets a connection of its own, one

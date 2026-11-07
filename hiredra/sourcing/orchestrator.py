@@ -35,6 +35,8 @@ from hiredra.sourcing.runstore import BoardResult, RunStore
 from hiredra.sourcing.sink import Sink, SinkStats
 
 log = logging.getLogger("hiredra.sourcing.orchestrator")
+#: The belt's status line, every ``belt.status_minutes`` (the CLI shows it in the crawl log).
+status_log = logging.getLogger("hiredra.sourcing.status")
 
 
 def _now_iso() -> str:
@@ -141,6 +143,10 @@ class _Writer:
 
     def submit(self, job: Callable[[], None]) -> None:
         self._jobs.put(job)
+
+    def pending(self) -> int:
+        """Writes queued and not yet done."""
+        return self._jobs.qsize()
 
     def check(self) -> None:
         if self.error is not None:
@@ -351,7 +357,7 @@ def run(
                     config, todo, ctx, registry, workers,
                     lambda i, entry, result: writer.submit(lambda: record(i, entry, result)),
                     None if jobspy_done else (jobspy_source or JobSpySource(config.jobspy)),
-                    seen, seen_many, sleep, clock, writer.check,
+                    seen, seen_many, sleep, clock, writer.check, writer.pending,
                 )  # fmt: skip
             finally:
                 writer.close()  # the boards finished are saved, a stop's too
@@ -455,11 +461,19 @@ def _run_belt(
     sleep: Callable[[float], None],
     clock: Callable[[], float],
     check: Callable[[], None] = lambda: None,
+    pending_writes: Callable[[], int] = lambda: 0,
 ) -> Any:
     """Run the boards (and JobSpy, when given) on the conveyor belt; each board is handed to ``record`` as it completes
     (the writer's, never waited on). ``check`` raises the writer's failure. Returns JobSpy's result (or the exception it
     raised), ``None`` when it was not run."""
     rules = config.belt
+    finished = [0]  # boards handed to the writer
+    hand_over = record
+
+    def record(i: int, entry: CompanyEntry, result: tuple) -> None:
+        finished[0] += 1
+        hand_over(i, entry, result)
+
     paces = {name: Pace(1.0 / rules.per_second(name)) for name in rules.platforms}
     host_cap = getattr(ctx.http, "slot_cap", None) or (lambda key: 2)
     belt = Belt({name: p.at_once for name, p in rules.platforms.items()}, host_cap)
@@ -613,7 +627,19 @@ def _run_belt(
 
     jobspy_result: Any = None
     watchdog = rules.watchdog_minutes * 60.0
-    last_done = warned = clock()
+    last_done = warned = started = clock()
+    status_every = rules.status_minutes * 60.0
+    next_status = started + status_every
+    total = len(boards)
+
+    def status(now: float) -> None:
+        """One line: what is in flight per platform, what is left, what is saved -- so a fault shows while it runs."""
+        lines = " ".join(f"{name or 'other'}={n}" for name, n in sorted(belt.in_line.items()) if n) or "none"
+        status_log.info(
+            "status %3.0f min | boards done %d of %d | in flight %d: %s | on the belt %d, put back %d | saves waiting %d",
+            (now - started) / 60, finished[0], total, len(running), lines, len(belt), belt.waiting, pending_writes(),
+        )  # fmt: skip
+
     pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="fetch")
     running: dict[Any, Task] = {}
 
@@ -657,10 +683,13 @@ def _run_belt(
                 continue
             ready = belt.next_ready_in(now)
             look = max(max(last_done, warned) + watchdog - now, 0.05)  # the watchdog's next look
-            timeout = min(look, ready) if ready is not None else look
+            timeout = min(x for x in (look, ready, max(next_status - now, 0.05)) if x is not None)
             done, _ = wait_any(running, timeout=timeout, return_when=FIRST_COMPLETED)
             settle(done)
             now = clock()
+            if now >= next_status:
+                status(now)
+                next_status = now + status_every
             if not done and now - last_done >= watchdog and now - warned >= watchdog:
                 warned = now
                 stuck = ", ".join(f"{t.kind} {t.board.entry.name if t.board else 'jobspy'}" for t in running.values())

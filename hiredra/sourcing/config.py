@@ -212,7 +212,8 @@ def _boards(raw: Any, path: Path) -> tuple[str, ...]:
 
 
 def _belt(raw: Any) -> BeltConfig:
-    """``belt:`` -- ``fill``, ``tries``, ``watchdog_minutes`` and ``platforms: {name: {limit, at_once}}``, strictly."""
+    """``belt:`` -- ``fill``, ``tries``, ``watchdog_minutes``, ``status_minutes`` and ``platforms: {name: {limit,
+    at_once}}``, strictly."""
     if raw is None:
         return BeltConfig()
     if not isinstance(raw, dict):
@@ -228,7 +229,8 @@ def _belt(raw: Any) -> BeltConfig:
     belt = _build(BeltConfig, {k: v for k, v in raw.items() if k != "platforms"}, "belt")
     if not 0 < belt.fill <= 1:
         raise ConfigError(f"belt.fill: must be above 0 and at most 1, got {belt.fill!r}")
-    return BeltConfig(fill=belt.fill, platforms=built, tries=belt.tries, watchdog_minutes=belt.watchdog_minutes)
+    return BeltConfig(fill=belt.fill, platforms=built, tries=belt.tries, watchdog_minutes=belt.watchdog_minutes,
+                      status_minutes=belt.status_minutes)  # fmt: skip
 
 
 def load_run_config(path: str | Path) -> RunConfig:
