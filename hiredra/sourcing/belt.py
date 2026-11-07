@@ -11,7 +11,8 @@ them in order; a worker that comes free takes the FIRST task the rules allow:
 * **its time** -- a task put back after a refusal waits until its ``not_before`` (the server's Retry-After, or the
   host's cooldown).
 
-So a worker never waits on a task the rules forbid: it takes the next one that is allowed. The order is laid out by
+So a worker never waits on a task the rules forbid: it takes the next one that is allowed, a platform below its
+share first (it is what the run's length hangs on), the rest after. The order is laid out by
 the orchestrator (``lay_out``): each platform's boards longest first, the platforms interleaved so each runs steadily
 from minute 0; a board's later chunks take its place on the belt, so a started board finishes before new ones start.
 
@@ -107,17 +108,10 @@ class Belt:
         while self._waiting and self._waiting[0][0] <= now:
             _, _, task = heapq.heappop(self._waiting)
             bisect.insort(self._lines[task.line], (task.key, next(self._seq), task))
-        best: tuple[str, int] | None = None
-        best_key: tuple[float, int] | None = None
-        for name, line in self._lines.items():
-            if not line or self.in_line[name] >= self._at_once.get(name, 1 << 30):
-                continue
-            for i in range(min(len(line), _LOOK_AHEAD)):
-                key, seq, task = line[i]
-                if task.host is None or self.in_host[task.host] < self._host_cap(task.host):
-                    if best_key is None or (key, seq) < best_key:
-                        best, best_key = (name, i), (key, seq)
-                    break
+        # A platform held to a rate is what the run's length hangs on, so a platform below its share is served
+        # first; the other lines fill the workers left. Placing tasks by key alone left Workday half-empty: its next
+        # board's key waits behind Accenture's estimate, though a board runs only 2 chunks at once (crawl 3, 2026-11-07).
+        best = self._first(lambda name: name in self._at_once) or self._first(lambda name: name not in self._at_once)
         if best is None:
             return None
         name, i = best
@@ -126,6 +120,21 @@ class Belt:
         if task.host is not None:
             self.in_host[task.host] += 1
         return task
+
+    def _first(self, wanted: Callable[[str], bool]) -> tuple[str, int] | None:
+        """Among the wanted lines with room, the allowed task with the smallest key: ``(line, index)``."""
+        best: tuple[str, int] | None = None
+        best_key: tuple[float, int] | None = None
+        for name, line in self._lines.items():
+            if not line or not wanted(name) or self.in_line[name] >= self._at_once.get(name, 1 << 30):
+                continue
+            for i in range(min(len(line), _LOOK_AHEAD)):
+                key, seq, task = line[i]
+                if task.host is None or self.in_host[task.host] < self._host_cap(task.host):
+                    if best_key is None or (key, seq) < best_key:
+                        best, best_key = (name, i), (key, seq)
+                    break
+        return best
 
     def done(self, task: Task) -> None:
         """A task taken earlier has finished (or failed): its platform's and host's places are free."""

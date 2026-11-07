@@ -62,3 +62,14 @@ def test_the_layout_puts_each_platforms_longest_board_first_and_every_platform_s
 def test_a_platforms_rate_is_its_fill_of_the_measured_limit():
     rules = BeltConfig(fill=0.6, platforms={"workday": Platform(limit=10.0, at_once=8)})
     assert rules.per_second("workday") == 6.0 and rules.per_second("lever") is None
+
+
+def test_a_platform_below_its_share_is_served_before_tasks_placed_earlier_on_the_belt():
+    # crawl 3 (2026-11-07): Accenture's estimate put Workday's next board 18 minutes down the belt, and other boards,
+    # placed earlier, took the free workers -- Workday ran 4 wide of its 8 (a board runs only 2 chunks at once)
+    belt = _belt(at_once={"workday": 4})
+    belt.put_all([Task("list", "workday", "accenture", 0.0, payload="acc") for _ in range(10)])
+    belt.put(Task("list", "workday", "circlek", 1100.0, payload="ck"))
+    belt.put_all([Task("board", OTHER, f"o{i}", 10.0 + i, payload="other") for i in range(10)])
+    taken = [belt.take().payload for _ in range(5)]
+    assert taken == ["acc", "acc", "ck", "other", "other"]  # Workday's free places first, then the rest
