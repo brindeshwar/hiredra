@@ -914,15 +914,16 @@ def record_board_run(conn: psycopg.Connection, run_id: str, result: Any) -> int:
         _board_health(conn, result.board_id, status, result.jobs, result.detail, now)
         if status in ("ok", "partial"):
             _board_cadence(conn, result.board_id, eligible, now)
-        _board_due(conn, result.board_id, now)
+        _board_due(conn, run_id, result.board_id, now)
     return closed
 
 
-#: D5.2 (freehire's rule): a board's crawl failing 3 times in a row rests it 6 h, doubling each further failure, at
-#: most 24 h; one clean crawl heals it. Never permanent: a board that keeps failing is still tried daily.
+#: D5.2 (freehire's rule): a board's crawl failing 3 times in a row rests it 6 h, doubling each further failure; one
+#: clean crawl heals it. Never permanent. At most a week (2026-11-07, was a day): a board that refuses every time
+#: (Cloudflare 403s, a login page) is then tried weekly, not daily -- 6 h, 12 h, 1 d, 2 d, 4 d, 7 d.
 REST_AFTER_FAILURES = 3
 REST_BASE_HOURS = 6
-REST_MAX_HOURS = 24
+REST_MAX_HOURS = 7 * 24
 #: D2.3 (b): a board whose last ``SLOW_AFTER_CRAWLS`` crawls listed no India/remote-eligible posting is crawled
 #: weekly; one eligible posting brings it back to daily. 3 is Hiredra's choice: the plan leaves N open.
 SLOW_AFTER_CRAWLS = 3
@@ -971,14 +972,17 @@ def _board_cadence(conn: psycopg.Connection, board_id: int, eligible: int, now: 
         conn.execute("UPDATE boards SET cadence = 'weekly' WHERE id = %s", (board_id,))
 
 
-def _board_due(conn: psycopg.Connection, board_id: int, now: str) -> None:
-    """The board's next crawl: its cadence after this one, or later while it rests (D5.1, D5.2)."""
+def _board_due(conn: psycopg.Connection, run_id: str, board_id: int, now: str) -> None:
+    """The board's next crawl: its cadence after this one, or later while it rests (D5.1, D5.2). Counted from the
+    RUN's start, not the board's own crawl, so a run's boards fall due together the next day and the next run finds
+    them all due at once (crawl 2's fell due over 6 hours)."""
     conn.execute(
         "UPDATE boards b SET next_due_at = GREATEST("
-        " %s::timestamptz + (CASE b.cadence WHEN 'weekly' THEN %s ELSE %s END)::interval,"
+        " COALESCE((SELECT started_at FROM runs WHERE run_id = %s), %s::timestamptz)"
+        " + (CASE b.cadence WHEN 'weekly' THEN %s ELSE %s END)::interval,"
         " COALESCE((SELECT h.cooldown_until FROM board_health h WHERE h.board_id = b.id), '-infinity'))"
         " WHERE b.id = %s",
-        (now, _DUE_AFTER["weekly"], _DUE_AFTER["daily"], board_id),
+        (run_id, now, _DUE_AFTER["weekly"], _DUE_AFTER["daily"], board_id),
     )
 
 

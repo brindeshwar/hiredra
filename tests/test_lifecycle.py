@@ -165,16 +165,16 @@ def _hours_from_now(conn, sql, board):
                               (board,)).fetchone()[0])  # fmt: skip
 
 
-def test_three_failures_in_a_row_rest_a_board_doubling_to_a_day_and_a_success_heals_it(conn):
+def test_three_failures_in_a_row_rest_a_board_doubling_to_a_week_and_a_success_heals_it(conn):
     board = _board(conn, status="active")
     rests = []
-    for _ in range(6):
+    for _ in range(9):
         db.record_board_run(conn, "R1", BoardResult(board_id=board, status="error", detail="HTTP 500"))
         until = conn.execute("SELECT cooldown_until FROM board_health WHERE board_id = %s", (board,)).fetchone()[0]
         rests.append(None if until is None else _hours_from_now(conn, "SELECT cooldown_until FROM board_health h"
                                                                       " WHERE h.board_id = b.id", board))  # fmt: skip
-    assert rests == [None, None, 6, 12, 24, 24]
-    assert _hours_from_now(conn, "b.next_due_at", board) == 24  # due no sooner than the rest ends
+    assert rests == [None, None, 6, 12, 24, 48, 96, 168, 168]  # a board that refuses every time: weekly, not daily
+    assert _hours_from_now(conn, "b.next_due_at", board) == 168  # due no sooner than the rest ends
     db.record_board_run(conn, "R1", BoardResult(board_id=board, status="ok", complete=True, jobs=1))
     failures, until, yielded = conn.execute(
         "SELECT consecutive_failures, cooldown_until, last_yield_at IS NOT NULL FROM board_health WHERE board_id = %s",
@@ -234,3 +234,10 @@ def test_a_board_carries_its_last_crawl_time_to_the_belt_and_a_listing_is_checke
     _job(conn, "lever:b", timed)
     assert db.jobs_stored(conn, ["lever:a", "lever:b", "lever:new"]) == {"lever:a", "lever:b"}
     assert db.jobs_stored(conn, []) == set()
+
+
+def test_a_runs_boards_fall_due_together_counted_from_the_runs_start(conn):
+    conn.execute("UPDATE runs SET started_at = now() - interval '5 hours' WHERE run_id = 'R1'")
+    board = _board(conn, status="active")
+    db.record_board_run(conn, "R1", BoardResult(board_id=board, status="ok", complete=True, jobs=1))
+    assert _hours_from_now(conn, "b.next_due_at", board) == 15  # 20 h after the run began, not after this board

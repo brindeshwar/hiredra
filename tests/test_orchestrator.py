@@ -431,8 +431,10 @@ class _Chunked:
 
     name = "chunky"
 
-    def __init__(self, n=7, page=3, fail_chunk=None):
-        self.n, self.page, self.fail_chunk = n, page, fail_chunk
+    def __init__(self, n=7, page=3, fail_chunk=None, error=None, fail_times=1 << 30, detail_error=None):
+        self.n, self.page, self.fail_chunk, self.fail_times = n, page, fail_chunk, fail_times
+        self.error = error or (lambda: Blocked("429", cooldown_key="k", until=0.0))
+        self.detail_error = detail_error  # (item index, times): that detail is refused this many times
         self.chunks: list = []
         self.details: list[str] = []
         self.threads: set[str] = set()
@@ -451,8 +453,9 @@ class _Chunked:
         with self.lock:
             self.chunks.append(chunk)
             self.threads.add(threading.current_thread().name)
-        if self.fail_chunk is not None and chunk == self.fail_chunk:
-            raise Blocked("429", cooldown_key="k", until=0.0)
+        if self.fail_chunk is not None and chunk == self.fail_chunk and self.fail_times > 0:
+            self.fail_times -= 1
+            raise self.error()
         start = chunk or 0
         items = {f"chunky:{entry.name}:{i}": {"i": i} for i in range(start, min(start + self.page, self.n))}
         more = tuple(range(self.page, self.n, self.page)) if chunk is None else ()
@@ -467,6 +470,9 @@ class _Chunked:
         if detail:
             with self.lock:
                 self.details.append(f"{entry.name}:{item['i']}")
+                if self.detail_error and self.detail_error[0] == item["i"] and self.detail_error[1] > 0:
+                    self.detail_error = (item["i"], self.detail_error[1] - 1)
+                    raise Blocked("429", cooldown_key="k", until=0.0)
         return _job(job_id=f"chunky:{entry.name}:{item['i']}", description="text" if detail else None)
 
 
@@ -499,20 +505,138 @@ def test_a_chunked_board_is_read_chunk_by_chunk_and_only_its_new_postings_cost_a
     assert report.companies[0].status == "ok" and len(sink.batches[0]) == 7
 
 
-def test_a_failed_chunk_fails_its_board_and_its_other_chunks_are_dropped(tmp_path, ctx):
-    provider = _Chunked(n=30, page=3, fail_chunk=3)
-    store = FakeRunStore()
-    report = run(
-        _config(pacing=Pacing(workers=2)),
-        companies=[CompanyEntry(name="A", provider="chunky", extra={"board_id": 1})],
+class _Clock:
+    """A fake monotonic clock that the belt's sleep moves on."""
+
+    def __init__(self):
+        self.t = 0.0
+        self.slept: list[float] = []
+
+    def __call__(self):
+        return self.t
+
+    def sleep(self, seconds):
+        self.slept.append(seconds)
+        self.t += seconds
+
+
+def _belt_run(provider, ctx, *, workers=2, tries=4, store=None, clock=None, **kw):
+    clock = clock or _Clock()
+    return run(
+        _config(pacing=Pacing(workers=workers), belt=BeltConfig(tries=tries)),
+        companies=[CompanyEntry(name="A", provider=provider.name, extra={"board_id": 1})],
         sink_factory=lambda r: RecordingSink(),
-        run_store=store,
+        run_store=store or FakeRunStore(),
         ctx=ctx,
         registry=(provider,),
         jobspy_source=FakeJobSpySource(),
+        sleep=clock.sleep,
+        clock=clock,
+        **kw,
     )
-    assert report.companies[0].status == "blocked" and store.board_results[0].status == "blocked"
-    assert len(provider.chunks) < 10 and provider.details == []  # nothing read past the failure's notice
+
+
+def test_an_error_that_cant_be_done_fails_its_board_and_its_other_chunks_are_dropped(ctx):
+    provider = _Chunked(n=30, page=3, fail_chunk=3, error=lambda: HTTPError("400", status=400))
+    store = FakeRunStore()
+    report = _belt_run(provider, ctx, store=store)
+    assert report.companies[0].status == "error" and store.board_results[0].status == "error"
+    assert provider.chunks.count(3) == 1 and provider.details == []  # never put back; nothing read past it
+
+
+def test_a_refused_chunk_goes_back_on_the_belt_and_its_board_completes_later_in_the_run(ctx):
+    provider = _Chunked(n=7, page=3, fail_chunk=3, fail_times=2)  # refused twice, then served
+    store = FakeRunStore()
+    report = _belt_run(provider, ctx, store=store)
+    assert provider.chunks.count(3) == 3  # tried, put back, tried, put back, served
+    assert report.companies[0].status == "ok" and store.board_results[0].jobs == 7
+
+
+def test_a_chunk_still_refused_after_its_tries_fails_its_board_for_the_run(ctx):
+    provider = _Chunked(n=7, page=3, fail_chunk=3)  # refused every time
+    report = _belt_run(provider, ctx, tries=3)
+    assert provider.chunks.count(3) == 3 and report.companies[0].status == "blocked"
+
+
+def test_a_refused_detail_puts_the_rest_of_its_chunk_back_and_keeps_what_it_read(ctx):
+    provider = _Chunked(n=4, page=4, detail_error=(2, 1))  # the third posting's detail is refused once
+    store = FakeRunStore()
+    report = _belt_run(provider, ctx, store=store)
+    assert provider.details == ["A:0", "A:1", "A:2", "A:2", "A:3"]  # 0 and 1 kept; 2 and 3 read when put back
+    assert report.companies[0].status == "ok" and store.board_results[0].jobs == 4
+
+
+def test_can_wait_is_only_for_errors_that_dont_mean_it_cant_be_done():
+    from hiredra.sourcing.http import TransientError
+    from hiredra.sourcing.orchestrator import can_wait
+
+    assert can_wait(Blocked("429", cooldown_key="k", until=0.0)) and can_wait(TransientError("timeout"))
+    assert can_wait(HTTPError("408", status=408))
+    assert not any(can_wait(HTTPError(str(s), status=s)) for s in (400, 401, 404, 410))
+    assert not can_wait(FetchError("no positions list")) and not can_wait(ValueError("a bug"))
+
+
+def test_the_watchdog_warns_when_no_task_finishes_for_too_long(ctx, caplog):
+    class Slow(FakeProvider):
+        def fetch(self, entry, ctx):
+            time.sleep(0.4)
+            return []
+
+    caplog.set_level("WARNING", logger="hiredra.sourcing.orchestrator")
+    run(
+        _config(pacing=Pacing(workers=2), belt=BeltConfig(watchdog_minutes=0.1 / 60)),  # 0.1 s
+        companies=[CompanyEntry(name="A", provider="slow")],
+        sink_factory=lambda r: RecordingSink(),
+        run_store=FakeRunStore(),
+        ctx=ctx,
+        registry=(Slow("slow"),),
+        jobspy_source=FakeJobSpySource(),
+    )
+    assert any("watchdog" in r.message and "board A" in r.message for r in caplog.records)
+
+
+def test_ctrl_c_finishes_the_tasks_in_flight_saves_their_boards_and_leaves_the_run_to_resume(tmp_path, ctx):
+    started = threading.Event()
+
+    class P(FakeProvider):
+        def board_url(self, entry):
+            return f"https://{entry.name.lower()}.p.example/"
+
+        def fetch(self, entry, ctx):
+            started.set()
+            time.sleep(0.2)
+            return [_job(job_id=f"p:{entry.name}")]
+
+    class Interrupting:
+        fired = False
+
+        def __call__(self):
+            if started.is_set() and not Interrupting.fired:
+                Interrupting.fired = True
+                raise KeyboardInterrupt
+            return time.monotonic()
+
+    store = FakeRunStore()
+    companies = _companies_yaml(tmp_path, [(n, "p") for n in "ABCDEFGH"])
+    entries = [
+        CompanyEntry(name=e.name, provider=e.provider, extra={**e.extra, "board_id": i + 1})
+        for i, e in enumerate(load_companies(companies))
+    ]
+    with pytest.raises(KeyboardInterrupt):
+        run(
+            _config(pacing=Pacing(workers=2)),
+            companies=entries,
+            sink_factory=lambda r: RecordingSink(),
+            run_store=store,
+            ctx=ctx,
+            registry=(P("p"),),
+            jobspy_source=FakeJobSpySource(),
+            clock=Interrupting(),
+        )
+    saved = len(store.board_results)
+    assert 1 <= saved < 8  # the boards in flight finished and were saved; no new one started
+    assert store.finished == []  # the run stays unfinished: --resume goes on from its checkpoint
+    assert len(store.checkpoints) == saved
 
 
 def test_jobspy_runs_at_minute_zero_beside_the_boards(tmp_path, ctx):

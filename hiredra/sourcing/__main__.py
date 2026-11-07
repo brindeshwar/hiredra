@@ -124,16 +124,20 @@ def _cmd_run(args: argparse.Namespace, *, due_only: bool = False) -> int:
         companies = [board_entry(row) for row in db.load_boards(conn, config.boards, due_only=due_only)]
         if due_only:
             print(f"crawl: {len(companies)} boards due")
-        report = run_orchestrator(
-            config,
-            companies=companies,
-            sink_factory=lambda run_id: ScoringSink(conn, run_id),
-            run_store=run_store,
-            resume=args.resume,
-            seen=seen,
-            seen_many=lambda keys: db.jobs_stored(conn, keys),  # asked on the main thread, on the run's connection
-            eligible=lambda jobs: sum(_known_eligible(j, funnel) for j in jobs),
-        )
+        try:
+            report = run_orchestrator(
+                config,
+                companies=companies,
+                sink_factory=lambda run_id: ScoringSink(conn, run_id),
+                run_store=run_store,
+                resume=args.resume,
+                seen=seen,
+                seen_many=lambda keys: db.jobs_stored(conn, keys),  # asked on the main thread, on the run's connection
+                eligible=lambda jobs: sum(_known_eligible(j, funnel) for j in jobs),
+            )
+        except KeyboardInterrupt:
+            print("stopped: the boards finished so far are saved; go on with the same command and --resume")
+            return 130
         _print_report(report)
         return 0 if report.status != "failed" else 1
     finally:
