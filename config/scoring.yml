@@ -20,8 +20,17 @@ http:
     boards-api.greenhouse.io: 4
     api.lever.co: 4
     api.ashbyhq.com: 4
-    eightfold.ai: 2             # ONE limit for every *.eightfold.ai tenant: it rate-limits an IP across all
-                                # of them (2026-11-03: 14 of 30 refused at 8 at once, 2 of 30 at 2 shared)
+    eightfold.ai: 3             # ONE set of slots for every *.eightfold.ai tenant (2026-11-03: 14 of 30 refused
+                                # at 8 at once, unpaced); the belt paces them to 0.6/s and keeps 3 in flight
+
+belt:                         # the conveyor belt (owner's plan, 2026-11-07): each platform held to `fill` of its
+  fill: 0.6                   # measured limit, so the limit is never reached and nothing is refused
+  tries: 4                    # a refused task goes back on the belt, at most this many times in a run
+  watchdog_minutes: 10        # warn when no task has finished for this long
+  platforms:                  # limit: requests/s where refusals start; at_once: its tasks in flight together
+    workday: {limit: 10.0, at_once: 8}    # crawl 2: many 429s at ~15/s, a few at ~10, none at ~6
+    eightfold: {limit: 1.0, at_once: 3}   # ~1/s for every tenant (freehire; 405s unpaced); ~3.8 s a request
+    phenom: {limit: 1.0, at_once: 2}      # ~1/s for every site (freehire: 403s past it); ~2 s a request
 
 jobspy:
   sites: [indeed, linkedin]     # google OFF (M0.2, 2026-10-17): 0 rows on 4 query phrasings

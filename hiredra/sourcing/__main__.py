@@ -131,6 +131,7 @@ def _cmd_run(args: argparse.Namespace, *, due_only: bool = False) -> int:
             run_store=run_store,
             resume=args.resume,
             seen=seen,
+            seen_many=lambda keys: db.jobs_stored(conn, keys),  # asked on the main thread, on the run's connection
             eligible=lambda jobs: sum(_known_eligible(j, funnel) for j in jobs),
         )
         _print_report(report)

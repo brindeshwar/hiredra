@@ -70,7 +70,6 @@ def _workplace(value: str | None) -> str | None:
 
 class EightfoldProvider:
     name = "eightfold"
-    boards_at_once = 2  # one pace for all of Eightfold: two boards keep it busy; more would only wait on it
 
     def __init__(self, interval: float = 1.0) -> None:
         self.pace = Pace(interval)  # outside the belt: one for every Eightfold tenant (freehire's ~1 request a second)

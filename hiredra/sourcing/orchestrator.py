@@ -13,16 +13,22 @@ import logging
 import queue
 import random
 import time
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor
+from concurrent.futures import wait as wait_any
 from collections.abc import Callable, Sequence
-from dataclasses import asdict, dataclass, replace
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime, timezone
+from typing import Any
+from urllib.parse import urlsplit
 
+from hiredra.sourcing.belt import OTHER, Belt, Task, lay_out
 from hiredra.sourcing.config import RunConfig
 from hiredra.sourcing.http import Blocked, FetchError, HTTPError, HttpClient
 from hiredra.sourcing.jobspy_source import JobSpySource, SiteOutcome
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext, Provider, company_slug
+from hiredra.sourcing.providers import _common
+from hiredra.sourcing.providers._common import CHUNK, Pace
 from hiredra.sourcing.registry import REGISTRY, route
 from hiredra.sourcing.runstore import BoardResult, RunStore
 from hiredra.sourcing.sink import Sink, SinkStats
@@ -96,6 +102,45 @@ def progress_key(entry: CompanyEntry) -> str:
     return f"{entry.name}|{entry.provider or ''}|{board}"
 
 
+#: A board's estimated time when it has no last crawl to go by (seconds): its place on the belt only.
+_UNKNOWN_SECONDS = 30.0
+
+
+@dataclass(eq=False)
+class _Board:
+    """One board read on the belt: its tasks' shared state, on the main thread only."""
+
+    i: int
+    entry: CompanyEntry
+    provider: Any
+    ctx: FetchContext
+    key: float
+    line: str
+    host: str | None
+    notes: list[str] = field(default_factory=list)
+    info: dict = field(default_factory=dict)
+    items: dict = field(default_factory=dict)
+    served: int = 0
+    open: int = 0  # its tasks on the belt or in flight
+    jobs: list = field(default_factory=list)
+    seconds: float = 0.0  # the work time of its tasks, summed
+    failed: CompanyOutcome | None = None
+
+
+def _outcome_of(err: BaseException, entry: CompanyEntry, provider: Provider) -> CompanyOutcome:
+    """A board's failure as its outcome: blocked, gone (a definitive 404 -- common with a generated company list built
+    from a days-old slug snapshot; benign, like 'unroutable', never a PARTIAL trigger) or error (any other HTTP
+    status, a fetch error, or a provider bug, which must not kill the run)."""
+    if isinstance(err, Blocked):
+        return CompanyOutcome(entry.name, "blocked", provider.name, 0, str(err))
+    if isinstance(err, HTTPError):
+        return CompanyOutcome(entry.name, "gone" if err.status == 404 else "error", provider.name, 0, str(err))
+    if isinstance(err, FetchError):
+        return CompanyOutcome(entry.name, "error", provider.name, 0, str(err))
+    log.error("orchestrator: %s on %r raised unexpectedly", provider.name, entry.name, exc_info=err)
+    return CompanyOutcome(entry.name, "error", provider.name, 0, f"{type(err).__name__}: {err}")
+
+
 def _roll_up(companies: Sequence[CompanyOutcome], jobspy: Sequence[SiteOutcome]) -> str:
     if any(c.status in _PARTIAL_TRIGGERS for c in companies):
         return "partial"
@@ -118,12 +163,19 @@ def run(
     rng: random.Random | None = None,
     seen: Callable[[str], bool] | None = None,
     eligible: Callable[[list[Job]], int] | None = None,
+    seen_many: Callable[[list[str]], set[str]] | None = None,
+    clock: Callable[[], float] = time.monotonic,
 ) -> RunReport:
     """Fetch every company in ``companies`` (the caller picks them: the CLI reads the ``boards`` table, D2.1) +
     the JobSpy batch, handing each batch to ``sink.consume()``. Fail-soft per company and per JobSpy site (sec. 5/9) --
     only a config error or a genuine bug raises out of this function. ``seen`` (is a job id already stored?) goes
     into the fetch context for hydrating providers (D3.4); ``eligible`` counts a board's India/remote-eligible
-    postings for its cadence (D2.3), injected so the orchestrator stays filter-free.
+    postings for its cadence (D2.3), injected so the orchestrator stays filter-free. ``seen_many`` answers ``seen`` for
+    a whole listing at once (the belt asks it once a chunked board's listing is read); left out, ``seen`` is asked per
+    job.
+
+    With more than one worker the run is the conveyor belt (``belt.py``): every due board's first task laid out before
+    the start, JobSpy among them at minute 0, big boards read as chunks, each platform held to its share.
     """
     rng = rng or random.Random()
     owns_ctx = ctx is None
@@ -163,25 +215,13 @@ def run(
                 return None, None, CompanyOutcome(entry.name, "unroutable", None, 0)
             try:
                 return provider, provider.fetch(entry, ctx), None
-            except Blocked as err:
-                return provider, None, CompanyOutcome(entry.name, "blocked", provider.name, 0, str(err))
-            except HTTPError as err:
-                # A definitive 404 means the board is gone/renamed -- common with a
-                # generated company list built from a days-old slug snapshot. Benign,
-                # like 'unroutable': never a PARTIAL trigger. Any other HTTP status
-                # (403 without a block marker, 5xx that isn't retried here, etc.) is
-                # still a real 'error'.
-                status = "gone" if err.status == 404 else "error"
-                return provider, None, CompanyOutcome(entry.name, status, provider.name, 0, str(err))
-            except FetchError as err:
-                return provider, None, CompanyOutcome(entry.name, "error", provider.name, 0, str(err))
             except Exception as err:  # noqa: BLE001 -- a provider bug must not kill the run
-                log.exception("orchestrator: %s.fetch(%r) raised unexpectedly", provider.name, entry.name)
-                outcome = CompanyOutcome(entry.name, "error", provider.name, 0, f"{type(err).__name__}: {err}")
-                return provider, None, outcome
+                return provider, None, _outcome_of(err, entry, provider)
 
         by_index: dict[int, CompanyOutcome] = {}
         unroutable: list[str] = []
+        jobspy_outcomes: tuple[SiteOutcome, ...] = ()
+        jobspy_ran = False  # the belt ran JobSpy among the boards
         trips: queue.SimpleQueue = queue.SimpleQueue()
 
         def record(i: int, entry: CompanyEntry, result: tuple) -> None:
@@ -235,31 +275,30 @@ def run(
                     sleep(config.pacing.between_companies + rng.random() * config.pacing.jitter)
                 record(i, entry, fetch(entry))
         else:
-            # D4.1: a pool of threads fetches; this thread alone writes (sink, checkpoints, cooldowns). The HTTP
-            # client's per-host slots (D4.2) pace a host, so there is no pause between companies.
-            # A provider paced as one site (``boards_at_once``: Eightfold, Phenom) gets a lane of its own that
-            # many workers wide, beside the pool: in the pool its boards, listed together, would hold every
-            # worker waiting on the one pace (crawl 2, 2026-11-05: 16 Eightfold boards, nothing else, for an hour).
+            # D4.1: worker threads fetch; this thread alone writes (sink, checkpoints, cooldowns).
             ctx.http.cooldowns.on_trip = lambda key, until, reason: trips.put((key, until, reason))
-            pools = {None: ThreadPoolExecutor(max_workers=workers, thread_name_prefix="fetch")}
-            futures = {}
             try:
-                for i, entry in todo:
-                    provider = route(entry, registry)
-                    lane = getattr(provider, "boards_at_once", None) if provider is not None else None
-                    key = provider.name if lane else None
-                    if key not in pools:
-                        pools[key] = ThreadPoolExecutor(max_workers=lane, thread_name_prefix=f"fetch-{key}")
-                    futures[pools[key].submit(fetch, entry)] = (i, entry)
-                for future in as_completed(futures):
-                    i, entry = futures[future]
-                    record(i, entry, future.result())
+                jobspy_result = _run_belt(
+                    config, todo, ctx, registry, workers, record,
+                    None if jobspy_done else (jobspy_source or JobSpySource(config.jobspy)),
+                    seen, seen_many, sleep, clock,
+                )  # fmt: skip
             finally:
-                for pool in pools.values():
-                    pool.shutdown(wait=True, cancel_futures=True)
                 ctx.http.cooldowns.on_trip = run_store.save_cooldown
                 while not trips.empty():
                     run_store.save_cooldown(*trips.get())
+            if jobspy_result is not None:
+                jobspy_ran = True
+                if isinstance(jobspy_result, BaseException):
+                    log.error("orchestrator: jobspy_source.fetch() raised", exc_info=jobspy_result)
+                    jobspy_outcomes = (
+                        SiteOutcome("jobspy", "error", 0, f"{type(jobspy_result).__name__}: {jobspy_result}"),
+                    )
+                else:
+                    sink.consume(jobspy_result.jobs)
+                    jobspy_outcomes = tuple(jobspy_result.outcomes)
+                    jobspy_done = True
+                    run_store.checkpoint(handle.run_id, companies_done=companies_done, jobspy_done=jobspy_done)
         outcomes = [by_index[i] for i in sorted(by_index)]  # the list's order, whatever order they finished in
 
         if unroutable and companies and len(unroutable) == len(companies):
@@ -268,8 +307,7 @@ def run(
                 len(companies),
             )
 
-        jobspy_outcomes: tuple[SiteOutcome, ...] = ()
-        if not jobspy_done:
+        if not jobspy_done and not jobspy_ran:
             source = jobspy_source or JobSpySource(config.jobspy)
             try:
                 result = source.fetch(ctx)
@@ -318,3 +356,217 @@ def run(
     finally:
         if owns_ctx:
             ctx.http.close()
+
+
+def _host_slots(http: Any, entry: CompanyEntry, provider: Provider | None) -> tuple[str | None, Callable[[str], int]]:
+    """The key of the host slots a board's requests take, and how to read a key's room: the HTTP client's own
+    (``slot_key``/``slot_cap``), so the belt never hands out a task whose host is full."""
+    url = provider.board_url(entry) if provider is not None else None
+    host = urlsplit(url).hostname if url else None
+    key_of = getattr(http, "slot_key", None)
+    cap = getattr(http, "slot_cap", None) or (lambda key: 2)
+    if host is None:
+        return None, cap
+    return (key_of(host) if key_of else host), cap
+
+
+def _run_belt(
+    config: RunConfig,
+    todo: list[tuple[int, CompanyEntry]],
+    ctx: FetchContext,
+    registry: Sequence[Provider],
+    workers: int,
+    record: Callable[[int, CompanyEntry, tuple], None],
+    jobspy: JobSpySource | None,
+    seen: Callable[[str], bool] | None,
+    seen_many: Callable[[list[str]], set[str]] | None,
+    sleep: Callable[[float], None],
+    clock: Callable[[], float],
+) -> Any:
+    """Run the boards (and JobSpy, when given) on the conveyor belt; each board is ``record``ed on this thread as it
+    completes. Returns JobSpy's result (or the exception it raised), ``None`` when it was not run."""
+    rules = config.belt
+    paces = {name: Pace(1.0 / rules.per_second(name)) for name in rules.platforms}
+    host_cap = getattr(ctx.http, "slot_cap", None) or (lambda key: 2)
+    belt = Belt({name: p.at_once for name, p in rules.platforms.items()}, host_cap)
+
+    boards: list[_Board] = []
+    for i, entry in todo:
+        provider = route(entry, registry)
+        line = provider.name if provider is not None and provider.name in rules.platforms else OTHER
+        host, _ = _host_slots(ctx.http, entry, provider)
+        board = _Board(i, entry, provider, ctx, 0.0, line, host)
+        board.ctx = replace(ctx, incomplete=board.notes.append, pace=paces[line].wait if line in paces else None)
+        boards.append(board)
+    width = {name: p.at_once for name, p in rules.platforms.items()}
+    estimates = [(b.line, float((b.entry.extra or {}).get("last_seconds") or _UNKNOWN_SECONDS), b) for b in boards]
+    for key, board in lay_out(estimates, width, workers):
+        board.key = key
+        kind = "list" if board.provider is not None and hasattr(board.provider, "list_chunk") else "board"
+        _put(belt, Task(kind, board.line, board.host, key, board=board))
+    if jobspy is not None:
+        belt.put(Task("jobspy", OTHER, None, -1.0, payload=jobspy))  # at minute 0, beside the boards
+
+    def stored(keys: list[str]) -> set[str]:
+        if seen_many is not None:
+            return seen_many(keys)
+        ask = seen or ctx.seen
+        return {k for k in keys if ask(k)}
+
+    def work(task: Task) -> tuple[str, Any, float]:
+        """On a worker: run one task. ``("ok", value, seconds)`` or ``("err", exception, seconds)``."""
+        started = time.monotonic()
+        try:
+            b = task.board
+            if task.kind == "jobspy":
+                value = task.payload.fetch(ctx)
+            elif task.kind == "board":
+                if b.provider is None:
+                    value = None
+                else:
+                    value = b.provider.fetch(b.entry, b.ctx)
+            elif task.kind == "list":
+                value = b.provider.list_chunk(b.entry, b.ctx, task.payload)
+            else:
+                value = _details(b, task.payload)
+            return "ok", value, time.monotonic() - started
+        except Exception as err:  # noqa: BLE001 -- a task's failure is its board's outcome, never the run's
+            return "err", err, time.monotonic() - started
+
+    def finish(b: _Board) -> None:
+        if b.failed is not None:
+            record(b.i, b.entry, (b.provider, None, b.failed, b.notes, b.seconds))
+        else:
+            record(b.i, b.entry, (b.provider, b.jobs, None, b.notes, b.seconds))
+
+    def fail(b: _Board, err: BaseException) -> None:
+        if b.failed is None:
+            b.failed = _outcome_of(err, b.entry, b.provider)
+
+    def listing_read(b: _Board) -> None:
+        """Every listing chunk is in: a second pass, or the details of the new postings, or the board is done."""
+        b.info["served"] = b.served
+        try:
+            more = list(b.provider.listed(b.entry, b.ctx, b.info, b.items))
+        except Exception as err:  # noqa: BLE001
+            fail(b, err)
+            finish(b)
+            return
+        if more:
+            for chunk in more:
+                _put(belt, Task("list", b.line, b.host, b.key, payload=chunk, board=b))
+            return
+        keys = list(b.items)
+        known = stored(keys)
+        new = []
+        for k in keys:
+            if k in known:
+                job = b.provider.job(b.entry, b.ctx, b.info, b.items[k], False)
+                if job is not None:
+                    b.jobs.append(job)
+            else:
+                new.append(b.items[k])
+        budget = _common.DETAIL_BUDGET
+        if len(new) > budget:
+            log.info("%s %s: %d new postings wait for the next run", b.provider.name, b.entry.name, len(new) - budget)
+            new = new[:budget]
+        for at in range(0, len(new), CHUNK):
+            _put(belt, Task("detail", b.line, b.host, b.key, payload=new[at : at + CHUNK], board=b))
+        if not new:
+            finish(b)
+
+    def handle(task: Task, status: str, value: Any, seconds: float) -> Any:
+        b = task.board
+        if task.kind == "jobspy":
+            return value
+        b.seconds += seconds
+        b.open -= 1
+        if task.kind == "board":
+            if status == "err":
+                result = (b.provider, None, _outcome_of(value, b.entry, b.provider), b.notes, b.seconds)
+            elif b.provider is None:
+                result = (None, None, CompanyOutcome(b.entry.name, "unroutable", None, 0), b.notes, b.seconds)
+            else:
+                result = (b.provider, value, None, b.notes, b.seconds)
+            record(b.i, b.entry, result)
+            return None
+        if status == "err":
+            fail(b, value)
+        elif task.kind == "list":
+            if task.payload is None:
+                b.info = dict(value.info or {})
+            for k, item in value.items.items():
+                b.items.setdefault(k, item)
+            b.served += value.served
+            if b.failed is None:
+                for chunk in value.more:
+                    _put(belt, Task("list", b.line, b.host, b.key, payload=chunk, board=b))
+        else:
+            b.jobs.extend(value)
+        if b.open == 0:
+            if b.failed is not None:
+                finish(b)
+            elif task.kind == "list":
+                listing_read(b)
+            else:
+                finish(b)
+        return None
+
+    jobspy_result: Any = None
+    pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="fetch")
+    running: dict[Any, Task] = {}
+    try:
+        while True:
+            now = clock()
+            while len(running) < workers:
+                task = belt.take(now)
+                if task is None:
+                    break
+                if task.board is not None and task.board.failed is not None:  # its board already failed
+                    belt.done(task)
+                    task.board.open -= 1
+                    if task.board.open == 0:
+                        finish(task.board)
+                    continue
+                running[pool.submit(work, task)] = task
+            if not running:
+                if not len(belt):
+                    break
+                wait_s = belt.next_ready_in(now)
+                if wait_s is None:  # tasks no rule will ever allow: a config error, not a reason to spin
+                    log.error("orchestrator: %d tasks left that no rule allows -- check belt.platforms", len(belt))
+                    break
+                sleep(wait_s)
+                continue
+            done, _ = wait_any(running, timeout=belt.next_ready_in(now), return_when=FIRST_COMPLETED)
+            for future in done:
+                task = running.pop(future)
+                belt.done(task)
+                status, value, seconds = future.result()
+                got = handle(task, status, value, seconds)
+                if task.kind == "jobspy":
+                    jobspy_result = got if status == "ok" else value
+    finally:
+        pool.shutdown(wait=True, cancel_futures=True)
+    return jobspy_result
+
+
+def _put(belt: Belt, task: Task) -> None:
+    if task.board is not None:
+        task.board.open += 1
+    belt.put(task)
+
+
+def _details(b: _Board, items: list) -> list[Job]:
+    """On a worker: a chunk of a board's new postings, each with its detail. A detail that fails is skipped: still
+    new, it is read next run (D3.4)."""
+    jobs = []
+    for item in items:
+        try:
+            job = b.provider.job(b.entry, b.ctx, b.info, item, True)
+        except FetchError as err:
+            log.info("%s %s: a detail failed: %s", b.provider.name, b.entry.name, err)
+            continue
+        if job is not None:
+            jobs.append(job)
+    return jobs
