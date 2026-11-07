@@ -27,6 +27,7 @@ belt:                         # the conveyor belt (owner's plan, 2026-11-07): ea
   fill: 0.6                   # measured limit, so the limit is never reached and nothing is refused
   tries: 4                    # a refused task goes back on the belt, at most this many times in a run
   watchdog_minutes: 10        # warn when no task has finished for this long
+  status_minutes: 10          # a status line in the crawl log: in flight per platform, left, saves waiting
   platforms:                  # limit: requests/s where refusals start; at_once: its tasks in flight together
     workday: {limit: 10.0, at_once: 8}    # crawl 2: many 429s at ~15/s, a few at ~10, none at ~6
     eightfold: {limit: 1.0, at_once: 3}   # ~1/s for every tenant (freehire; 405s unpaced); ~3.8 s a request

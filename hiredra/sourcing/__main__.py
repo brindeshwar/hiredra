@@ -20,6 +20,7 @@ closes it once in a ``finally``. ``ScoringSink`` and ``PgRunStore`` share it.
 from __future__ import annotations
 
 import argparse
+import logging
 import sys
 
 # Job titles/companies/detail strings can carry arbitrary Unicode; a Windows
@@ -105,8 +106,20 @@ def _cmd_crawl(args: argparse.Namespace) -> int:
         return 1
 
 
+def _show_status() -> None:
+    """The belt's status line in the crawl's output (stderr, unbuffered), and nothing else of the INFO chatter."""
+    status = logging.getLogger("hiredra.sourcing.status")
+    if not status.handlers:
+        handler = logging.StreamHandler(sys.stderr)
+        handler.setFormatter(logging.Formatter("%(asctime)s %(message)s", "%H:%M:%S"))
+        status.addHandler(handler)
+        status.setLevel(logging.INFO)
+        status.propagate = False
+
+
 def _cmd_run(args: argparse.Namespace, *, due_only: bool = False) -> int:
     config = load_run_config(args.config)
+    _show_status()
     funnel = load_filter_config()
     conn = db.connect(args.db)
     # ``seen`` is asked from the fetch workers (D4.1): with more than one, it gets a connection of its own, one
@@ -117,6 +130,10 @@ def _cmd_run(args: argparse.Namespace, *, due_only: bool = False) -> int:
     def seen(job_id: str) -> bool:
         with seen_lock:
             return db.job_stored(seen_conn, job_id)
+
+    def stored_many(keys: list[str]) -> set[str]:
+        with seen_lock:
+            return db.jobs_stored(seen_conn, keys)
 
     try:
         db.init_db(conn)
@@ -132,7 +149,7 @@ def _cmd_run(args: argparse.Namespace, *, due_only: bool = False) -> int:
                 run_store=run_store,
                 resume=args.resume,
                 seen=seen,
-                seen_many=lambda keys: db.jobs_stored(conn, keys),  # asked on the main thread, on the run's connection
+                seen_many=lambda keys: stored_many(keys),  # the dispatcher's question, never on the writer's connection
                 eligible=lambda jobs: sum(_known_eligible(j, funnel) for j in jobs),
             )
         except KeyboardInterrupt:

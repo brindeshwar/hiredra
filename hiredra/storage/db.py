@@ -686,6 +686,31 @@ def touch_job(conn: psycopg.Connection, job_id: str, *, run_id: str | None = Non
         _touch(conn, _id(conn, job_id), detail=detail, now=now)
 
 
+def touch_jobs(conn: psycopg.Connection, job_ids: Sequence[str], *, run_id: str | None = None) -> int:
+    """``touch_job`` for a whole board's re-sighted jobs in two statements, not four round trips each (crawl 3,
+    2026-11-07: 741,900 re-sightings a crawl, one by one, kept the run's one writer busy for most of an hour). Each
+    job still gets its ``seen`` event, noting ``reopened`` when it had been closed. Returns how many were touched;
+    an id not in the store is skipped."""
+    ids = list(dict.fromkeys(job_ids))
+    if not ids:
+        return 0
+    now = _now()
+    detail = "re-sighted (dedup match)" + (f" [{run_id}]" if run_id else "")
+    touched = 0
+    for at in range(0, len(ids), 5_000):
+        with conn.transaction():
+            rows = conn.execute(
+                "WITH old AS (SELECT id, closed_at IS NOT NULL AS was_closed FROM jobs WHERE job_key = ANY(%s)"
+                " FOR UPDATE), upd AS (UPDATE jobs j SET last_seen_at = %s, updated_at = %s, closed_at = NULL"
+                " FROM old WHERE j.id = old.id RETURNING j.id)"
+                " INSERT INTO job_events (job_id, kind, detail, at)"
+                " SELECT id, 'seen', CASE WHEN was_closed THEN %s ELSE %s END, %s FROM old RETURNING job_id",
+                (ids[at : at + 5_000], now, now, f"{detail}; reopened", detail, now),
+            ).fetchall()
+            touched += len(rows)
+    return touched
+
+
 def _touch(conn: psycopg.Connection, jid: int, *, detail: str, now: str) -> None:
     """A sighting: ``last_seen_at`` moves, and a job closed earlier (D5.3) is open again -- listed, so offered."""
     was_closed = conn.execute("SELECT closed_at IS NOT NULL FROM jobs WHERE id = %s", (jid,)).fetchone()[0]

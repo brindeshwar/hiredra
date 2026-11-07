@@ -12,6 +12,7 @@ import json
 import logging
 import queue
 import random
+import threading
 import time
 from concurrent.futures import FIRST_COMPLETED, ThreadPoolExecutor
 from concurrent.futures import wait as wait_any
@@ -34,6 +35,8 @@ from hiredra.sourcing.runstore import BoardResult, RunStore
 from hiredra.sourcing.sink import Sink, SinkStats
 
 log = logging.getLogger("hiredra.sourcing.orchestrator")
+#: The belt's status line, every ``belt.status_minutes`` (the CLI shows it in the crawl log).
+status_log = logging.getLogger("hiredra.sourcing.status")
 
 
 def _now_iso() -> str:
@@ -116,6 +119,49 @@ def can_wait(err: BaseException) -> bool:
     if isinstance(err, (Blocked, TransientError)):
         return True
     return isinstance(err, HTTPError) and err.status == 408
+
+
+class _Writer:
+    """The run's one database writer, on a thread of its own (crawl 3, 2026-11-07): the belt's dispatcher must never
+    wait on the database, or every worker that finishes waits with it -- saving a board, its re-sightings and the
+    run's progress took most of an hour of a crawl, and the store's first read 50 s. Writes run in order; the first
+    that raises stops the writer, and the dispatcher raises it at its next look (``check``)."""
+
+    def __init__(self) -> None:
+        self._jobs: queue.SimpleQueue = queue.SimpleQueue()
+        self.error: BaseException | None = None
+        self._thread = threading.Thread(target=self._loop, name="writer", daemon=True)
+        self._thread.start()
+
+    def _loop(self) -> None:
+        while (job := self._jobs.get()) is not None:
+            if self.error is None:
+                try:
+                    job()
+                except BaseException as err:  # noqa: BLE001 -- handed to the dispatcher, which raises it
+                    self.error = err
+
+    def submit(self, job: Callable[[], None]) -> None:
+        self._jobs.put(job)
+
+    def pending(self) -> int:
+        """Writes queued and not yet done."""
+        return self._jobs.qsize()
+
+    def check(self) -> None:
+        if self.error is not None:
+            raise self.error
+
+    def close(self) -> None:
+        """Every write submitted is done (or the writer has failed), then the thread ends; raises its error."""
+        self._jobs.put(None)
+        self._thread.join()
+        self.check()
+
+
+#: How often the belt saves the run's progress (seconds): the list of boards done grows to ~14,000 names, so saving it
+#: after every board wrote gigabytes over a crawl. A stop or a crash loses at most this long of boards to ``--resume``.
+_CHECKPOINT_EVERY_S = 30.0
 
 
 class _Interrupted(Exception):
@@ -244,9 +290,17 @@ def run(
         jobspy_ran = False  # the belt ran JobSpy among the boards
         trips: queue.SimpleQueue = queue.SimpleQueue()
 
+        last_checkpoint = [0.0]
+        throttle = config.pacing.workers > 1  # the belt saves its progress every _CHECKPOINT_EVERY_S, not per board
+
+        def checkpoint(force: bool = False) -> None:
+            if force or not throttle or clock() - last_checkpoint[0] >= _CHECKPOINT_EVERY_S:
+                run_store.checkpoint(handle.run_id, companies_done=companies_done, jobspy_done=jobspy_done)
+                last_checkpoint[0] = clock()
+
         def record(i: int, entry: CompanyEntry, result: tuple) -> None:
-            """On the main thread: the board's jobs to the sink, its outcome and lifecycle (D5.3-D5.5), the
-            checkpoint (per-company persist)."""
+            """On the one writer (the main thread, or the belt's writer thread): the board's jobs to the sink, its
+            outcome and lifecycle (D5.3-D5.5), the checkpoint (per-company persist)."""
             provider, jobs_c, outcome, notes, seconds = result
             before = sink.stats()
             n_eligible = eligible(jobs_c) if eligible is not None and outcome is None else 0
@@ -279,7 +333,7 @@ def run(
             while not trips.empty():  # cooldowns tripped on worker threads, written here (one connection)
                 run_store.save_cooldown(*trips.get())
             companies_done.add(progress_key(entry))
-            run_store.checkpoint(handle.run_id, companies_done=companies_done, jobspy_done=jobspy_done)
+            checkpoint()
 
         todo: list[tuple[int, CompanyEntry]] = []
         for i, entry in enumerate(companies):
@@ -297,16 +351,20 @@ def run(
         else:
             # D4.1: worker threads fetch; this thread alone writes (sink, checkpoints, cooldowns).
             ctx.http.cooldowns.on_trip = lambda key, until, reason: trips.put((key, until, reason))
+            writer = _Writer()
             try:
                 jobspy_result = _run_belt(
-                    config, todo, ctx, registry, workers, record,
+                    config, todo, ctx, registry, workers,
+                    lambda i, entry, result: writer.submit(lambda: record(i, entry, result)),
                     None if jobspy_done else (jobspy_source or JobSpySource(config.jobspy)),
-                    seen, seen_many, sleep, clock,
+                    seen, seen_many, sleep, clock, writer.check, writer.pending,
                 )  # fmt: skip
             finally:
+                writer.close()  # the boards finished are saved, a stop's too
                 ctx.http.cooldowns.on_trip = run_store.save_cooldown
                 while not trips.empty():
                     run_store.save_cooldown(*trips.get())
+                checkpoint(force=True)
             if jobspy_result is not None:
                 jobspy_ran = True
                 if isinstance(jobspy_result, BaseException):
@@ -402,10 +460,20 @@ def _run_belt(
     seen_many: Callable[[list[str]], set[str]] | None,
     sleep: Callable[[float], None],
     clock: Callable[[], float],
+    check: Callable[[], None] = lambda: None,
+    pending_writes: Callable[[], int] = lambda: 0,
 ) -> Any:
-    """Run the boards (and JobSpy, when given) on the conveyor belt; each board is ``record``ed on this thread as it
-    completes. Returns JobSpy's result (or the exception it raised), ``None`` when it was not run."""
+    """Run the boards (and JobSpy, when given) on the conveyor belt; each board is handed to ``record`` as it completes
+    (the writer's, never waited on). ``check`` raises the writer's failure. Returns JobSpy's result (or the exception it
+    raised), ``None`` when it was not run."""
     rules = config.belt
+    finished = [0]  # boards handed to the writer
+    hand_over = record
+
+    def record(i: int, entry: CompanyEntry, result: tuple) -> None:
+        finished[0] += 1
+        hand_over(i, entry, result)
+
     paces = {name: Pace(1.0 / rules.per_second(name)) for name in rules.platforms}
     host_cap = getattr(ctx.http, "slot_cap", None) or (lambda key: 2)
     belt = Belt({name: p.at_once for name, p in rules.platforms.items()}, host_cap)
@@ -559,7 +627,19 @@ def _run_belt(
 
     jobspy_result: Any = None
     watchdog = rules.watchdog_minutes * 60.0
-    last_done = warned = clock()
+    last_done = warned = started = clock()
+    status_every = rules.status_minutes * 60.0
+    next_status = started + status_every
+    total = len(boards)
+
+    def status(now: float) -> None:
+        """One line: what is in flight per platform, what is left, what is saved -- so a fault shows while it runs."""
+        lines = " ".join(f"{name or 'other'}={n}" for name, n in sorted(belt.in_line.items()) if n) or "none"
+        status_log.info(
+            "status %3.0f min | boards done %d of %d | in flight %d: %s | on the belt %d, put back %d | saves waiting %d",
+            (now - started) / 60, finished[0], total, len(running), lines, len(belt), belt.waiting, pending_writes(),
+        )  # fmt: skip
+
     pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="fetch")
     running: dict[Any, Task] = {}
 
@@ -578,6 +658,7 @@ def _run_belt(
 
     try:
         while True:
+            check()
             now = clock()
             while len(running) < workers:
                 task = belt.take(now)
@@ -597,15 +678,24 @@ def _run_belt(
                 if wait_s is None:  # tasks no rule will ever allow: a config error, not a reason to spin
                     log.error("orchestrator: %d tasks left that no rule allows -- check belt.platforms", len(belt))
                     break
+                # Only put-back tasks are left (a host cooling down, Workday's maintenance): a planned wait, not a stall.
+                # Sleep in steps so the status line goes on, and the watchdog counts from the wait's end.
                 log.info("orchestrator: only put-back tasks left; the next in %.0fs", wait_s)
-                sleep(wait_s)
+                sleep(max(min(wait_s, next_status - now), 0.05))
+                now = last_done = warned = clock()
+                if now >= next_status:
+                    status(now)
+                    next_status = now + status_every
                 continue
             ready = belt.next_ready_in(now)
-            check = max(max(last_done, warned) + watchdog - now, 0.05)  # the watchdog's next look
-            timeout = min(check, ready) if ready is not None else check
+            look = max(max(last_done, warned) + watchdog - now, 0.05)  # the watchdog's next look
+            timeout = min(x for x in (look, ready, max(next_status - now, 0.05)) if x is not None)
             done, _ = wait_any(running, timeout=timeout, return_when=FIRST_COMPLETED)
             settle(done)
             now = clock()
+            if now >= next_status:
+                status(now)
+                next_status = now + status_every
             if not done and now - last_done >= watchdog and now - warned >= watchdog:
                 warned = now
                 stuck = ", ".join(f"{t.kind} {t.board.entry.name if t.board else 'jobspy'}" for t in running.values())

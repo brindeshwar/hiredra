@@ -241,3 +241,20 @@ def test_a_runs_boards_fall_due_together_counted_from_the_runs_start(conn):
     board = _board(conn, status="active")
     db.record_board_run(conn, "R1", BoardResult(board_id=board, status="ok", complete=True, jobs=1))
     assert _hours_from_now(conn, "b.next_due_at", board) == 15  # 20 h after the run began, not after this board
+
+
+def test_a_boards_re_sightings_are_touched_in_one_batch_each_with_its_event(conn):
+    board = _board(conn, status="active")
+    _job(conn, "lever:open", board)
+    _job(conn, "lever:closed", board, seen_hours_ago=100)
+    conn.execute("UPDATE jobs SET closed_at = now() WHERE job_key = 'lever:closed'")
+    assert db.touch_jobs(conn, ["lever:open", "lever:closed", "lever:unknown", "lever:open"], run_id="R1") == 2
+    assert _state(conn, "lever:closed") is False  # listed again: open again
+    events = dict(conn.execute(
+        "SELECT j.job_key, e.detail FROM job_events e JOIN jobs j ON j.id = e.job_id WHERE e.kind = 'seen' AND e.detail LIKE 're-sighted%%'"
+    ).fetchall())  # fmt: skip
+    assert events == {
+        "lever:open": "re-sighted (dedup match) [R1]",
+        "lever:closed": "re-sighted (dedup match) [R1]; reopened",
+    }
+    assert db.touch_jobs(conn, []) == 0

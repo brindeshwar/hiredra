@@ -73,3 +73,25 @@ def test_a_platform_below_its_share_is_served_before_tasks_placed_earlier_on_the
     belt.put_all([Task("board", OTHER, f"o{i}", 10.0 + i, payload="other") for i in range(10)])
     taken = [belt.take().payload for _ in range(5)]
     assert taken == ["acc", "acc", "ck", "other", "other"]  # Workday's free places first, then the rest
+
+
+def test_a_full_host_with_hundreds_of_tasks_never_hides_the_boards_behind_it():
+    # crawl 3 (2026-11-07): Accenture's and Circle K's chunks filled a look-ahead of 512, and Workday ran 2 boards
+    belt = _belt(at_once={"workday": 8})
+    belt.put_all([Task("list", "workday", "accenture", 0.0, payload="acc") for _ in range(400)])
+    belt.put_all([Task("list", "workday", "circlek", 1.0, payload="ck") for _ in range(400)])
+    belt.put_all([Task("list", "workday", f"wd{i}", 2.0 + i, payload=f"wd{i}") for i in range(10)])
+    taken = [belt.take().payload for _ in range(8)]
+    assert taken == ["acc", "acc", "ck", "ck", "wd0", "wd1", "wd2", "wd3"]  # Workday's 8, past the two full hosts
+    assert belt.take() is None and len(belt) == 802
+
+
+def test_a_host_set_aside_as_full_comes_back_when_its_task_is_done():
+    belt = _belt()
+    first = [Task("list", OTHER, "h", float(i), payload=f"h{i}") for i in range(3)]
+    belt.put_all(first)
+    belt.put(Task("list", OTHER, "z", 9.0, payload="z"))
+    a, b, z = belt.take(), belt.take(), belt.take()
+    assert [a.payload, b.payload, z.payload] == ["h0", "h1", "z"] and belt.take() is None  # h is full: set aside
+    belt.done(a)
+    assert belt.take().payload == "h2" and len(belt) == 0
