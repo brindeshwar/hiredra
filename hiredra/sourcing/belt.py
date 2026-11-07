@@ -29,9 +29,6 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
 
-#: How far down one platform's line ``take`` looks for a task whose host has room, before giving that line up for
-#: the moment (a big board's chunks sit together; its host allows two at once).
-_LOOK_AHEAD = 512
 #: The line of every task with no platform rule.
 OTHER = ""
 
@@ -82,22 +79,37 @@ class Belt:
     def __init__(self, at_once: Mapping[str, int], host_cap: Callable[[str], int]) -> None:
         self._at_once = dict(at_once)
         self._host_cap = host_cap
-        self._lines: dict[str, list[tuple[float, int, Task]]] = defaultdict(list)
+        # Each line's tasks are kept per host, in belt order, with a heap of each host's first task: a host that is
+        # full is set aside in one step, however many of its tasks wait (crawl 3, 2026-11-07: Accenture's and Circle
+        # K's hundreds of chunks filled a look-ahead of 512 tasks, so Workday saw no other board and ran 2 boards at a
+        # time). A set-aside host's first task goes back on its line's heap when the host has room again.
+        self._hosts: dict[str, dict[str | None, list[tuple[float, int, Task]]]] = defaultdict(dict)
+        self._heads: dict[str, list[tuple[float, int, str | None]]] = defaultdict(list)
+        self._full: dict[str, set[str]] = defaultdict(set)  # host -> lines whose first task of it was set aside
         self._waiting: list[tuple[float, int, Task]] = []  # put back, by not_before
         self._seq = itertools.count()
+        self._count = 0  # tasks on the belt, set aside included
         self.in_line: dict[str, int] = defaultdict(int)  # in flight, per line
         self.in_host: dict[str, int] = defaultdict(int)  # in flight, per host key
 
     def __len__(self) -> int:
-        return sum(len(line) for line in self._lines.values()) + len(self._waiting)
+        return self._count
 
     def put(self, task: Task, now: float = 0.0) -> None:
         """On the belt at its place; or set aside until its ``not_before`` when that is still to come."""
-        item = (task.key, next(self._seq), task)
+        self._count += 1
+        seq = next(self._seq)
         if task.not_before > now:
-            heapq.heappush(self._waiting, (task.not_before, item[1], task))
+            heapq.heappush(self._waiting, (task.not_before, seq, task))
         else:
-            bisect.insort(self._lines[task.line], item)
+            self._place(task, seq)
+
+    def _place(self, task: Task, seq: int) -> None:
+        queue = self._hosts[task.line].setdefault(task.host, [])
+        item = (task.key, seq, task)
+        bisect.insort(queue, item)
+        if queue[0] is item:  # the host's new first task
+            heapq.heappush(self._heads[task.line], (task.key, seq, task.host))
 
     def put_all(self, tasks: Iterable[Task], now: float = 0.0) -> None:
         for task in tasks:
@@ -106,41 +118,62 @@ class Belt:
     def take(self, now: float = 0.0) -> Task | None:
         """The first task the rules allow, now marked in flight; ``None`` when none is allowed at the moment."""
         while self._waiting and self._waiting[0][0] <= now:
-            _, _, task = heapq.heappop(self._waiting)
-            bisect.insort(self._lines[task.line], (task.key, next(self._seq), task))
+            _, seq, task = heapq.heappop(self._waiting)
+            self._place(task, seq)
         # A platform held to a rate is what the run's length hangs on, so a platform below its share is served
         # first; the other lines fill the workers left. Placing tasks by key alone left Workday half-empty: its next
         # board's key waits behind Accenture's estimate, though a board runs only 2 chunks at once (crawl 3, 2026-11-07).
         best = self._first(lambda name: name in self._at_once) or self._first(lambda name: name not in self._at_once)
         if best is None:
             return None
-        name, i = best
-        _, _, task = self._lines[name].pop(i)
-        self.in_line[task.line] += 1
-        if task.host is not None:
-            self.in_host[task.host] += 1
+        line, host = best
+        heapq.heappop(self._heads[line])
+        queue = self._hosts[line][host]
+        _, _, task = queue.pop(0)
+        if queue:
+            heapq.heappush(self._heads[line], (queue[0][0], queue[0][1], host))
+        else:
+            del self._hosts[line][host]
+        self._count -= 1
+        self.in_line[line] += 1
+        if host is not None:
+            self.in_host[host] += 1
         return task
 
-    def _first(self, wanted: Callable[[str], bool]) -> tuple[str, int] | None:
-        """Among the wanted lines with room, the allowed task with the smallest key: ``(line, index)``."""
-        best: tuple[str, int] | None = None
+    def _first(self, wanted: Callable[[str], bool]) -> tuple[str, str | None] | None:
+        """Among the wanted lines with room, the line and host of the allowed task with the smallest key. A host found
+        full is set aside, so it is never looked at again until it has room."""
+        best: tuple[str, str | None] | None = None
         best_key: tuple[float, int] | None = None
-        for name, line in self._lines.items():
-            if not line or not wanted(name) or self.in_line[name] >= self._at_once.get(name, 1 << 30):
+        for line, heads in self._heads.items():
+            if not wanted(line) or self.in_line[line] >= self._at_once.get(line, 1 << 30):
                 continue
-            for i in range(min(len(line), _LOOK_AHEAD)):
-                key, seq, task = line[i]
-                if task.host is None or self.in_host[task.host] < self._host_cap(task.host):
-                    if best_key is None or (key, seq) < best_key:
-                        best, best_key = (name, i), (key, seq)
-                    break
+            while heads:
+                key, seq, host = heads[0]
+                queue = self._hosts[line].get(host)
+                if not queue or (queue[0][0], queue[0][1]) != (key, seq):  # stale: no longer the host's first
+                    heapq.heappop(heads)
+                    continue
+                if host is not None and self.in_host[host] >= self._host_cap(host):
+                    heapq.heappop(heads)
+                    self._full[host].add(line)
+                    continue
+                if best_key is None or (key, seq) < best_key:
+                    best, best_key = (line, host), (key, seq)
+                break
         return best
 
     def done(self, task: Task) -> None:
-        """A task taken earlier has finished (or failed): its platform's and host's places are free."""
+        """A task taken earlier has finished (or failed): its platform's and host's places are free, and a host set
+        aside as full comes back to its lines."""
         self.in_line[task.line] -= 1
-        if task.host is not None:
-            self.in_host[task.host] -= 1
+        if task.host is None:
+            return
+        self.in_host[task.host] -= 1
+        for line in self._full.pop(task.host, ()):
+            queue = self._hosts[line].get(task.host)
+            if queue:
+                heapq.heappush(self._heads[line], (queue[0][0], queue[0][1], task.host))
 
     def next_ready_in(self, now: float) -> float | None:
         """Seconds until the next set-aside task may run, ``None`` when none is set aside."""
