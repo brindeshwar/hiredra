@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from html import unescape
 
 from hiredra.sourcing._html import html_to_text
@@ -19,11 +19,13 @@ from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
 from hiredra.sourcing.providers._common import (
     DETAIL_BUDGET,
+    Listed,
     assert_allowed_url,
     clean,
-    hydrate,
     infer_remote,
     iso_date,
+    page_ranges,
+    read_board,
     work_mode,
 )
 
@@ -105,46 +107,77 @@ class OracleProvider:
 
     def fetch(self, entry: CompanyEntry, ctx: FetchContext) -> list[Job]:
         board = parse_board((entry.extra or {}).get("slug") or "")
-        allowed = frozenset({board.host})
+        return read_board(self, entry, ctx, budget=DETAIL_BUDGET, label=f"oracle {board.host}/{board.site}")
 
-        def get(url: str) -> dict:
-            assert_allowed_url(url, allowed, self.name)
-            data = ctx.http.get_json(url, timeout=_TIMEOUT_S)
-            return data if isinstance(data, dict) else {}
+    def list_chunk(self, entry: CompanyEntry, ctx: FetchContext, chunk: dict | None) -> Listed:
+        board = parse_board((entry.extra or {}).get("slug") or "")
+        got = read_chunk(lambda url: _get(ctx, board, url), board, chunk)
+        return replace(got, items={f"oracle:{board.host}:{r['Id']}": r for r in got.items.values()})
 
-        def detail(req: dict) -> Job | None:
-            items = get(detail_url(board, req["Id"])).get("items") or []
-            return to_job(entry.name, board, req, items[0] if items and isinstance(items[0], dict) else None)
+    def listed(self, entry: CompanyEntry, ctx: FetchContext, info: dict, items: dict) -> tuple:
+        """A list that stopped serving before its total (a huge site) saw part of the board."""
+        served, total = info.get("served", 0), info.get("total", 0)
+        if served and served < total:
+            ctx.incomplete(f"{served} of {total} requisitions served")
+        return ()
 
-        return hydrate(
-            list_requisitions(get, board, short=ctx.incomplete),
-            key=lambda req: f"oracle:{board.host}:{req['Id']}",
-            seen=ctx.seen,
-            listing=lambda req: to_job(entry.name, board, req, {}),
-            detail=detail,
-            budget=DETAIL_BUDGET,
-            label=f"oracle {board.host}/{board.site}",
-        )
+    def job(self, entry: CompanyEntry, ctx: FetchContext, info: dict, item: dict, detail: bool) -> Job | None:
+        board = parse_board((entry.extra or {}).get("slug") or "")
+        if not detail:
+            return to_job(entry.name, board, item, {})
+        items = _get(ctx, board, detail_url(board, item["Id"])).get("items") or []
+        return to_job(entry.name, board, item, items[0] if items and isinstance(items[0], dict) else None)
+
+
+def _get(ctx: FetchContext, board: Board, url: str) -> dict:
+    assert_allowed_url(url, frozenset({board.host}), "oracle")
+    if ctx.pace is not None:
+        ctx.pace()
+    data = ctx.http.get_json(url, timeout=_TIMEOUT_S)
+    return data if isinstance(data, dict) else {}
+
+
+def _requisitions(page_body: dict) -> tuple[list[dict], int]:
+    """A list page's requisitions and the total it states. The list nests under ``items[0]``; the ``expand`` keeps
+    ``requisitionList`` filled."""
+    items = page_body.get("items") or []
+    page = items[0] if items and isinstance(items[0], dict) else {}
+    reqs = [r for r in page.get("requisitionList") or () if isinstance(r, dict) and r.get("Id")]
+    return reqs, int(page.get("TotalJobsCount") or 0)
+
+
+def read_chunk(get: Callable[[str], dict], board: Board, chunk: dict | None) -> Listed:
+    """One chunk of the requisition list, keyed by id: ``None`` is the first page, which states the total and plans the
+    rest as page ranges (``{"offset", "end"}``); a range pages until its end or an empty page."""
+    if chunk is None:
+        reqs, total = _requisitions(get(list_url(board, 0)))
+        more = tuple({"offset": a, "end": b} for a, b in page_ranges(len(reqs), total, PAGE)) if reqs else ()
+        return Listed({r["Id"]: r for r in reqs}, more=more, served=len(reqs), info={"total": total})
+    rows: list[dict] = []
+    offset = chunk["offset"]
+    while offset < chunk["end"]:
+        reqs, _ = _requisitions(get(list_url(board, offset)))
+        if not reqs:
+            break
+        rows += reqs
+        offset += len(reqs)
+    return Listed({r["Id"]: r for r in rows}, served=len(rows))
 
 
 def list_requisitions(get, board: Board, short: Callable[[str], None] = lambda reason: None) -> list[dict]:  # noqa: ANN001
-    """Page the requisition list until a page is empty or ``TotalJobsCount`` is reached. The list nests under
-    ``items[0]``; the ``expand`` keeps ``requisitionList`` filled. An empty page before the total (the list stops
-    serving: a huge site) is reported to ``short``: the crawl saw part of the board."""
-    out: list[dict] = []
-    total = 0
-    while True:
-        items = get(list_url(board, len(out))).get("items") or []
-        page = items[0] if items and isinstance(items[0], dict) else {}
-        reqs = [r for r in page.get("requisitionList") or () if isinstance(r, dict) and r.get("Id")]
-        if not reqs:
-            if out and len(out) < total:
-                short(f"{len(out)} of {total} requisitions served")
-            return out
-        out += reqs
-        total = int(page.get("TotalJobsCount") or 0)
-        if len(out) >= total:
-            return out
+    """Every requisition, the chunks read one after another; a list that stops serving before its total (a huge site)
+    is reported to ``short``: the crawl saw part of the board."""
+    first = read_chunk(get, board, None)
+    out, served = dict(first.items), first.served
+    for chunk in first.more:
+        got = read_chunk(get, board, chunk)
+        served += got.served
+        for key, req in got.items.items():
+            out.setdefault(key, req)
+    total = (first.info or {}).get("total", 0)
+    if served and served < total:
+        short(f"{served} of {total} requisitions served")
+    return list(out.values())
 
 
 def to_job(company: str, board: Board, req: dict, detail: dict | None) -> Job | None:

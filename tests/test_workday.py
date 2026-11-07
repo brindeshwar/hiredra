@@ -91,10 +91,11 @@ def test_pages_by_the_first_pages_total():
         "total": total,
         "jobPostings": [{"title": i, "externalPath": f"/job/X/{i}"} for i in ids],
     }  # noqa: E731
-    pages = [page(4, *(f"P{i}" for i in range(20))), page(0, "Q1"), page(0, "Q2")]
+    pages = [page(4, *(f"P{i}" for i in range(20))), page(0, "Q1", "Q2"), page(0, "R")]
     pages[0]["total"] = 22
     http = _Http(pages=pages, details={"/job/X/": {"jobPostingInfo": {}}})
-    assert len(_fetch(http)) == 22  # later pages say total 0; the walk goes on to 22
+    jobs = _fetch(http)  # later pages say total 0; the walk goes on to 22, and no further
+    assert len(jobs) == 22 and "R" not in {j.title for j in jobs}
 
 
 def test_a_shared_host_board_spells_its_tenant_out():
@@ -214,3 +215,10 @@ def test_only_new_postings_cost_a_detail_and_a_run_fetches_at_most_the_budget(mo
     jobs = workday.WorkdayProvider().fetch(entry, ctx)
     assert asked == ["B", "C"]  # A is stored, D waits for the next run
     assert [(j.title, j.description) for j in jobs] == [("A", None), ("B", "new"), ("C", "new")]
+
+
+def test_a_big_board_is_planned_as_chunks_of_fifty_pages_after_its_first():
+    first = {"total": 2500, "jobPostings": [{"title": "A", "externalPath": f"/job/{i}"} for i in range(20)]}
+    got = workday.read_chunk(lambda body: first, None)
+    assert len(got.items) == 20 and got.served == 20
+    assert [(c["offset"], c["end"]) for c in got.more] == [(20, 1020), (1020, 2020), (2020, 2500)]

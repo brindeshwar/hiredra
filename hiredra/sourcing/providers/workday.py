@@ -8,7 +8,8 @@ posting's detail is one more GET (a hydrating source, D3.4).
 A board past 2,000 postings reports ``total: 2000`` and loops back to page one beyond it, so it is listed slice by
 slice through its own facets (job family, location, ...), the dimension whose largest value is smallest first,
 up to three dimensions deep; a board that still can't be listed completely fails rather than return part of
-itself as the whole. Requests go one at a time (D4.2 allows two per host; freehire uses 8).
+itself as the whole. Read on the belt, a board is chunks of up to 50 pages, a slice's probe one chunk each; outside it,
+the chunks go one after another (D4.2 allows two requests per host; freehire uses 8).
 """
 
 from __future__ import annotations
@@ -16,7 +17,7 @@ from __future__ import annotations
 import logging
 import re
 from collections.abc import Callable, Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from hiredra.sourcing._html import html_to_text
@@ -25,11 +26,13 @@ from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import CompanyEntry, FetchContext
 from hiredra.sourcing.providers._common import (
     DETAIL_BUDGET,
+    Listed,
     assert_allowed_url,
     clean,
-    hydrate,
     infer_remote,
     iso_date,
+    page_ranges,
+    read_board,
     work_mode,
 )
 
@@ -123,82 +126,103 @@ class WorkdayProvider:
 
     def fetch(self, entry: CompanyEntry, ctx: FetchContext) -> list[Job]:
         board = parse_board((entry.extra or {}).get("slug") or "")
-        allowed = frozenset({board.host})
+        return read_board(self, entry, ctx, budget=DETAIL_BUDGET, label=f"workday {board.tenant}/{board.site}")
 
-        def post(body: dict) -> dict:
-            url = f"{board.api}/jobs"
-            assert_allowed_url(url, allowed, self.name)
-            resp = ctx.http.request("POST", url, json=body, timeout=_TIMEOUT_S)
-            data = resp.json()
-            return data if isinstance(data, dict) else {}
+    def list_chunk(self, entry: CompanyEntry, ctx: FetchContext, chunk: dict | None) -> Listed:
+        board = parse_board((entry.extra or {}).get("slug") or "")
+        got = read_chunk(lambda body: _request(ctx, board, "POST", "/jobs", body), chunk)
+        return replace(got, items={job_id(board, p): p for p in got.items.values()})
 
-        def get(path: str) -> dict:
-            url = f"{board.api}{path}"
-            assert_allowed_url(url, allowed, self.name)
-            data = ctx.http.get_json(url, timeout=_TIMEOUT_S)
-            return data if isinstance(data, dict) else {}
+    def listed(self, entry: CompanyEntry, ctx: FetchContext, info: dict, items: dict) -> tuple:
+        return ()  # a board that can't be listed completely already failed in its chunk
 
-        return hydrate(
-            list_postings(post),
-            key=lambda p: job_id(board, p),
-            seen=ctx.seen,
-            listing=lambda p: to_job(entry.name, board, p, {}),
-            detail=lambda p: to_job(entry.name, board, p, get(p["externalPath"])),
-            budget=DETAIL_BUDGET,
-            label=f"workday {board.tenant}/{board.site}",
-        )
+    def job(self, entry: CompanyEntry, ctx: FetchContext, info: dict, item: dict, detail: bool) -> Job | None:
+        board = parse_board((entry.extra or {}).get("slug") or "")
+        return to_job(entry.name, board, item, _request(ctx, board, "GET", item["externalPath"]) if detail else {})
+
+
+def _request(ctx: FetchContext, board: Board, method: str, path: str, body: dict | None = None) -> dict:
+    """One call to the board's API, on the platform's pace when the belt sets one."""
+    url = f"{board.api}{path}"
+    assert_allowed_url(url, frozenset({board.host}), "workday")
+    if ctx.pace is not None:
+        ctx.pace()
+    if method == "POST":
+        data = ctx.http.request("POST", url, json=body, timeout=_TIMEOUT_S).json()
+    else:
+        data = ctx.http.get_json(url, timeout=_TIMEOUT_S)
+    return data if isinstance(data, dict) else {}
 
 
 def _page(post: Callable[[dict], dict], facets: dict, offset: int) -> dict:
     return post({"appliedFacets": facets, "limit": PAGE, "offset": offset, "searchText": ""})
 
 
-def _page_all(post: Callable[[dict], dict], facets: dict, first: dict) -> list[dict]:
-    """Page a query to its end from an already fetched first page. Some boards report the real total only on the
-    first page and 0 after, so the first non-zero total is kept."""
-    out: list[dict] = []
-    total, page = -1, first
-    while postings := [p for p in page.get("jobPostings") or () if isinstance(p, dict) and p.get("externalPath")]:
-        out += postings
-        if total < 0 and page.get("total"):
-            total = int(page["total"])
-        if 0 <= total <= len(out):
+def _postings(page: dict) -> list[dict]:
+    return [p for p in page.get("jobPostings") or () if isinstance(p, dict) and p.get("externalPath")]
+
+
+def read_chunk(post: Callable[[dict], dict], chunk: dict | None) -> Listed:
+    """One chunk of a board's listing, its postings keyed by path. ``None`` is the first page; it says how the rest is
+    read: by page ranges (``{"facets", "offset", "end"}``, ``end`` ``None`` when the board states no total), or, for a
+    board capped at 2,000, by facet slices, each read first by a probe of its first page (``{"facets", "used",
+    "depth"}``). A first page answered 422 is a tenant this host no longer serves -- a made-up tenant gets the same 422,
+    while a missing site of a real tenant gets a 404 -- so the board is gone, as for a 404 (crawl 1, 2026-11-05: 30
+    boards, among them Comcast, moved from wd5 to wd115, and Dell, moved to Oracle)."""
+    if chunk is None:
+        try:
+            first = _page(post, {}, 0)
+        except HTTPError as err:
+            if err.status != 422:
+                raise
+            raise HTTPError(f"{err} -- the tenant is not on this host (moved)", status=404, url=err.url) from err
+        return _probed(first, {}, (), 0)
+    if "offset" not in chunk:
+        return _probed(_page(post, chunk["facets"], 0), chunk["facets"], tuple(chunk["used"]), chunk["depth"])
+    rows: list[dict] = []
+    offset, end = chunk["offset"], chunk["end"]
+    while end is None or offset < end:
+        postings = _postings(_page(post, chunk["facets"], offset))
+        if not postings:
             break
-        page = _page(post, facets, len(out))
-    return out
+        rows += postings
+        offset += len(postings)
+    return Listed({p["externalPath"]: p for p in rows}, served=len(rows))
+
+
+def _probed(page: dict, facets: dict, used: tuple[str, ...], depth: int) -> Listed:
+    """A slice's first page: its postings and the ranges still to read, or, when the slice is capped, a probe of each
+    value of the facet dimension that splits it best. Some boards report the real total only on the first page and 0
+    after, so the first page's total plans the ranges."""
+    if page.get("total") == CAP:
+        dim = pick_split(page.get("facets") or (), set(used))
+        if dim is None or depth >= MAX_FACET_DEPTH:
+            raise FetchError(f"workday: board capped at {CAP} and no facet left to split it completely")
+        param, values = dim
+        return Listed(more=tuple({"facets": {**facets, param: [value_id]}, "used": [*used, param], "depth": depth + 1}
+                                 for value_id, _ in values))  # fmt: skip
+    postings = _postings(page)
+    total = int(page.get("total") or 0)
+    if not postings or (total and len(postings) >= total):
+        more: tuple = ()
+    elif total:
+        more = tuple({"facets": facets, "offset": a, "end": b} for a, b in page_ranges(len(postings), total, PAGE))
+    else:
+        more = ({"facets": facets, "offset": len(postings), "end": None},)
+    return Listed({p["externalPath"]: p for p in postings}, more=more, served=len(postings))
 
 
 def list_postings(post: Callable[[dict], dict]) -> list[dict]:
-    """Every posting on the board. A first page answered 422 is a tenant this host no longer serves -- a made-up
-    tenant gets the same 422, while a missing site of a real tenant gets a 404 -- so the board is gone, as for a
-    404 (crawl 1, 2026-11-05: 30 boards, among them Comcast, moved from wd5 to wd115, and Dell, moved to Oracle)."""
-    try:
-        first = _page(post, {}, 0)
-    except HTTPError as err:
-        if err.status != 422:
-            raise
-        raise HTTPError(f"{err} -- the tenant is not on this host (moved)", status=404, url=err.url) from err
-    if first.get("total") != CAP:
-        return _page_all(post, {}, first)
-    return _split(post, {}, first, set(), 0)
-
-
-def _split(post: Callable[[dict], dict], facets: dict, capped: dict, used: set[str], depth: int) -> list[dict]:
-    dim = pick_split(capped.get("facets") or (), used)
-    if dim is None or depth >= MAX_FACET_DEPTH:
-        raise FetchError(f"workday: board capped at {CAP} and no facet left to split it completely")
-    param, values = dim
-    by_path: dict[str, dict] = {}
-    for value_id, _ in values:
-        scoped = {**facets, param: [value_id]}
-        page = _page(post, scoped, 0)
-        part = (
-            _split(post, scoped, page, used | {param}, depth + 1)
-            if page.get("total") == CAP
-            else _page_all(post, scoped, page)
-        )
-        by_path.update((p["externalPath"], p) for p in part)
-    return list(by_path.values())
+    """Every posting on the board, its chunks read one after another (a slice's own chunks before the next slice);
+    a posting listed in two slices counts once."""
+    out: dict[str, dict] = {}
+    todo: list = [None]
+    while todo:
+        got = read_chunk(post, todo.pop(0))
+        for path, posting in got.items.items():
+            out.setdefault(path, posting)
+        todo[:0] = got.more
+    return list(out.values())
 
 
 def _employment_type(time_type: Any) -> str | None:
