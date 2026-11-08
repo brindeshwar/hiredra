@@ -107,6 +107,11 @@ _JOB_COLUMNS: tuple[str, ...] = (
 )
 
 _REQUIRED_JOB_FIELDS = ("url", "title", "company", "source")
+_NEW_JOB_COLUMNS: tuple[str, ...] = (
+    *_JOB_COLUMNS, "external_id", "company_id", "countries", "content_hash", "role_fingerprint", "duplicate_of",
+    "status_changed_at", "first_seen_at", "last_seen_at", "updated_at", "first_seen_run",
+)  # fmt: skip
+_INSERT_BATCH = 500  # new jobs saved in one transaction
 
 # Every job column a caller reads, plus the board's slug and tag and the
 # skills list, in the shapes the SQLite rows had them: ``job_id`` is the key, ``skills`` is None until extraction
@@ -294,47 +299,28 @@ def upsert_job(
     listed again is reopened to ``filtered`` (the only status liveness drops
     from) -- a take-down and repost under the same id (2026-10-27).
     """
-    for field in _REQUIRED_JOB_FIELDS:
-        if not job.get(field):
-            raise ValueError(f"job {job.get('job_id') or job.get('url')!r} is missing required field {field!r}")
-    source = str(job["source"])
-    job_id = str(job.get("job_id") or f"{source}:{job['url']}")
-    if not job_id.startswith(source + ":"):
-        raise ValueError(f"job_id {job_id!r} must start with its source {source!r} and ':' (D1.5)")
-
-    yr = job.get("years_required")
-    if yr is not None and not isinstance(yr, int):
-        raise TypeError("years_required must be an int or None (0 = explicitly zero-experience role; unknown = None)")
-
+    job_id = _checked_job_id(job)
     now = _now()
     reopen = False
     with conn.transaction():
         row = conn.execute("SELECT id, status, status_detail FROM jobs WHERE job_key = %s", (job_id,)).fetchone()
         if row is None:
-            title, company = job["title"], job["company"]
-            countries = sorted(parse_location(job.get("location") or "", "", title)["countries"])
-            fingerprint = role_fingerprint(company_key(company), title, job.get("description"), countries)
+            countries, fingerprint = _role_of(job)
             # D6.3: a role already stored and open (a copy per city, a repost) -> this copy points at it
             canonical = conn.execute(
                 "SELECT id FROM jobs WHERE role_fingerprint = %s AND closed_at IS NULL AND duplicate_of IS NULL"
                 " ORDER BY id LIMIT 1",
                 (fingerprint,),
             ).fetchone()
-            values = [job.get(c) for c in _JOB_COLUMNS]
-            if values[_JOB_COLUMNS.index("is_remote")] is not None:  # a 0/1 from an older caller is a bool
-                values[_JOB_COLUMNS.index("is_remote")] = bool(values[_JOB_COLUMNS.index("is_remote")])
-            values += [
-                job_id[len(source) + 1 :], _company_id(conn, company), countries,
-                content_hash(title, company, job.get("location"), job.get("description")),
-                fingerprint, canonical[0] if canonical else None,
-                now, now, now, now, first_seen_run,
-            ]  # fmt: skip
-            cols = (*_JOB_COLUMNS, "external_id", "company_id", "countries", "content_hash", "role_fingerprint",
-                    "duplicate_of", "status_changed_at", "first_seen_at", "last_seen_at", "updated_at", "first_seen_run")  # fmt: skip
+            values = _new_job_values(
+                job, job_id, _company_id(conn, job["company"]), countries, fingerprint,
+                canonical[0] if canonical else None, first_seen_run, now,
+            )  # fmt: skip
             try:
                 with conn.transaction():
                     new_id = conn.execute(
-                        f"INSERT INTO jobs ({', '.join(cols)}) VALUES ({', '.join('%s' for _ in cols)}) RETURNING id",
+                        f"INSERT INTO jobs ({', '.join(_NEW_JOB_COLUMNS)})"
+                        f" VALUES ({', '.join('%s' for _ in _NEW_JOB_COLUMNS)}) RETURNING id",
                         values,
                     ).fetchone()[0]
             except psycopg.errors.UniqueViolation as err:
@@ -350,6 +336,123 @@ def upsert_job(
     if reopen:
         set_status(conn, job_id, "filtered", detail="reopened: listed again after liveness: gone")
     return job_id
+
+
+def upsert_jobs(
+    conn: psycopg.Connection,
+    jobs: Sequence[Mapping[str, Any]],
+    *,
+    first_seen_run: str | None = None,
+) -> int:
+    """``upsert_job`` for a whole board: its new jobs saved in batches, one commit each, not a commit and ten round
+    trips per job (crawl 5, 2026-11-08: saves queued up behind the run's one writer). Returns how many were new.
+
+    A re-sighted job (or a job repeated in ``jobs``) goes through ``upsert_job``: the crawl has already taken those
+    out, so they are rare. Every job is checked before the first is written."""
+    checked = [(_checked_job_id(job), job) for job in jobs]
+    stored = jobs_stored(conn, [job_id for job_id, _ in checked])
+    fresh: dict[str, Mapping[str, Any]] = {}
+    again: list[Mapping[str, Any]] = []
+    for job_id, job in checked:
+        if job_id in stored or job_id in fresh:
+            again.append(job)
+        else:
+            fresh[job_id] = job
+    items = list(fresh.items())
+    for at in range(0, len(items), _INSERT_BATCH):
+        chunk = items[at : at + _INSERT_BATCH]
+        try:
+            with conn.transaction():
+                _insert_jobs(conn, chunk, first_seen_run)
+        except psycopg.errors.UniqueViolation:  # a url stored under another id: one by one keeps those before it
+            for _, job in chunk:
+                upsert_job(conn, job, first_seen_run=first_seen_run)
+    for job in again:
+        upsert_job(conn, job, first_seen_run=first_seen_run)
+    return len(fresh)
+
+
+def _insert_jobs(
+    conn: psycopg.Connection, jobs: list[tuple[str, Mapping[str, Any]]], first_seen_run: str | None
+) -> None:
+    """One batch of jobs known to be new, inside the caller's transaction. Each id is taken first, so a copy of a role
+    earlier in the same batch (a copy per city, D6.3) can point at it without waiting for the insert."""
+    now = _now()
+    ids = [r[0] for r in conn.execute(
+        "SELECT nextval(pg_get_serial_sequence('jobs', 'id')) FROM generate_series(1, %s)", (len(jobs),)
+    )]  # fmt: skip
+    companies = {name: _company_id(conn, name) for name in {str(job["company"]) for _, job in jobs}}
+    roles = [_role_of(job) for _, job in jobs]
+    canonical: dict[str, int] = {
+        r[0]: r[1]
+        for r in conn.execute(
+            "SELECT DISTINCT ON (role_fingerprint) role_fingerprint, id FROM jobs WHERE role_fingerprint = ANY(%s)"
+            " AND closed_at IS NULL AND duplicate_of IS NULL ORDER BY role_fingerprint, id",
+            (list({fingerprint for _, fingerprint in roles}),),
+        )
+    }
+    rows = []
+    for new_id, (job_id, job), (countries, fingerprint) in zip(ids, jobs, roles, strict=True):
+        root = canonical.setdefault(fingerprint, new_id)
+        rows.append([
+            new_id,
+            *_new_job_values(job, job_id, companies[str(job["company"])], countries, fingerprint,
+                             None if root == new_id else root, first_seen_run, now),
+        ])  # fmt: skip
+    cols = ("id", *_NEW_JOB_COLUMNS)
+    with conn.cursor() as cur:
+        cur.executemany(
+            f"INSERT INTO jobs ({', '.join(cols)}) OVERRIDING SYSTEM VALUE VALUES ({', '.join('%s' for _ in cols)})",
+            rows,
+        )
+    conn.execute(
+        "INSERT INTO job_events (job_id, kind, detail, at) SELECT id, 'seen', 'first sighting', %s::timestamptz"
+        " FROM unnest(%s::bigint[]) AS id",
+        (now, ids),
+    )
+
+
+def _checked_job_id(job: Mapping[str, Any]) -> str:
+    """The job's ``job_id`` once its required fields are known good; raises on a job the store must not take."""
+    for field in _REQUIRED_JOB_FIELDS:
+        if not job.get(field):
+            raise ValueError(f"job {job.get('job_id') or job.get('url')!r} is missing required field {field!r}")
+    source = str(job["source"])
+    job_id = str(job.get("job_id") or f"{source}:{job['url']}")
+    if not job_id.startswith(source + ":"):
+        raise ValueError(f"job_id {job_id!r} must start with its source {source!r} and ':' (D1.5)")
+    yr = job.get("years_required")
+    if yr is not None and not isinstance(yr, int):
+        raise TypeError("years_required must be an int or None (0 = explicitly zero-experience role; unknown = None)")
+    return job_id
+
+
+def _role_of(job: Mapping[str, Any]) -> tuple[list[str], str]:
+    """A new job's countries and the fingerprint of its role."""
+    title = job["title"]
+    countries = sorted(parse_location(job.get("location") or "", "", title)["countries"])
+    return countries, role_fingerprint(company_key(job["company"]), title, job.get("description"), countries)
+
+
+def _new_job_values(
+    job: Mapping[str, Any],
+    job_id: str,
+    company_id: int | None,
+    countries: list[str],
+    fingerprint: str,
+    canonical: int | None,
+    first_seen_run: str | None,
+    now: str,
+) -> list[Any]:
+    """A new job's values, in the order of ``_NEW_JOB_COLUMNS``."""
+    values = [job.get(c) for c in _JOB_COLUMNS]
+    if values[_JOB_COLUMNS.index("is_remote")] is not None:  # a 0/1 from an older caller is a bool
+        values[_JOB_COLUMNS.index("is_remote")] = bool(values[_JOB_COLUMNS.index("is_remote")])
+    return [
+        *values, job_id[len(str(job["source"])) + 1 :], company_id, countries,
+        content_hash(job["title"], job["company"], job.get("location"), job.get("description")),
+        fingerprint, canonical, now, now, now, now, first_seen_run,
+    ]  # fmt: skip
 
 
 def fill_provenance(
