@@ -224,8 +224,10 @@ def _belt(raw: Any) -> BeltConfig:
     built = {str(name): _build(Platform, spec, f"belt.platforms.{name}") for name, spec in platforms.items()}
     for name, plat in built.items():
         if not (isinstance(plat.limit, (int, float)) and plat.limit > 0 and isinstance(plat.at_once, int)
-                and plat.at_once > 0):  # fmt: skip
-            raise ConfigError(f"belt.platforms.{name}: limit must be > 0 and at_once a whole number > 0")
+                and plat.at_once > 0 and isinstance(plat.per_data_centre, bool)):  # fmt: skip
+            raise ConfigError(
+                f"belt.platforms.{name}: limit must be > 0, at_once a whole number > 0, per_data_centre true or false"
+            )
     belt = _build(BeltConfig, {k: v for k, v in raw.items() if k != "platforms"}, "belt")
     if not 0 < belt.fill <= 1:
         raise ConfigError(f"belt.fill: must be above 0 and at most 1, got {belt.fill!r}")

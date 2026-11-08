@@ -481,19 +481,32 @@ def _run_belt(
         finished[0] += 1
         hand_over(i, entry, result)
 
-    paces = {name: Pace(1.0 / rules.per_second(name)) for name in rules.platforms}
     host_cap = getattr(ctx.http, "slot_cap", None) or (lambda key: 2)
-    belt = Belt({name: p.at_once for name, p in rules.platforms.items()}, host_cap)
+    paces: dict[str, Pace] = {}  # one per line: a platform, or one data centre of a platform limited per data centre
+    width: dict[str, int] = {}
+
+    def line_of(provider: Provider | None, entry: CompanyEntry) -> str:
+        if provider is None or provider.name not in rules.platforms:
+            return OTHER
+        platform = rules.platforms[provider.name]
+        line = provider.name
+        if platform.per_data_centre:
+            centre = getattr(provider, "data_centre", lambda e: None)(entry)
+            line = f"{provider.name}:{centre}" if centre else provider.name
+        if line not in paces:
+            paces[line] = Pace(1.0 / rules.per_second(provider.name))
+            width[line] = platform.at_once
+        return line
 
     boards: list[_Board] = []
     for i, entry in todo:
         provider = route(entry, registry)
-        line = provider.name if provider is not None and provider.name in rules.platforms else OTHER
+        line = line_of(provider, entry)
         host, _ = _host_slots(ctx.http, entry, provider)
         board = _Board(i, entry, provider, ctx, 0.0, line, host)
         board.ctx = replace(ctx, incomplete=board.notes.append, pace=paces[line].wait if line in paces else None)
         boards.append(board)
-    width = {name: p.at_once for name, p in rules.platforms.items()}
+    belt = Belt(width, host_cap)
     estimates = [(b.line, float((b.entry.extra or {}).get("last_seconds") or _UNKNOWN_SECONDS), b) for b in boards]
     for key, board in lay_out(estimates, width, workers):
         board.key = key
@@ -579,6 +592,7 @@ def _run_belt(
         until = getattr(err, "until", 0.0) or 0.0
         delay = max(until - time.time(), 0.0) if isinstance(err, Blocked) else _RETRY_AFTER_S * task.tries
         task.not_before = clock() + max(delay, 1.0)
+        belt.to_back(task)  # after its wait it joins the back of its line, never ahead of tasks not yet tried
         log.info("orchestrator: %s %s put back (try %d), %s; again in %.0fs", task.kind,
                  task.board.entry.name if task.board else "jobspy", task.tries + 1, err, delay)  # fmt: skip
         _put(belt, task, clock())

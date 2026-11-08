@@ -9,8 +9,8 @@ boards: [curated]
 pacing:
   between_companies: 1.0      # base seconds between company fetches
   jitter: 0.5                 # + up to this many random seconds (one worker only)
-  workers: 32                 # tasks in flight (D4.1). Enough for every platform's share at once (Workday 20,
-                              # Eightfold 3, Phenom 2, JobSpy 1, the rest): with 16, Workday got only 10 (crawl 4).
+  workers: 48                 # tasks in flight (D4.1). Enough for every line's share at once (Workday 10 per data
+                              # centre, Eightfold 6, Phenom 2, JobSpy 1, the rest): with 16, Workday got only 10 (crawl 4).
                               # Most of them wait on a pace, which costs nothing. Past 1, http.per_host paces a host
 
 http:
@@ -22,8 +22,8 @@ http:
     boards-api.greenhouse.io: 4
     api.lever.co: 4
     api.ashbyhq.com: 4
-    eightfold.ai: 3             # ONE set of slots for every *.eightfold.ai tenant (2026-11-03: 14 of 30 refused
-                                # at 8 at once, unpaced); the belt paces them to 0.6/s and keeps 3 in flight
+    eightfold.ai: 6             # ONE set of slots for every *.eightfold.ai tenant (2026-11-03: 14 of 30 refused
+                                # at 8 at once, unpaced); the belt paces them all to ~2.2/s, 6 in flight
 
 belt:                         # the conveyor belt (owner's plan, 2026-11-07): each platform held to `fill` of its
   fill: 0.6                   # measured limit, so the limit is never reached and nothing is refused
@@ -31,10 +31,12 @@ belt:                         # the conveyor belt (owner's plan, 2026-11-07): ea
   watchdog_minutes: 10        # warn when no task has finished for this long
   status_minutes: 10          # a status line in the crawl log: in flight per platform, left, saves waiting
   platforms:                  # limit: requests/s where refusals start; at_once: its tasks in flight together
-    workday: {limit: 10.0, at_once: 20}   # crawl 2: many 429s at ~15/s, a few at ~10, none at ~6. 20 at once
-                                          # so the pace (6/s), not the count, sets the rate: a request took
-                                          # ~1.8-2.6 s (crawl 3), so 8 gave 4.3/s and 12 gave ~4.9/s
-    eightfold: {limit: 1.0, at_once: 3}   # ~1/s for every tenant (freehire; 405s unpaced); ~3.8 s a request
+    workday: {limit: 10.0, at_once: 10, per_data_centre: true}  # PER data centre (wd1, wd5...): measured
+                                          # 2026-11-08, one refused at ~12/s (clean at 9); four together took
+                                          # 16.6/s with no refusal. 6/s each; a reply ~0.9 s, so 10 at once
+    eightfold: {limit: 3.6, at_once: 6}   # ONE limit across our IP: measured 2026-11-08, 3.6/s over 4 sites
+                                          # clean, 8/s throttled (405) in 29 s. 3.6 = the highest rate measured
+                                          # clean, so 60% = ~2.2/s for all of Eightfold; a reply ~0.5 s
     phenom: {limit: 1.0, at_once: 2}      # ~1/s for every site (freehire: 403s past it); ~2 s a request
 
 jobspy:

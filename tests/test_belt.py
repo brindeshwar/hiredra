@@ -95,3 +95,14 @@ def test_a_host_set_aside_as_full_comes_back_when_its_task_is_done():
     assert [a.payload, b.payload, z.payload] == ["h0", "h1", "z"] and belt.take() is None  # h is full: set aside
     belt.done(a)
     assert belt.take().payload == "h2" and len(belt) == 0
+
+
+def test_a_refused_task_goes_to_the_back_of_its_line_after_its_wait():
+    # owner's rule (2026-11-08): a refused task never jumps ahead of tasks not yet tried
+    belt = _belt()
+    refused = Task("list", OTHER, "a", 0.0, payload="refused", not_before=10.0)
+    belt.to_back(refused)
+    belt.put(refused, now=0.0)
+    belt.put_all([Task("list", OTHER, f"h{i}", 5.0 + i, payload=f"fresh{i}") for i in range(3)], now=0.0)
+    taken = [t.payload for t in iter(lambda: belt.take(now=20.0), None)]
+    assert taken == ["fresh0", "fresh1", "fresh2", "refused"]

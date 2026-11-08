@@ -36,10 +36,14 @@ OTHER = ""
 @dataclass(frozen=True, slots=True)
 class Platform:
     """A platform held to a rate: ``limit`` is the request rate its refusals start at (measured), ``at_once`` how many
-    of its tasks may be in flight together (enough to keep its pace full: the rate times a request's time)."""
+    of its tasks may be in flight together (enough to keep its pace full: the rate times a request's time).
+    ``per_data_centre``: the limit holds per data centre of the platform, not across it, so each data centre is a line
+    of its own with its own pace and share (Workday: measured 2026-11-08, one data centre refused at ~12 req/s while
+    four together took 16.6 with no refusal)."""
 
     limit: float
     at_once: int
+    per_data_centre: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -112,6 +116,11 @@ class Belt:
         bisect.insort(queue, item)
         if queue[0] is item:  # the host's new first task
             heapq.heappush(self._heads[task.line], (task.key, seq, task.host))
+
+    def to_back(self, task: Task) -> None:
+        """The task's place moves to the back of its line (the owner's rule, 2026-11-08: a refused task never jumps
+        ahead of tasks not yet tried). Call before ``put``."""
+        task.key = float("inf")
 
     def put_all(self, tasks: Iterable[Task], now: float = 0.0) -> None:
         for task in tasks:

@@ -43,6 +43,7 @@ CAP = 2000  # the total a capped board reports
 MAX_FACET_DEPTH = 3
 _HOST = re.compile(r"^(?:[a-z0-9-]+\.wd\d+\.myworkdayjobs\.com|wd\d+\.myworkdaysite\.com)$")
 _TIMEOUT_S = 30.0
+_DATA_CENTRE = re.compile(r"(?:^|\.)(wd\d+)\.")
 MAINTENANCE_PAUSE_S = 1800.0  # a tenant in maintenance is asked again after this long
 
 
@@ -124,6 +125,16 @@ class WorkdayProvider:
 
     def detect(self, entry: CompanyEntry) -> bool:
         return self.board_url(entry) is not None
+
+    def data_centre(self, entry: CompanyEntry) -> str | None:
+        """The board's data centre (``wd1``, ``wd5``, ``wd103``...): Workday's limit holds per data centre, not across
+        Workday (measured 2026-11-08), so the belt paces each one on its own."""
+        try:
+            host = parse_board((entry.extra or {}).get("slug") or "").host
+        except FetchError:
+            return None
+        m = _DATA_CENTRE.search(host)
+        return m.group(1) if m else None
 
     def fetch(self, entry: CompanyEntry, ctx: FetchContext) -> list[Job]:
         board = parse_board((entry.extra or {}).get("slug") or "")
