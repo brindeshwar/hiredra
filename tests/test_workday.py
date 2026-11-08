@@ -263,3 +263,13 @@ def test_a_board_that_states_no_total_is_never_paged_past_the_cap_where_it_repea
 
     jobs = workday.list_postings(post)
     assert len(jobs) == 20 and max(asked) < workday.CAP
+
+
+def test_a_boards_data_centre_is_read_from_its_host():
+    def dc(slug):
+        return workday.WorkdayProvider().data_centre(CompanyEntry(name="A", provider="workday", extra={"slug": slug}))
+
+    assert dc("nvidia.wd5.myworkdayjobs.com/NVIDIAExternalCareerSite") == "wd5"
+    assert dc("acme.wd103.myworkdayjobs.com/Careers") == "wd103"
+    assert dc("wd1.myworkdaysite.com/acme/site") == "wd1"  # the shared host spells it first
+    assert dc("not-a-board") is None

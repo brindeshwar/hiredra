@@ -978,3 +978,41 @@ def test_jobspy_is_saved_the_moment_it_finishes_so_a_later_stop_never_searches_a
     )
     assert seen_at and seen_at[0] < 4  # saved before the last board, not after the run
     assert any(cp["jobspy_done"] for cp in store.checkpoints[:-1])  # and the progress said so then
+
+
+def test_a_platform_limited_per_data_centre_gets_a_line_and_a_share_per_data_centre(tmp_path, ctx):
+    # Workday (measured 2026-11-08): one data centre refused at ~12/s while four together took 16.6/s
+    lock = threading.Lock()
+    running: dict[str, int] = {}
+    peak: dict[str, int] = {}
+
+    class PerDC(FakeProvider):
+        def board_url(self, entry):
+            return f"https://{entry.name.lower()}.example/"
+
+        def data_centre(self, entry):
+            return entry.name[:3]  # "wd1-a" -> "wd1"
+
+        def fetch(self, entry, ctx):
+            dc = self.data_centre(entry)
+            with lock:
+                running[dc] = running.get(dc, 0) + 1
+                peak[dc] = max(peak.get(dc, 0), running[dc])
+            time.sleep(0.15)
+            with lock:
+                running[dc] -= 1
+            return []
+
+    names = [f"wd{d}-{i}" for d in (1, 5) for i in range(6)]
+    report = run(
+        _config(pacing=Pacing(workers=8),
+                belt=BeltConfig(platforms={"wd": Platform(limit=1000.0, at_once=2, per_data_centre=True)})),
+        companies=[CompanyEntry(name=n, provider="wd") for n in names],
+        sink_factory=lambda r: RecordingSink(),
+        run_store=FakeRunStore(),
+        ctx=ctx,
+        registry=(PerDC("wd"),),
+        jobspy_source=FakeJobSpySource(),
+    )  # fmt: skip
+    assert peak == {"wd1": 2, "wd5": 2}  # each data centre its own share of 2, side by side: 4 at once in all
+    assert [c.status for c in report.companies] == ["ok"] * 12

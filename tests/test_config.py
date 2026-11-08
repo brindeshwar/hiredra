@@ -180,3 +180,20 @@ def test_board_entry_routes_on_the_stored_provider_and_slug():
     assert entry.extra == {"slug": "acme", "provenance": "orphan", "board_id": 7}
     tagged = board_entry({**row, "name": "Acme", "list_tag": "confirmed"})
     assert tagged.name == "Acme" and tagged.extra["tag"] == "confirmed"
+
+
+def test_a_platform_may_be_limited_per_data_centre_and_the_flag_is_checked(tmp_path):
+    import pytest as _pytest
+
+    from hiredra.sourcing.config import ConfigError, load_run_config
+
+    base = "kind: scoring\nboards: all\njobspy: {sites: [], default_query: {search_terms: [x]}}\n"
+    good = tmp_path / "good.yml"
+    good.write_text(base + "belt: {platforms: {workday: {limit: 10.0, at_once: 10, per_data_centre: true}}}\n",
+                    encoding="utf-8")  # fmt: skip
+    assert load_run_config(good).belt.platforms["workday"].per_data_centre is True
+    bad = tmp_path / "bad.yml"
+    bad.write_text(base + "belt: {platforms: {workday: {limit: 10.0, at_once: 10, per_data_centre: maybe}}}\n",
+                   encoding="utf-8")  # fmt: skip
+    with _pytest.raises(ConfigError, match="per_data_centre"):
+        load_run_config(bad)
