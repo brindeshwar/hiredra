@@ -22,8 +22,8 @@ http:
     boards-api.greenhouse.io: 4
     api.lever.co: 4
     api.ashbyhq.com: 4
-    eightfold.ai: 3             # ONE set of slots for every *.eightfold.ai tenant (2026-11-03: 14 of 30 refused
-                                # at 8 at once, unpaced); the belt paces them to 0.6/s and keeps 3 in flight
+    eightfold.ai: 10            # ONE set of slots for every *.eightfold.ai tenant (2026-11-03: 14 of 30 refused
+                                # at 8 at once, unpaced); the belt paces them to 0.6/s, 10 in flight (crawl 4)
 
 belt:                         # the conveyor belt (owner's plan, 2026-11-07): each platform held to `fill` of its
   fill: 0.6                   # measured limit, so the limit is never reached and nothing is refused
@@ -34,7 +34,8 @@ belt:                         # the conveyor belt (owner's plan, 2026-11-07): ea
     workday: {limit: 10.0, at_once: 20}   # crawl 2: many 429s at ~15/s, a few at ~10, none at ~6. 20 at once
                                           # so the pace (6/s), not the count, sets the rate: a request took
                                           # ~1.8-2.6 s (crawl 3), so 8 gave 4.3/s and 12 gave ~4.9/s
-    eightfold: {limit: 1.0, at_once: 3}   # ~1/s for every tenant (freehire; 405s unpaced); ~3.8 s a request
+    eightfold: {limit: 1.0, at_once: 10}  # ~1/s for every tenant (freehire; 405s unpaced). A reply takes 15-20 s,
+                                          # so 3 at once gave ~0.23/s (crawl 4); 10 lets the 0.6/s pace bind
     phenom: {limit: 1.0, at_once: 2}      # ~1/s for every site (freehire: 403s past it); ~2 s a request
 
 jobspy:
