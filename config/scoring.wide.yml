@@ -12,7 +12,9 @@ boards: all
 pacing:
   between_companies: 1.0      # base seconds between company fetches
   jitter: 0.5                 # + up to this many random seconds (one worker only)
-  workers: 16                 # boards fetched at once (D4.1); past 1, http.per_host paces a host
+  workers: 32                 # tasks in flight (D4.1). Enough for every platform's share at once (Workday 20,
+                              # Eightfold 3, Phenom 2, JobSpy 1, the rest): with 16, Workday got only 10 (crawl 4).
+                              # Most of them wait on a pace, which costs nothing. Past 1, http.per_host paces a host
 
 http:
   timeout: 15.0
@@ -32,8 +34,9 @@ belt:                         # the conveyor belt (owner's plan, 2026-11-07): ea
   watchdog_minutes: 10        # warn when no task has finished for this long
   status_minutes: 10          # a status line in the crawl log: in flight per platform, left, saves waiting
   platforms:                  # limit: requests/s where refusals start; at_once: its tasks in flight together
-    workday: {limit: 10.0, at_once: 12}   # crawl 2: many 429s at ~15/s, a few at ~10, none at ~6. 12 at once,
-                                          # as a request takes ~1.8 s with its pace wait: 8 gave 4.3/s (crawl 3)
+    workday: {limit: 10.0, at_once: 20}   # crawl 2: many 429s at ~15/s, a few at ~10, none at ~6. 20 at once
+                                          # so the pace (6/s), not the count, sets the rate: a request took
+                                          # ~1.8-2.6 s (crawl 3), so 8 gave 4.3/s and 12 gave ~4.9/s
     eightfold: {limit: 1.0, at_once: 3}   # ~1/s for every tenant (freehire; 405s unpaced); ~3.8 s a request
     phenom: {limit: 1.0, at_once: 2}      # ~1/s for every site (freehire: 403s past it); ~2 s a request
 

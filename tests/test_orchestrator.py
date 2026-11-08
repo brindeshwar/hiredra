@@ -370,8 +370,7 @@ def test_workers_fetch_at_once_and_one_writer_thread_writes(tmp_path, ctx):
         sleep=slept.append,
     )
     assert p.peak > 1 and all(t.startswith("fetch") for t in p.threads)  # boards fetched at once, on workers
-    assert sink_threads[:6] == ["writer"] * 6  # every board's write on the one writer, never on a fetch worker
-    assert sink_threads[6] == threading.current_thread().name  # JobSpy's batch after the writer is done: one at a time
+    assert sink_threads == ["writer"] * 7  # every board's write and JobSpy's batch on the one writer, never on a worker
     assert len(sink_threads) == 7  # six boards and the JobSpy batch
     assert [c.name for c in report.companies] == list("ABCDEF")  # the list's order, not the finishing order
     assert slept == []  # the per-host slots pace, not a pause between companies
@@ -505,7 +504,7 @@ def test_a_chunked_board_is_read_chunk_by_chunk_and_only_its_new_postings_cost_a
     assert all(t.startswith("fetch") for t in provider.threads)
     [result] = store.board_results
     assert (result.status, result.jobs, result.complete) == ("ok", 7, True)
-    assert report.companies[0].status == "ok" and len(sink.batches[0]) == 7
+    assert report.companies[0].status == "ok" and max(len(b) for b in sink.batches) == 7  # JobSpy's empty batch too
 
 
 class _Clock:
@@ -614,7 +613,8 @@ def test_ctrl_c_finishes_the_tasks_in_flight_saves_their_boards_and_leaves_the_r
         fired = False
 
         def __call__(self):
-            if started.is_set() and not Interrupting.fired:
+            # a real Ctrl-C reaches only the main thread; the writer reads the clock too
+            if started.is_set() and not Interrupting.fired and threading.current_thread() is threading.main_thread():
                 Interrupting.fired = True
                 raise KeyboardInterrupt
             return time.monotonic()
@@ -940,3 +940,41 @@ def test_a_wait_for_put_back_tasks_keeps_the_status_line_and_is_no_stall_to_the_
     assert max(clock.slept) <= 600.0 + 1e-6  # slept in steps of at most the status interval
     assert len([r for r in caplog.records if r.name == "hiredra.sourcing.status"]) >= 5
     assert not any("watchdog" in r.getMessage() for r in caplog.records)
+
+
+def test_jobspy_is_saved_the_moment_it_finishes_so_a_later_stop_never_searches_again(tmp_path, ctx):
+    # crawl 3 (2026-11-07): JobSpy's jobs were saved only at the run's end, so the stop for a fix lost them and
+    # --resume searched again
+    class Slow(FakeProvider):
+        def fetch(self, entry, ctx):
+            time.sleep(0.3)
+            return []
+
+    class Spy(FakeJobSpySource):
+        pass
+
+    store = FakeRunStore()
+    sink = RecordingSink()
+    seen_at: list[int] = []
+    real_consume = sink.consume
+
+    def consume(jobs, **kw):
+        if jobs and jobs[0].source == "jobspy-indeed":
+            seen_at.append(len(store.board_results))  # how many boards were saved when JobSpy's jobs were
+        real_consume(jobs, **kw)
+
+    sink.consume = consume
+    companies = _companies_yaml(tmp_path, [(n, "p") for n in "ABCD"])
+    entries = [CompanyEntry(name=e.name, provider=e.provider, extra={**e.extra, "board_id": i + 1})
+               for i, e in enumerate(load_companies(companies))]  # fmt: skip
+    run(
+        _config(pacing=Pacing(workers=2)),
+        companies=entries,
+        sink_factory=lambda r: sink,
+        run_store=store,
+        ctx=ctx,
+        registry=(Slow("p"),),
+        jobspy_source=Spy(result=JobSpyResult(jobs=[_job(source="jobspy-indeed", job_id="js:1")], outcomes=())),
+    )
+    assert seen_at and seen_at[0] < 4  # saved before the last board, not after the run
+    assert any(cp["jobspy_done"] for cp in store.checkpoints[:-1])  # and the progress said so then
