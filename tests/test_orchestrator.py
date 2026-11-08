@@ -613,7 +613,8 @@ def test_ctrl_c_finishes_the_tasks_in_flight_saves_their_boards_and_leaves_the_r
         fired = False
 
         def __call__(self):
-            if started.is_set() and not Interrupting.fired:
+            # a real Ctrl-C reaches only the main thread; the writer reads the clock too
+            if started.is_set() and not Interrupting.fired and threading.current_thread() is threading.main_thread():
                 Interrupting.fired = True
                 raise KeyboardInterrupt
             return time.monotonic()
