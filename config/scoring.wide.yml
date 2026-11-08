@@ -32,8 +32,9 @@ belt:                         # the conveyor belt (owner's plan, 2026-11-07): ea
   watchdog_minutes: 10        # warn when no task has finished for this long
   status_minutes: 10          # a status line in the crawl log: in flight per platform, left, saves waiting
   platforms:                  # limit: requests/s where refusals start; at_once: its tasks in flight together
-    workday: {limit: 10.0, at_once: 12}   # crawl 2: many 429s at ~15/s, a few at ~10, none at ~6. 12 at once,
-                                          # as a request takes ~1.8 s with its pace wait: 8 gave 4.3/s (crawl 3)
+    workday: {limit: 10.0, at_once: 20}   # crawl 2: many 429s at ~15/s, a few at ~10, none at ~6. 20 at once
+                                          # so the pace (6/s), not the count, sets the rate: a request took
+                                          # ~1.8-2.6 s (crawl 3), so 8 gave 4.3/s and 12 gave ~4.9/s
     eightfold: {limit: 1.0, at_once: 3}   # ~1/s for every tenant (freehire; 405s unpaced); ~3.8 s a request
     phenom: {limit: 1.0, at_once: 2}      # ~1/s for every site (freehire: 403s past it); ~2 s a request
 

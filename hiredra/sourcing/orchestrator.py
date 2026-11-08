@@ -352,12 +352,23 @@ def run(
             # D4.1: worker threads fetch; this thread alone writes (sink, checkpoints, cooldowns).
             ctx.http.cooldowns.on_trip = lambda key, until, reason: trips.put((key, until, reason))
             writer = _Writer()
+
+            def save_jobspy(result: Any) -> None:
+                """On the writer, as soon as JobSpy is done: its jobs stored and the run's progress saying so, so a
+                stop or a crash later never makes ``--resume`` search again (crawl 3, 2026-11-07)."""
+                nonlocal jobspy_done, jobspy_outcomes
+                sink.consume(result.jobs)
+                jobspy_outcomes = tuple(result.outcomes)
+                jobspy_done = True
+                checkpoint(force=True)
+
             try:
                 jobspy_result = _run_belt(
                     config, todo, ctx, registry, workers,
                     lambda i, entry, result: writer.submit(lambda: record(i, entry, result)),
                     None if jobspy_done else (jobspy_source or JobSpySource(config.jobspy)),
                     seen, seen_many, sleep, clock, writer.check, writer.pending,
+                    lambda result: writer.submit(lambda: save_jobspy(result)),
                 )  # fmt: skip
             finally:
                 writer.close()  # the boards finished are saved, a stop's too
@@ -366,17 +377,12 @@ def run(
                     run_store.save_cooldown(*trips.get())
                 checkpoint(force=True)
             if jobspy_result is not None:
-                jobspy_ran = True
+                jobspy_ran = True  # its jobs were saved by the writer the moment it finished
                 if isinstance(jobspy_result, BaseException):
                     log.error("orchestrator: jobspy_source.fetch() raised", exc_info=jobspy_result)
                     jobspy_outcomes = (
                         SiteOutcome("jobspy", "error", 0, f"{type(jobspy_result).__name__}: {jobspy_result}"),
                     )
-                else:
-                    sink.consume(jobspy_result.jobs)
-                    jobspy_outcomes = tuple(jobspy_result.outcomes)
-                    jobspy_done = True
-                    run_store.checkpoint(handle.run_id, companies_done=companies_done, jobspy_done=jobspy_done)
         outcomes = [by_index[i] for i in sorted(by_index)]  # the list's order, whatever order they finished in
 
         if unroutable and companies and len(unroutable) == len(companies):
@@ -462,6 +468,7 @@ def _run_belt(
     clock: Callable[[], float],
     check: Callable[[], None] = lambda: None,
     pending_writes: Callable[[], int] = lambda: 0,
+    on_jobspy: Callable[[Any], None] = lambda result: None,
 ) -> Any:
     """Run the boards (and JobSpy, when given) on the conveyor belt; each board is handed to ``record`` as it completes
     (the writer's, never waited on). ``check`` raises the writer's failure. Returns JobSpy's result (or the exception it
@@ -654,6 +661,8 @@ def _run_belt(
             got = handle(task, status, value, seconds)
             if task.kind == "jobspy":
                 jobspy_result = got if status == "ok" else value
+                if status == "ok":
+                    on_jobspy(got)  # saved now, not at the run's end
             last_done = clock()
 
     try:
