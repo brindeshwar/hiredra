@@ -12,7 +12,9 @@ boards: all
 pacing:
   between_companies: 1.0      # base seconds between company fetches
   jitter: 0.5                 # + up to this many random seconds (one worker only)
-  workers: 16                 # boards fetched at once (D4.1); past 1, http.per_host paces a host
+  workers: 32                 # tasks in flight (D4.1). Enough for every platform's share at once (Workday 20,
+                              # Eightfold 3, Phenom 2, JobSpy 1, the rest): with 16, Workday got only 10 (crawl 4).
+                              # Most of them wait on a pace, which costs nothing. Past 1, http.per_host paces a host
 
 http:
   timeout: 15.0
