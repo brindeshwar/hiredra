@@ -207,3 +207,24 @@ def test_each_prompt_version_marks_the_rows_it_writes(tmp_path, monkeypatch):
     markers = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.startswith("# rows below:")]
     assert [m.split(", ")[-1] for m in markers] == [d.PROMPT_VERSION.replace("9", "2"), "describe-9"]
     assert d.read_tsv(path) == answers
+
+
+def test_a_passing_failure_is_retried_until_it_clears(tmp_path):
+    # the owner's rule: keep trying, never stop on a passing failure
+    import httpx
+
+    class Busy(FakeChain):
+        def __init__(self, answers, busy):
+            super().__init__(answers)
+            self.busy = busy
+
+        def invoke(self, prompt):
+            if self.busy:
+                self.busy -= 1
+                self.prompts.append(prompt)
+                raise httpx.ConnectError("connection reset")
+            return super().invoke(prompt)
+
+    chain = Busy({"dagster": GOOD}, busy=7)
+    stats = d.describe(["dagster"], chain, tmp_path / "gen.tsv", examples={}, sleep=lambda s: None)
+    assert (stats.kept, stats.stopped, len(chain.prompts)) == (1, None, 8)

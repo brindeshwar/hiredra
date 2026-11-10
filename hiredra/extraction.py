@@ -54,7 +54,7 @@ from langchain_core.exceptions import OutputParserException
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, ValidationError
-from tenacity import Retrying, retry_if_exception, stop_after_attempt
+from tenacity import Retrying, retry_if_exception, stop_never
 
 from hiredra import skilltag, vocab
 from hiredra.lock import LockHeld, RunLock
@@ -106,7 +106,8 @@ class ExtractionConfig:
     fallback_base_url: str = "https://integrate.api.nvidia.com/v1"
     fallback_requests_per_minute: int = 40
     fallback_headroom: float = 0.90
-    fallback_requests_per_day: int = 2000
+    fallback_requests_per_day: int = 10000
+    fallback_count_errors: bool = False
     fallback_timeout_seconds: float = 120.0
     fallback_max_tokens: int = 4096
 
@@ -150,7 +151,8 @@ def _fallback_fields(fb: dict) -> dict:
         "fallback_base_url": str(fb.get("base_url") or "https://integrate.api.nvidia.com/v1"),
         "fallback_requests_per_minute": int(fb.get("requests_per_minute", 40)),
         "fallback_headroom": float(fb.get("headroom", 0.90)),
-        "fallback_requests_per_day": int(fb.get("requests_per_day", 2000)),
+        "fallback_requests_per_day": int(fb.get("requests_per_day", 10000)),
+        "fallback_count_errors": bool(fb.get("count_errors", False)),
         "fallback_timeout_seconds": float(fb.get("timeout_seconds", 120)),
         "fallback_max_tokens": int(fb.get("max_tokens", 4096)),
     }
@@ -459,11 +461,14 @@ def _call(chain, jd_text: str, usage: DailyUsage | None) -> ExtractionResult:
     """One attempt: check the daily budget, count the attempt, call."""
     if usage is not None:
         usage.reserve(1)  # raises BEFORE the call when today's budget is used
-        # Counted BEFORE the call, failed attempts too: Google counts some requests it rejects or
-        # times out on, so counting only successes let the local count fall behind (694 vs 644
-        # observed on 2026-10-19). Ahead of Google is the safe direction.
-        usage.record(1)
+        if usage.count_errors:
+            # Counted BEFORE the call, failed attempts too: Google counts some requests it rejects or
+            # times out on, so counting only successes let the local count fall behind (694 vs 644
+            # observed on 2026-10-19). Ahead of Google is the safe direction.
+            usage.record(1)
     result = chain.invoke(_build_prompt(jd_text))
+    if usage is not None and not usage.count_errors:
+        usage.record(1)  # NVIDIA counts a request once it is accepted, not one that failed
     if result is None:
         raise SchemaError("structured output came back empty")
     return result
@@ -491,13 +496,15 @@ def build_extraction_graph(chain, usage: DailyUsage | None = None, sleep=time.sl
     Step 3 needs today. This is still the right seam for something like a
     future retry-with-repaired-prompt node without a rewrite.
 
-    Retries (4 attempts) cover only ``transient`` failures (429 per-minute, 5xx, network),
+    Retries cover only ``transient`` failures (429 per-minute, 5xx, network) and never give up on their own: the
+    owner's rule is to keep trying, the wait doubling from 1 s with jitter up to 2 minutes (NVIDIA's hosted models
+    are often busy). The daily budget still stops the run, since every attempt is counted;
     waiting the server's own retryDelay when it gives one. Every attempt spends quota, so
     each one goes through the daily counter.
     """
     retrying = Retrying(
         retry=retry_if_exception(lambda exc: classify_failure(exc) == "transient"),
-        stop=stop_after_attempt(4),
+        stop=stop_never,  # the owner's rule: keep trying (it stopped after 4 tries until 2026-11-10)
         wait=jittered_wait,  # the owner's rule: 1, 2, 4, 8 s + jitter, or the server's own delay
         sleep=sleep,
         reraise=True,
@@ -877,6 +884,7 @@ def main(argv: list[str] | None = None) -> int:
                             conn,
                             config.fallback_provider,
                             config.fallback_model.split("/", 1)[-1],
+                            count_errors=config.fallback_count_errors,
                         )
                         try:
                             chain = NvidiaChain(
