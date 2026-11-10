@@ -491,13 +491,14 @@ def build_extraction_graph(chain, usage: DailyUsage | None = None, sleep=time.sl
     Step 3 needs today. This is still the right seam for something like a
     future retry-with-repaired-prompt node without a rewrite.
 
-    Retries (4 attempts) cover only ``transient`` failures (429 per-minute, 5xx, network),
+    Retries (5 attempts, so all four of the owner's waits: 1, 2, 4, 8 s) cover only ``transient`` failures (429
+    per-minute, 5xx, network),
     waiting the server's own retryDelay when it gives one. Every attempt spends quota, so
     each one goes through the daily counter.
     """
     retrying = Retrying(
         retry=retry_if_exception(lambda exc: classify_failure(exc) == "transient"),
-        stop=stop_after_attempt(4),
+        stop=stop_after_attempt(5),  # 4 tries made only 3 waits: the 8 s one never came (found 2026-11-10)
         wait=jittered_wait,  # the owner's rule: 1, 2, 4, 8 s + jitter, or the server's own delay
         sleep=sleep,
         reraise=True,

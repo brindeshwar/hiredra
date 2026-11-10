@@ -416,13 +416,13 @@ def test_a_per_minute_429_is_retried_then_succeeds(db, tmp_path):
     ],
     ids=["429-per-minute", "503", "network"],
 )
-def test_transient_trouble_that_outlasts_4_tries_stops_the_run(db, error):
+def test_transient_trouble_that_outlasts_5_tries_stops_the_run(db, error):
     job_id = _filtered_job(db)
-    chain = _ScriptChain(error, error, error, error)
+    chain = _ScriptChain(error, error, error, error, error)
 
     stats = _run(db, chain)
 
-    assert stats.stopped == "transient" and chain.calls == 4
+    assert stats.stopped == "transient" and chain.calls == 5
     assert _status(db, job_id) == "filtered"
 
 
@@ -718,3 +718,17 @@ def test_cli_reguard(tmp_path, capsys, pg_url):
     args = _cli_paths(tmp_path, pg_url)
     assert extraction.main([*args, "--reguard"]) == 0
     assert "reguard: 0 job(s) re-checked" in capsys.readouterr().out
+
+
+def test_a_transient_failure_waits_1_2_4_and_8_seconds_plus_jitter_before_giving_up(db):
+    # the owner's retry rule: the waits double from 1 s, each with up to the same again of random jitter
+    _filtered_job(db)
+    error = _wrapped(httpx.ConnectError("connection reset"))
+    waits: list[float] = []
+
+    _run(db, _ScriptChain(error, error, error, error, error), sleep=waits.append)
+
+    retry_waits = [w for w in waits if w >= 1.0]
+    assert len(retry_waits) == 4
+    for wait, base in zip(retry_waits, (1, 2, 4, 8), strict=True):
+        assert base <= wait < 2 * base
