@@ -141,8 +141,10 @@ def salary_range(low: Any, high: Any, currency: Any, period: Any) -> dict[str, A
 
 
 #: Detail requests per board per run for a hydrating provider (D3.4): a stored posting needs none, and a huge new
-#: board drains over runs instead of eating one (Workday's ABB, 2,035 postings, took 29 min one at a time).
-DETAIL_BUDGET = 200
+#: board drains over runs instead of eating one (Workday's ABB, 2,035 postings, took 29 min one at a time). Past a
+#: board's first read this rarely bites: since October a company posted 200 or more on one day on 0.09% of days.
+#: At 1,000 the worst case stays inside the crawl's 6 hours (wd1's 51 capped boards: 800 more each at 6/s is ~1.9 h).
+DETAIL_BUDGET = 1000
 
 #: Requests in one chunk, the conveyor belt's unit of work (2026-11-07): a big board is read as many chunks, each of
 #: at most this many listing pages or job details, so no board holds a worker for long and the chunks of one board
