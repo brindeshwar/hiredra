@@ -416,13 +416,25 @@ def test_a_per_minute_429_is_retried_then_succeeds(db, tmp_path):
     ],
     ids=["429-per-minute", "503", "network"],
 )
-def test_transient_trouble_that_outlasts_5_tries_stops_the_run(db, error):
+def test_transient_trouble_is_retried_until_it_clears(db, error):
+    # the owner's rule: keep trying, never stop on a passing failure
     job_id = _filtered_job(db)
-    chain = _ScriptChain(error, error, error, error, error)
+    chain = _ScriptChain(*[error] * 9)
 
     stats = _run(db, chain)
 
-    assert stats.stopped == "transient" and chain.calls == 5
+    assert stats.stopped is None and stats.extracted == 1 and chain.calls == 10
+    assert _status(db, job_id) == "extracted"
+
+
+def test_retrying_stops_only_at_the_daily_budget(db):
+    job_id = _filtered_job(db)
+    error = _wrapped(httpx.ConnectError("connection reset"))
+    chain = _ScriptChain(*[error] * 50)
+
+    stats = _run(db, chain, usage=_usage(db, budget=6))
+
+    assert stats.stopped == "daily_quota" and chain.calls == 6  # every attempt is counted against the day
     assert _status(db, job_id) == "filtered"
 
 
@@ -720,15 +732,15 @@ def test_cli_reguard(tmp_path, capsys, pg_url):
     assert "reguard: 0 job(s) re-checked" in capsys.readouterr().out
 
 
-def test_a_transient_failure_waits_1_2_4_and_8_seconds_plus_jitter_before_giving_up(db):
-    # the owner's retry rule: the waits double from 1 s, each with up to the same again of random jitter
+def test_the_wait_doubles_from_1_second_with_jitter_up_to_2_minutes(db):
+    # the owner's retry rule: 1, 2, 4, 8 s and on, each with up to the same again of random jitter
     _filtered_job(db)
     error = _wrapped(httpx.ConnectError("connection reset"))
     waits: list[float] = []
 
-    _run(db, _ScriptChain(error, error, error, error, error), sleep=waits.append)
+    _run(db, _ScriptChain(*[error] * 9), sleep=waits.append)
 
     retry_waits = [w for w in waits if w >= 1.0]
-    assert len(retry_waits) == 4
-    for wait, base in zip(retry_waits, (1, 2, 4, 8), strict=True):
-        assert base <= wait < 2 * base
+    assert len(retry_waits) == 9
+    for wait, base in zip(retry_waits, (1, 2, 4, 8, 16, 32, 64, 128, 256), strict=True):
+        assert min(base, 120) <= wait <= min(2 * base, 120)

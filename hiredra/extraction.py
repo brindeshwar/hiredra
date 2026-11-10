@@ -54,7 +54,7 @@ from langchain_core.exceptions import OutputParserException
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, ValidationError
-from tenacity import Retrying, retry_if_exception, stop_after_attempt
+from tenacity import Retrying, retry_if_exception, stop_never
 
 from hiredra import skilltag, vocab
 from hiredra.lock import LockHeld, RunLock
@@ -491,14 +491,15 @@ def build_extraction_graph(chain, usage: DailyUsage | None = None, sleep=time.sl
     Step 3 needs today. This is still the right seam for something like a
     future retry-with-repaired-prompt node without a rewrite.
 
-    Retries (5 attempts, so all four of the owner's waits: 1, 2, 4, 8 s) cover only ``transient`` failures (429
-    per-minute, 5xx, network),
+    Retries cover only ``transient`` failures (429 per-minute, 5xx, network) and never give up on their own: the
+    owner's rule is to keep trying, the wait doubling from 1 s with jitter up to 2 minutes (NVIDIA's hosted models
+    are often busy). The daily budget still stops the run, since every attempt is counted;
     waiting the server's own retryDelay when it gives one. Every attempt spends quota, so
     each one goes through the daily counter.
     """
     retrying = Retrying(
         retry=retry_if_exception(lambda exc: classify_failure(exc) == "transient"),
-        stop=stop_after_attempt(5),  # 4 tries made only 3 waits: the 8 s one never came (found 2026-11-10)
+        stop=stop_never,  # the owner's rule: keep trying (it stopped after 4 tries until 2026-11-10)
         wait=jittered_wait,  # the owner's rule: 1, 2, 4, 8 s + jitter, or the server's own delay
         sleep=sleep,
         reraise=True,

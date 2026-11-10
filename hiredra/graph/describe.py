@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 from pydantic import BaseModel
-from tenacity import Retrying, retry_if_exception, stop_after_attempt
+from tenacity import Retrying, retry_if_exception, stop_never
 
 from hiredra.graph.descriptions import DESCRIPTIONS_PATH, load_descriptions
 from hiredra.lock import LockHeld, RunLock
@@ -196,7 +196,7 @@ def describe(
     _header(path)
     retrying = Retrying(
         retry=retry_if_exception(lambda exc: classify_failure(exc) == "transient"),
-        stop=stop_after_attempt(4),
+        stop=stop_never,  # the owner's rule: keep trying; the daily meter still stops the run
         wait=jittered_wait,
         sleep=sleep,
         reraise=True,
