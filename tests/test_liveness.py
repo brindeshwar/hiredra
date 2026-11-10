@@ -12,6 +12,7 @@ from hiredra import liveness
 from hiredra.sourcing.http import HTTPError, HttpClient, HttpConfig
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.provider import FetchContext
+from hiredra.sourcing.providers._common import hydrate
 from hiredra.storage import connect, get_events, get_job, init_db, set_status, upsert_job
 
 
@@ -222,4 +223,43 @@ def test_liveness_never_touches_jobs_already_dropped_by_an_earlier_gate(ctx, pg_
 
     assert stats.checked == 0 and provider.fetch_calls == 0
     assert get_job(conn, "greenhouse:d1")["status_detail"] == "role_type: no allow term matched"  # untouched
+    conn.close()
+
+
+def test_a_board_needing_one_request_per_job_is_checked_from_its_listing_alone(pg_url):
+    """The detail budget must not hide a posting: one left out of the fetch would read as gone."""
+    conn = connect(pg_url)
+    init_db(conn)
+    upsert_job(conn, _job(job_id="hydrating:late", url="https://fake.example/late", source="hydrating"))
+    set_status(conn, "hydrating:late", "filtered")
+
+    class Hydrating:
+        name = "hydrating"
+
+        def detect(self, entry):
+            return True
+
+        def board_url(self, entry):
+            return "https://fake.example/board"
+
+        def fetch(self, entry, ctx):
+            ids = [f"hydrating:{n}" for n in range(3)] + ["hydrating:late"]
+            return [
+                Job(job_id=i, url=f"https://fake.example/{i}", title="T", company="C", source="hydrating")
+                for i in hydrate(
+                    ids, key=lambda i: i, seen=ctx.seen, listing=lambda i: i, detail=self._no_detail, budget=0
+                )
+            ]
+
+        @staticmethod
+        def _no_detail(item):
+            raise AssertionError("a detail was requested")
+
+    http = HttpClient(HttpConfig())
+    try:
+        stats = liveness.check_liveness(conn, FetchContext(http=http), registry=[Hydrating()])
+    finally:
+        http.close()
+    assert (stats.live, stats.gone) == (1, 0)
+    assert get_job(conn, "hydrating:late")["status"] == "filtered"
     conn.close()

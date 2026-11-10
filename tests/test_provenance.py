@@ -9,7 +9,7 @@ from hiredra import liveness
 from hiredra.sourcing.config import load_companies
 from hiredra.sourcing.job import Job
 from hiredra.sourcing.orchestrator import run
-from hiredra.sourcing.provider import CompanyEntry, company_slug
+from hiredra.sourcing.provider import CompanyEntry, FetchContext, company_slug
 from hiredra.sourcing.providers.ashby import AshbyProvider
 from hiredra.sourcing.providers.greenhouse import GreenhouseProvider
 from hiredra.sourcing.providers.lever import LeverProvider
@@ -159,7 +159,7 @@ def test_liveness_hands_the_stored_slug_to_board_url(conn):
     _filtered_job(conn, job_id="greenhouse:b", url="https://job-boards.greenhouse.io/beta/jobs/2", company="Beta")
     provider = _FakeLivenessProvider("greenhouse")
 
-    liveness.check_liveness(conn, ctx=object(), registry=[provider])  # type: ignore[arg-type]
+    liveness.check_liveness(conn, ctx=FetchContext(http=object()), registry=[provider])  # type: ignore[arg-type]
 
     by_url = {e.careers_url: e for e in provider.entries}
     assert by_url["https://acme.com/careers?gh_jid=1"].extra == {"slug": "acme"}
