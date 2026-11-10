@@ -212,7 +212,9 @@ class DailyUsage:
     """Requests sent today (Pacific day), against a budget: one ``api_usage`` row per metered model per day (Q5).
 
     The count lives in Postgres since plan unit DB3b, so two processes add to it atomically. ``provider`` and
-    ``model`` name the meter (Google meters the model, not the stage)."""
+    ``model`` name the meter (Google meters the model, not the stage). ``count_errors``: is a request that failed
+    (429, 5xx, no answer) counted too? Google counts some it rejects, so Gemini's meter counts every attempt; NVIDIA
+    counts only the requests it accepts (owner, 2026-11-11)."""
 
     def __init__(
         self,
@@ -221,8 +223,10 @@ class DailyUsage:
         provider: str,
         model: str,
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+        count_errors: bool = True,
     ):
         self.budget = budget
+        self.count_errors = count_errors
         self.conn = conn
         self.provider = provider
         self.model = model

@@ -87,6 +87,7 @@ fallback:
   base_url: https://integrate.api.nvidia.com/v1
   requests_per_minute: 40
   headroom: 0.90
-  requests_per_day: 2000
+  requests_per_day: 10000      # the owner's guard (2026-11-11)
+  count_errors: false          # a request counts once NVIDIA accepts it, not when it fails (429, 5xx, no answer)
   timeout_seconds: 120
   max_tokens: 4096

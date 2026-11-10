@@ -744,3 +744,20 @@ def test_the_wait_doubles_from_1_second_with_jitter_up_to_2_minutes(db):
     assert len(retry_waits) == 9
     for wait, base in zip(retry_waits, (1, 2, 4, 8, 16, 32, 64, 128, 256), strict=True):
         assert min(base, 120) <= wait <= min(2 * base, 120)
+
+
+def test_a_meter_that_counts_only_accepted_requests_keeps_trying_past_its_budget_of_errors(db):
+    # NVIDIA (owner, 2026-11-11): a request counts once it is accepted, not when it fails
+    job_id = _filtered_job(db)
+    error = _wrapped(httpx.ConnectError("connection reset"))
+    usage = DailyUsage(3, db, "nvidia", "some-model", count_errors=False)
+
+    stats = _run(db, _ScriptChain(*[error] * 8), usage=usage)
+
+    assert stats.stopped is None and _status(db, job_id) == "extracted"
+    assert usage.used() == 1  # eight failures, one accepted request
+
+
+def test_the_nvidia_guard_is_10000_a_day_and_counts_only_accepted_requests():
+    config = extraction.load_extraction_config()
+    assert config.fallback_requests_per_day == 10000 and config.fallback_count_errors is False
