@@ -26,12 +26,7 @@ class PersistResult:
 
 
 def persist_jobs(conn, jobs: Iterable[Job], *, run_id: str | None = None) -> PersistResult:
-    """Upsert each job (stamping new rows with ``run_id``). New vs re-sighted."""
-    inserted = reseen = 0
-    for job in jobs:
-        if db.job_exists(conn, job.job_id):
-            reseen += 1
-        else:
-            inserted += 1
-        db.upsert_job(conn, job.to_dict(), first_seen_run=run_id)
-    return PersistResult(inserted=inserted, reseen=reseen)
+    """Upsert the jobs in batches (stamping new rows with ``run_id``). New vs re-sighted."""
+    rows = [job.to_dict() for job in jobs]
+    inserted = db.upsert_jobs(conn, rows, first_seen_run=run_id)
+    return PersistResult(inserted=inserted, reseen=len(rows) - inserted)
