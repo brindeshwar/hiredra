@@ -874,6 +874,11 @@ def iter_jobs(
     yield from select_jobs(conn, " AND ".join(clauses), params, "j.first_seen_at, j.job_key")
 
 
+def next_jobs(conn: psycopg.Connection, *, status: str, after_id: int, limit: int) -> list[dict]:
+    """The next ``limit`` jobs of ``status`` past ``after_id``, in id order: for a queue too large to hold in memory."""
+    return select_jobs(conn, "j.status = %s AND j.id > %s", (status, after_id), f"j.id LIMIT {int(limit)}")
+
+
 def get_events(conn: psycopg.Connection, job_id: str) -> list[dict]:
     """All events for a job, oldest first."""
     cur = conn.execute(

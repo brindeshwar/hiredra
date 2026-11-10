@@ -447,3 +447,25 @@ def test_unescape_markdown_leaves_plain_text_alone():
     assert unescape_markdown("C++ and 3+ years") == "C++ and 3+ years"
     assert unescape_markdown(r"3\+ years, \(remote\)") == "3+ years, (remote)"
     assert unescape_markdown(None) is None and unescape_markdown("") == ""
+
+
+def test_the_funnel_reads_its_queue_a_batch_at_a_time_and_judges_every_job(pg_url, monkeypatch):
+    conn = connect(pg_url)
+    init_db(conn)
+    for n in range(7):
+        upsert_job(conn, _job(job_id=f"greenhouse:b{n}", url=f"ub{n}", description=f"We need backend engineer {n}."))
+    monkeypatch.setattr(funnel, "COMMIT_EVERY", 3)
+    sizes = []
+    real = funnel.next_jobs
+
+    def spy(*args, **kwargs):
+        jobs = real(*args, **kwargs)
+        sizes.append(len(jobs))
+        return jobs
+
+    monkeypatch.setattr(funnel, "next_jobs", spy)
+    stats = funnel.run_funnel(conn, CONFIG)
+    assert stats.seen == 7
+    assert sizes == [3, 3, 1, 0]
+    assert not real(conn, status="fetched", after_id=0, limit=1)
+    conn.close()
