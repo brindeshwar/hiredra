@@ -34,7 +34,7 @@ from hiredra.storage import (
     add_note,
     connect,
     init_db,
-    iter_jobs,
+    next_jobs,
     set_status,
     set_years_required,
 )
@@ -370,16 +370,15 @@ def run_funnel(conn, config: FilterConfig) -> FunnelStats:
     jobs by board before fetching, so it isn't folded into this per-job loop.
     """
     stats = FunnelStats()
-    # Materialized up front: writes below change `status`, and iterating a
-    # cursor while mutating the table it's reading from is asking for trouble.
-    # Fine at this scale (hundreds-to-thousands of rows per CLAUDE.md sec 3.5).
-    jobs = list(iter_jobs(conn, status="fetched"))
-    for start in range(0, len(jobs), COMMIT_EVERY):
+    # A batch at a time, past the last id judged: the queue can be over a million jobs and 5 GB of text (2026-11-10).
+    last_id = 0
+    while jobs := next_jobs(conn, status="fetched", after_id=last_id, limit=COMMIT_EVERY):
         # One transaction per chunk: every commit waits for a disk flush, and a commit per write made the funnel
         # 1.5x slower than SQLite (measured in DB5). A crash loses at most this chunk, which stays 'fetched'.
         with conn.transaction():
-            for job in jobs[start : start + COMMIT_EVERY]:
+            for job in jobs:
                 _judge(conn, job, config, stats)
+        last_id = jobs[-1]["id"]
     return stats
 
 
