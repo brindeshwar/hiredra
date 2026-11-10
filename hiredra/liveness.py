@@ -32,7 +32,7 @@ layer reopens it to 'filtered' (``upsert_job``).
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from hiredra.sourcing.http import HTTPError, HttpClient, HttpConfig
 from hiredra.sourcing.provider import CompanyEntry, FetchContext, Provider
@@ -56,6 +56,10 @@ def check_liveness(conn, ctx: FetchContext | None = None, registry: Sequence[Pro
     owns_ctx = ctx is None
     if ctx is None:
         ctx = FetchContext(http=HttpClient(HttpConfig()))
+    # Is it still listed? The listing alone answers that. Every posting counts as stored, so a board that needs one
+    # request per job for its details spends none here and no posting is left out behind the detail budget, where it
+    # would read as gone (2026-11-10).
+    ctx = replace(ctx, seen=lambda job_id: True)
 
     provider_by_name = {p.name: p for p in registry}
     try:
