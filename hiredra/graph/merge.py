@@ -77,9 +77,10 @@ def normalized_key(name: str) -> str:
     """Spelling-insensitive key: lower-case, hyphens/spaces/slashes/dots ignored,
     simple plurals folded, ``2.0`` -> ``2``. ``+`` and ``#`` keep their meaning
     (``c#`` -> csharp, ``c++`` -> cplusplus) so they can never collapse into ``c``,
-    and a leading dot too (``.net`` -> dotnet)."""
+    and a leading dot too (``.net`` -> dotnet; a leading bare ``net`` is .NET as well)."""
     n = name.lower().replace("+", " plus ").replace("#", " sharp ")
     n = re.sub(r"^\.", "dot ", n)
+    n = re.sub(r"^net\b", "dot net", n)  # owner, 2026-11-12: "net", ".net" and "dotnet" are one skill
     n = re.sub(r"\.0\b", "", n)
     return "".join(_sing(w) for w in _words(n))
 
@@ -90,6 +91,7 @@ def spelling_keys(name: str) -> frozenset[str]:
     "node.js" ("nodejs"); trying both means each real match is found either way."""
     n = name.lower().replace("+", " plus ").replace("#", " sharp ")
     n = re.sub(r"^\.", "dot ", n)
+    n = re.sub(r"^net\b", "dot net", n)  # owner, 2026-11-12: "net", ".net" and "dotnet" are one skill
     n = re.sub(r"\.0\b", "", n)
     words = _words(n)
     return frozenset({"".join(words), "".join(_sing(w) for w in words)})

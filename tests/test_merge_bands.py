@@ -98,7 +98,10 @@ def _band(report, band):
         ("c#", "c", False),
         ("c++", "c", False),
         ("f#", "f", False),
-        (".net", "net", False),
+        (".net", "net", True),  # owner, 2026-11-12: one skill
+        ("dotnet", "net", True),
+        ("net core 8", ".net core 8", True),
+        ("network", ".network", False),  # only a whole leading word "net" is .NET
         ("oauth", "oauth2", False),
         ("sql", "sql server", False),
     ],
