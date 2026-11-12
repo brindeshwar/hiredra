@@ -65,21 +65,39 @@ def check_preconditions(conn, graph_cfg: GraphConfig, profile: ProfileSkills, ov
         )
 
 
+#: An extracted job whose skills are not all described yet (decision D3, 2026-11-12): it waits for
+#: `python -m hiredra.graph.describe`, which may also merge one of its skills into another, so its score is
+#: computed once, on settled skills. A skill described or declined is settled; one that is not a node is not
+#: waited on (it is scored by a fresh embedding, as before).
+_WAITING = (
+    "EXISTS (SELECT 1 FROM job_skills s LEFT JOIN skill_alias a ON a.alias = s.skill "
+    "JOIN skill_vocab v ON v.name = COALESCE(a.canonical, s.skill) "
+    "WHERE s.job_id = j.id AND v.description_source IS NULL)"
+)
+
+
 def select_jobs(
     conn, weights: Weights, graph_cfg: GraphConfig, profile: ProfileSkills, *, force: bool = False
 ) -> list[dict]:
-    """``extracted`` jobs, plus ``scored`` ones with any stale stamp (oldest first). ``force`` takes
-    every ``scored`` job: the stamps don't cover graph merges, so a merge needs a forced rescore."""
+    """``extracted`` jobs whose skills are all described, plus ``scored`` ones with any stale stamp (oldest
+    first). ``force`` takes every ``scored`` job too: the stamps don't cover graph merges, so a merge needs a
+    forced rescore."""
     order = "j.first_seen_at, j.job_key"
+    ready = f"(j.status = 'extracted' AND NOT {_WAITING})"
     if force:
-        return _jobs_where(conn, "j.status IN ('extracted', 'scored')", (), order)
+        return _jobs_where(conn, f"{ready} OR j.status = 'scored'", (), order)
     return _jobs_where(
         conn,
-        "j.status = 'extracted' OR (j.status = 'scored' AND (j.score_version IS DISTINCT FROM %s "
+        f"{ready} OR (j.status = 'scored' AND (j.score_version IS DISTINCT FROM %s "
         "OR j.score_embed_tag IS DISTINCT FROM %s OR j.score_skills_hash IS DISTINCT FROM %s))",
         (weights.score_version, graph_cfg.embed_tag, profile.skills_hash),
         order,
     )
+
+
+def waiting_for_descriptions(conn) -> int:
+    """Extracted jobs held back until `python -m hiredra.graph.describe` has described their skills."""
+    return conn.execute(f"SELECT count(*) FROM jobs j WHERE j.status = 'extracted' AND {_WAITING}").fetchone()[0]
 
 
 def _band(fit: float) -> str:

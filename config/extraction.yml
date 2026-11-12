@@ -60,6 +60,21 @@ keep_whole: [
   trust and safety, trust & safety, weights & biases, weights and biases, stm32, web3, web 3.0,
   do-178b/c, rtca do-178b/c
 ]
+# --- The describe step (hiredra.graph.describe; owner decisions D2, D6, 2026-11-12) -------------------
+# Every new skill is described by gemini-3.5-flash-lite and checked against its 5 nearest known skills
+# ("is it one of these under another name?"). It shares the flash-lite meter above with extraction:
+# at most max_requests_per_day requests a day for describing, and never into the last `reserve`
+# requests of the shared 450, which stay for extraction. A "same as" answer is applied only when the
+# names allow it; one way is the same words plus these filler words only ("mcp server" -> mcp).
+describe:
+  max_requests_per_day: 60
+  reserve: 50
+  fillers: [
+    server, servers, tool, tools, tooling, system, systems, framework, frameworks, library, libraries,
+    platform, platforms, programming, language, sdk, api, apis, js, integration, integrations, ecosystem,
+    stack, fundamentals, concepts, basics, skills, experience, technology, technologies, services, protocol
+  ]
+
 # canonical name -> other names that count as "the JD names it"
 skill_synonyms:
   gcp: [google cloud, google cloud platform]

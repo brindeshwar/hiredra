@@ -104,6 +104,12 @@ class ExtractionConfig:
     # Skill-name cleaning (hiredra.vocab.Resolver): names never split or version-stripped. Not part of the stamp:
     # it decides how a name is stored, not what the model was asked.
     keep_whole: frozenset = frozenset()
+    # The describe step (hiredra.graph.describe; decisions D2, D6): its own daily cap on the shared flash-lite
+    # meter, the share of that meter it never touches (kept for extraction), and the filler words a "same skill"
+    # name may add ("mcp server" -> mcp).
+    describe_requests_per_day: int = 60
+    describe_reserve: int = 50
+    same_skill_fillers: frozenset = frozenset()
     # Fallback provider (docs/model-selection-extraction.md): used when Gemini's daily budget is spent.
     fallback_provider: str | None = None  # "nvidia" or None
     fallback_model: str = ""
@@ -140,6 +146,11 @@ def load_extraction_config(
         skill_synonyms={_norm(k): tuple(_norm(v) for v in vs) for k, vs in (data.get("skill_synonyms") or {}).items()},
         dictionary_skip=frozenset(_norm(x) for x in data.get("dictionary_skip") or []),
         keep_whole=frozenset(vocab.normalize(str(x)) for x in data.get("keep_whole") or []),
+        describe_requests_per_day=int((data.get("describe") or {}).get("max_requests_per_day", 60)),
+        describe_reserve=int((data.get("describe") or {}).get("reserve", 50)),
+        same_skill_fillers=frozenset(
+            vocab.normalize(str(x)) for x in (data.get("describe") or {}).get("fillers") or []
+        ),
         **_fallback_fields(data.get("fallback") or {}),
     )
 

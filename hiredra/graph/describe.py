@@ -1,50 +1,61 @@
-"""Write a plain-language description for every skill freehire does not describe (owner, 2026-10-29).
+"""The describe step (owner, 2026-11-12): every new skill gets a description, and a check for "is this a skill
+we already have under another name?" -- so the graph never again fills up with undescribed names and unmerged
+variants.
 
-    python -m hiredra.graph.describe                 # describe every undescribed graph skill (resumable)
-    python -m hiredra.graph.describe --limit 80      # a first slice
-    python -m hiredra.graph.describe --holdout 60    # quality test: describe 60 skills freehire DOES describe,
-                                                     #   without showing its text, into the holdout file
+    python -m hiredra.graph.describe            # after `python -m hiredra.graph sync`, before scoring
+    python -m hiredra.graph.describe --dry-run  # the queue and the first prompt; no API call
 
-Why: the embedding input is "name: description" (D1.15), and freehire describes only 603 of our 2,566 skills.
+How (the LLM reads, code decides -- CLAUDE.md rule 3):
 
-How (the LLM writes, code decides -- CLAUDE.md rule 3):
-- one Gemini flash-lite call per BATCH skills (structured output), with freehire descriptions as the examples
-  of the standard, so ~1,960 skills take ~50 requests; extraction's daily meter and the ``llm`` run lock are
-  shared, and calls are paced under the free tier's 15 requests/minute;
-- every description is CHECKED against freehire's style before it is kept (``problems``); one that fails, or a
-  name the model calls ambiguous or not a skill, stays undescribed -- the skill is then embedded by its bare
-  name, never by a guess;
-- results go to ``skill_descriptions_generated.tsv`` beside freehire's file (reviewable, versioned, one row per
-  skill). They feed the embedding input only once the measured comparison shows they help.
+- the queue is every node with no description yet (``description_source`` empty): first the ones that jobs waiting
+  to be scored use (scoring holds a job until its skills are described, decision D3), then the owner's, then the
+  most seen;
+- each skill goes to Gemini flash-lite with its 5 nearest known skills (by the stored vectors), 40 skills a
+  request. The model answers per skill: a description, or "same as <one of the 5>";
+- a "same as" is applied only if code agrees it is a variant of that name (``same_skill``): an acronym, a spelling
+  within two letters, or the same words plus filler words only ("mcp server" -> mcp). Never a pair on the
+  never-merge list, never the owner's own skill merged away. It is merged the way ``graph clean`` merges (decision
+  D2), and every merge is written to ``data/describe/merges.csv``;
+- a description is kept only if it meets freehire's standard (``problems``); otherwise, or when the model gives
+  none, the skill is marked ``declined`` and stays embedded by its bare name;
+- budget (decision D6): at most ``describe.max_requests_per_day`` requests a day, and never into the last
+  ``describe.reserve`` of the shared flash-lite meter, which extraction needs. Paced under 15 requests a minute;
+  passing failures are retried until they clear.
+
+Generated descriptions are stored, not yet embedded: ``embedding.description_sources`` decides that.
 """
 
 from __future__ import annotations
 
 import argparse
-import random
+import csv
 import re
 import sys
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Collection, Sequence
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 
+import numpy as np
 from pydantic import BaseModel
 from tenacity import Retrying, retry_if_exception, stop_never
 
-from hiredra.graph.descriptions import DESCRIPTIONS_PATH, load_descriptions
+from hiredra.graph.descriptions import load_descriptions
+from hiredra.graph.merge import normalized_key
 from hiredra.lock import LockHeld, RunLock
-from hiredra.quota import DailyQuotaExceeded, DailyUsage, classify_failure, jittered_wait
+from hiredra.quota import DailyBudgetReached, DailyQuotaExceeded, DailyUsage, classify_failure, jittered_wait
+from hiredra.vocab import is_acronym
 
 MODEL_NAME = "gemini-3.5-flash-lite"  # the flash-lite meter extraction counts on, too
-PROMPT_VERSION = "describe-2"  # describe-1 lacked the "technology job posting" context
-GENERATED_PATH = DESCRIPTIONS_PATH.with_name("skill_descriptions_generated.tsv")
-HOLDOUT_PATH = Path(__file__).resolve().parents[2] / "data" / "calibration" / "describe_holdout.tsv"
+PROMPT_VERSION = "describe-3"  # describe-3: the same-skill question, and specific (not generic) wording
 BATCH = 40
+CANDIDATES = 5
 REQUESTS_PER_MINUTE = 13  # the free tier's 15, with headroom
+MERGES_PATH = Path(__file__).resolve().parents[2] / "data" / "describe" / "merges.csv"
 
 #: freehire descriptions shown as the standard: languages, platforms, tools, practices, soft skills, compliance,
-#: an acronym and an engineering method. Never described themselves in a holdout.
+#: an acronym and an engineering method.
 EXAMPLES = ("python", "kafka", "kubernetes", "react", "sql", "terraform", "figma", "agile", "stakeholder management",
             "machine learning", "llm", "soc 2", "data quality", "gcp", "content marketing", "fea")  # fmt: skip
 
@@ -59,7 +70,8 @@ _BANNED = re.compile(
 
 class Described(BaseModel):
     name: str
-    description: str | None  # None: ambiguous, too vague, or not a skill
+    same_as: str | None = None  # one of the known skills shown for this name, when it is the same skill
+    description: str | None = None  # None: ambiguous, too vague, not a skill -- or same_as is given
 
 
 class DescribedBatch(BaseModel):
@@ -100,23 +112,30 @@ def problems(name: str, text: str) -> list[str]:
     return out
 
 
-def build_prompt(names: Sequence[str], examples: dict[str, str]) -> str:
+def build_prompt(batch: Sequence[tuple[str, Sequence[str]]], examples: dict[str, str]) -> str:
+    """One request: each skill with the known skills nearest to it."""
     shown = "\n".join(f"- {n}: {examples[n]}" for n in EXAMPLES if n in examples)
-    asked = "\n".join(f"{i}. {n}" for i, n in enumerate(names, 1))
+    asked = "\n".join(f"{i}. {name} | known: {'; '.join(cands)}" for i, (name, cands) in enumerate(batch, 1))
     return (
-        "You write entries for a glossary of job skills. Each entry is a short, plain-language description of what "
-        "the skill is and what it is used for at work.\n\n"
-        "Follow the standard of these entries exactly:\n"
+        "You maintain a glossary of job skills. For every skill below you get the known skills nearest to it.\n\n"
+        "First decide if the skill IS one of its known skills under another name: another spelling, a version, an "
+        "abbreviation or its expansion, a translation, or the same skill with a filler word such as 'server', "
+        "'tools', 'systems', 'framework' or 'programming'. Then set same_as to that known skill, copied exactly. A "
+        "related tool, a competing product, or a broader or narrower skill is NOT the same: react native is not "
+        "react, aws bedrock is not aws, gcp is not aws, mysql is not sql. When unsure, leave same_as null.\n\n"
+        "Otherwise write its description, to the standard of these entries:\n"
         f"{shown}\n\n"
-        "Rules:\n"
+        "Rules for a description:\n"
         "- 1 or 2 sentences, about 100-250 characters, ending with a full stop.\n"
         "- Start with the skill's name (proper capitalisation is fine), then 'is' or 'are': define it first.\n"
+        "- Say what kind of thing it is (a language, a database, a cloud service, a library for a named task, a "
+        "practice) and the specific job it does. Avoid wording that fits any tool, such as 'a platform used to "
+        "build applications'.\n"
         "- Neutral and factual. No marketing words, no 'you' or 'we', no lists, no markdown, no links.\n"
         "- Every name comes from a technology job posting (software, data, AI, cloud, security), so give an "
-        "acronym or a product name its technology meaning. Describe the common meaning of the name in those "
-        "postings. If a name is still ambiguous, too vague to describe, or not a skill at all, give null as its "
-        "description instead of guessing.\n"
-        "- Return one item for every name below, with the name copied exactly as given.\n\n"
+        "acronym or a product name its technology meaning. If a name is ambiguous, too vague to describe, or not "
+        "a skill at all, give null as its description instead of guessing.\n"
+        "- Return one item for every skill below, with the name copied exactly as given (without the known list).\n\n"
         f"Skills:\n{asked}\n"
     )
 
@@ -136,64 +155,146 @@ def build_chain(*, api_key: str | None = None):
     return model.with_structured_output(DescribedBatch)
 
 
+# ── code decides ──────────────────────────────────────────────────────────────
+def _edits(a: str, b: str) -> int:
+    """Levenshtein distance (short strings only)."""
+    prev = list(range(len(b) + 1))
+    for i, ca in enumerate(a, 1):
+        cur = [i]
+        for j, cb in enumerate(b, 1):
+            cur.append(min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (ca != cb)))
+        prev = cur
+    return prev[-1]
+
+
+def _words(name: str) -> list[str]:
+    return [w for w in re.split(r"[^\w+#]+", name.lower()) if w]
+
+
+def same_skill(name: str, known: str, fillers: Collection[str]) -> str | None:
+    """Why ``name`` can be the skill ``known`` under another name, or None. The model said they are the same; this
+    is the check that the names allow it: one is the other's acronym; the same number of words, spelled within two
+    letters (three for a name with accented letters: a translation); or ``name`` is ``known``'s words plus filler
+    words only."""
+    if name == known:
+        return None
+    if is_acronym(name, known) or is_acronym(known, name):
+        return "acronym"
+    a, b = normalized_key(name), normalized_key(known)
+    words, base = _words(name), _words(known)
+    accented = any(ord(ch) > 127 for ch in name)
+    # A spelling slip changes letters inside words; it never adds a word ("ai governance" is not "governance").
+    if len(words) == len(base) and min(len(a), len(b)) >= 5 and _edits(a, b) <= (3 if accented else 2):
+        return "spelling"
+    extra = [w for w in words if w not in base]
+    if base and all(w in words for w in base) and extra and all(w in fillers for w in extra):
+        return "filler words"
+    return None
+
+
+# ── the run ───────────────────────────────────────────────────────────────────
 @dataclass
 class DescribeStats:
     asked: int = 0
-    kept: int = 0
-    declined: int = 0  # the model said: ambiguous / not a skill
-    rejected: dict[str, list[str]] = field(default_factory=dict)  # name -> what missed the standard
-    missing: int = 0  # not returned by the model at all
+    described: int = 0
+    declined: int = 0  # no description, or one that missed the standard
+    merged: list[tuple[str, str, str]] = field(default_factory=list)  # (name, into, why)
+    refused: list[tuple[str, str]] = field(default_factory=list)  # a same_as the code did not accept
+    missing: int = 0  # not returned by the model: asked again next run
     requests: int = 0
     stopped: str | None = None
 
 
-def read_tsv(path: Path) -> dict[str, str]:
-    """``name -> description`` from a generated file (``#`` lines are its header)."""
-    if not path.exists():
-        return {}
-    rows = [ln.split("\t") for ln in path.read_text(encoding="utf-8").splitlines() if ln and not ln.startswith("#")]
-    return {name: text for name, text in rows}
+def queue(conn) -> list[str]:
+    """Nodes with no description yet: first those used by jobs waiting to be scored, then the owner's, then the
+    most seen."""
+    rows = conn.execute(
+        "SELECT v.name, v.mine, v.seen_count, EXISTS ("
+        "  SELECT 1 FROM job_skills s JOIN jobs j ON j.id = s.job_id"
+        "  LEFT JOIN skill_alias a ON a.alias = s.skill"
+        "  WHERE j.status = 'extracted' AND COALESCE(a.canonical, s.skill) = v.name) AS waiting "
+        "FROM skill_vocab v WHERE v.description_source IS NULL"
+    ).fetchall()
+    rows.sort(key=lambda r: (not r["waiting"], not r["mine"], -r["seen_count"], r["name"]))
+    return [r["name"] for r in rows]
 
 
-def _header(path: Path) -> None:
-    """The file's header on first use; later, a marker line whenever a newer prompt version starts writing, so
-    every row can be traced to the prompt that wrote it."""
-    marker = f"# rows below: {MODEL_NAME}, {PROMPT_VERSION}"
-    if not path.exists():
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            f"# Skill descriptions written by {MODEL_NAME} (hiredra/graph/describe.py) for skills freehire does not\n"
-            "# describe, each checked against freehire's standard before it was kept.\n"
-            "# Columns: name<TAB>description. Review freely; delete a row to have it rewritten.\n"
-            f"{marker}\n",
-            encoding="utf-8",
-            newline="\n",
-        )
-        return
-    markers = [ln for ln in path.read_text(encoding="utf-8").splitlines() if ln.startswith("# rows below:")]
-    if not markers or markers[-1] != marker:
-        with path.open("a", encoding="utf-8", newline="\n") as fh:
-            fh.write(marker + "\n")
+def nearest(names: Sequence[str], vectors: dict[str, np.ndarray], k: int = CANDIDATES) -> dict[str, list[str]]:
+    """Each name's ``k`` nearest other nodes by cosine (the stored, current vectors)."""
+    pool = list(vectors)
+    if not pool:
+        return {n: [] for n in names}
+    matrix = np.stack([vectors[n] for n in pool])
+    out = {}
+    for name in names:
+        if name not in vectors:
+            out[name] = []
+            continue
+        sims = matrix @ vectors[name]
+        out[name] = [pool[i] for i in np.argsort(-sims)[: k + 1] if pool[i] != name][:k]
+    return out
+
+
+class Budget:
+    """Decision D6: the describe step's own daily cap, and never into the shared meter's reserve."""
+
+    def __init__(self, shared: DailyUsage, own: DailyUsage, keep: int):
+        self.shared, self.own, self.keep = shared, own, keep
+
+    def reserve(self, n: int) -> None:
+        self.own.reserve(n)
+        self.shared.reserve(n)
+        if self.shared.remaining() - n < self.keep:
+            raise DailyBudgetReached(
+                f"the last {self.keep} flash-lite requests today are kept for extraction ({self.shared.summary()})"
+            )
+
+    def record(self, n: int) -> None:
+        self.shared.record(n)
+        self.own.record(n)
+
+    def mark_exhausted(self, note: str | None = None) -> None:
+        self.shared.mark_exhausted(note)
+
+
+def set_description(conn, name: str, text: str | None, source: str) -> None:
+    conn.execute(
+        "UPDATE skill_vocab SET description = %s, description_source = %s WHERE name = %s", (text, source, name)
+    )
+
+
+def _refusal(name: str, target: str, shown: Sequence[str], mine: set[str], never, fillers) -> str | None:
+    if target not in shown:
+        return "not one of the known skills shown"
+    if frozenset((name, target)) in never:
+        return "on the never-merge list"
+    if name in mine:
+        return "the owner's own skill is never merged away"
+    if same_skill(name, target, fillers) is None:
+        return "the names are not variants of each other"
+    return None
 
 
 def describe(
+    conn,
     names: Sequence[str],
+    candidates: dict[str, list[str]],
     chain,
-    path: Path,
     *,
-    usage: DailyUsage | None = None,
+    fillers: Collection[str],
+    apply_merge: Callable[[str, str, str], bool],
+    never: Collection[frozenset[str]] = frozenset(),
+    budget: Budget | None = None,
     examples: dict[str, str] | None = None,
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
     log: Callable[[str], None] = lambda _msg: None,
 ) -> DescribeStats:
-    """Describe ``names`` in batches, appending every kept description to ``path`` as it lands (resumable: names
-    already in the file are skipped)."""
+    """Ask about ``names`` in batches; each batch's answers are written before the next request (resumable: a
+    re-run asks only what is still undescribed)."""
     examples = examples if examples is not None else load_descriptions()
-    done = read_tsv(path)
-    todo = [n for n in dict.fromkeys(names) if n not in done]
-    stats = DescribeStats(asked=len(todo))
-    _header(path)
+    mine = {r["name"] for r in conn.execute("SELECT name FROM skill_vocab WHERE mine")}
+    stats = DescribeStats(asked=len(names))
     retrying = Retrying(
         retry=retry_if_exception(lambda exc: classify_failure(exc) == "transient"),
         stop=stop_never,  # the owner's rule: keep trying; the daily meter still stops the run
@@ -205,94 +306,142 @@ def describe(
 
     def call(prompt: str) -> DescribedBatch:
         nonlocal next_at
-        if usage is not None:
-            usage.reserve(1)
-            usage.record(1)  # counted before it is sent, failed attempts too (as extraction does)
+        if budget is not None:
+            budget.reserve(1)
+            budget.record(1)  # counted before it is sent, failed attempts too (as extraction does)
         if next_at is not None and clock() < next_at:
             sleep(next_at - clock())
         next_at = clock() + gap
         stats.requests += 1
         return chain.invoke(prompt)
 
-    for start in range(0, len(todo), BATCH):
-        batch = todo[start : start + BATCH]
+    for start in range(0, len(names), BATCH):
+        batch = list(names[start : start + BATCH])
         try:
-            result = retrying(call, build_prompt(batch, examples))
+            result = retrying(call, build_prompt([(n, candidates.get(n, [])) for n in batch], examples))
         except Exception as exc:
-            kind = "daily_quota" if isinstance(exc, DailyQuotaExceeded) else classify_failure(exc)
+            kind = classify_failure(exc)
             if kind is None:
                 raise
-            if kind == "daily_quota" and usage is not None:
-                usage.mark_exhausted(str(exc).splitlines()[0][:200])
+            if isinstance(exc, DailyBudgetReached):
+                kind = "daily_budget"  # our own cap or the kept reserve: Google's quota is untouched
+            elif kind == "daily_quota" and budget is not None and not isinstance(exc, DailyQuotaExceeded):
+                budget.mark_exhausted(str(exc).splitlines()[0][:200])  # Google itself said the day is spent
             stats.stopped = kind
             log(f"STOPPED ({kind}): {str(exc).splitlines()[0][:200]} -- finished batches are saved")
             break
-        got = {item.name: item.description for item in result.items}
-        rows = []
+        got = {" ".join(item.name.split()).lower(): item for item in result.items}
         for name in batch:
-            if name not in got:
+            item = got.get(name)
+            if item is None:
                 stats.missing += 1
-            elif not got[name]:
-                stats.declined += 1
-            elif bad := problems(name, got[name].strip()):
-                stats.rejected[name] = bad
+                continue
+            target = " ".join((item.same_as or "").split()).lower()
+            if target:
+                why = _refusal(name, target, candidates.get(name, []), mine, never, fillers)
+                if why is None:
+                    reason = same_skill(name, target, fillers)
+                    if apply_merge(name, target, reason):
+                        stats.merged.append((name, target, reason))
+                    continue  # merged now, or already one skill earlier in this run
+                stats.refused.append((name, f"same as {target}: {why}"))
+            text = " ".join((item.description or "").split())
+            if text and not problems(name, text):
+                set_description(conn, name, text, "generated")
+                stats.described += 1
             else:
-                rows.append(f"{name}\t{got[name].strip()}\n")
-        with path.open("a", encoding="utf-8", newline="\n") as fh:
-            fh.writelines(rows)
-        stats.kept += len(rows)
-        log(f"  batch {start // BATCH + 1}: kept {len(rows)}/{len(batch)}")
+                set_description(conn, name, None, "declined")
+                stats.declined += 1
+        log(
+            f"  batch {start // BATCH + 1}: described {stats.described}, merged {len(stats.merged)}, "
+            f"declined {stats.declined}"
+        )
     return stats
 
 
-def undescribed_skills(conn) -> list[str]:
-    """Graph skills with no freehire description, most-seen first (the ones scoring meets most)."""
-    have = load_descriptions()
-    rows = conn.execute("SELECT name FROM skill_vocab ORDER BY mine DESC, seen_count DESC, name").fetchall()
-    return [n for (n,) in rows if n.lower() not in have]
-
-
-def holdout_skills(n: int, seed: int = 20261029) -> list[str]:
-    """``n`` freehire-described names (never an example), for the blind quality test."""
-    pool = sorted({name for name in load_descriptions() if name not in EXAMPLES and " " not in name.strip("-")})
-    return random.Random(seed).sample(pool, n)
+def log_merges(merged: Sequence[tuple[str, str, str]], path: Path = MERGES_PATH) -> None:
+    """Every automatic merge, appended for the owner to look over."""
+    if not merged:
+        return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    new = not path.exists()
+    with path.open("a", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        if new:
+            w.writerow(["at", "name", "merged_into", "why", "prompt"])
+        at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        w.writerows([at, n, into, why, PROMPT_VERSION] for n, into, why in merged)
 
 
 def main(argv: list[str] | None = None) -> int:
-    from hiredra.storage import connect
+    from hiredra.extraction import load_extraction_config, name_resolver
+    from hiredra.graph import clean
+    from hiredra.graph.config import load_graph_config
+    from hiredra.graph.curation import load_never_merge
+    from hiredra.graph.descriptions import embedding_descriptions
+    from hiredra.graph.index import load_skills
+    from hiredra.graph.sync import input_texts
+    from hiredra.storage import connect, get_skill_vocab, resolve_alias, skill_index_status
 
     ap = argparse.ArgumentParser(prog="python -m hiredra.graph.describe", description=__doc__.split("\n\n")[0])
     ap.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
-    ap.add_argument("--limit", type=int, default=None, help="describe at most this many skills")
-    ap.add_argument("--holdout", type=int, default=None, help="quality test: describe N freehire-described skills")
-    ap.add_argument("--budget", type=int, default=450, help="flash-lite requests/day this meter allows")
+    ap.add_argument("--limit", type=int, default=None, help="ask about at most this many skills")
+    ap.add_argument("--dry-run", action="store_true", help="show the queue and the first prompt; no API call")
     args = ap.parse_args(argv)
 
+    ext, cfg = load_extraction_config(), load_graph_config()
     conn = connect(args.db)
     try:
-        if args.holdout:
-            names, path = holdout_skills(args.holdout), HOLDOUT_PATH
-            examples = {k: v for k, v in load_descriptions().items() if k not in names}
-        else:
-            names, path, examples = undescribed_skills(conn), GENERATED_PATH, None
+        status = skill_index_status(conn, cfg.embed_tag, input_texts(embedding_descriptions(conn, cfg)))
+        if status["unembedded"] or status["stale"]:
+            print(f"NOT RUN: the index is not current ({status}) -- run `python -m hiredra.graph sync` first")
+            return 3
+        names = queue(conn)
         names = names[: args.limit] if args.limit else names
-        usage = DailyUsage(args.budget, conn, "gemini", MODEL_NAME)
-        print(f"{len(names)} skill(s) to describe into {path}; today: {usage.summary()}", flush=True)
+        vectors = {s.name: s.vector for s in load_skills(conn, cfg) if s.vector is not None}
+        candidates = nearest(names, vectors)
+        shared = DailyUsage(ext.daily_budget, conn, "gemini", MODEL_NAME)
+        own = DailyUsage(ext.describe_requests_per_day, conn, "gemini-describe", MODEL_NAME)
+        print(
+            f"{len(names)} skill(s) to describe; flash-lite today: {shared.summary()}; describe today: "
+            f"{own.summary()}; kept for extraction: {ext.describe_reserve}",
+            flush=True,
+        )
+        if args.dry_run:
+            print(build_prompt([(n, candidates[n]) for n in names[:BATCH]], load_descriptions()))
+            return 0
+        resolver = name_resolver(conn, ext)
+
+        def apply_merge(name: str, into: str, why: str) -> bool:
+            into = resolve_alias(conn, into) or into  # merged away earlier in this run: follow it
+            if into == name or get_skill_vocab(conn, name) is None:
+                return False  # already one skill
+            clean.apply(conn, resolver, [clean.Change(name, "merge", (into,), f"same skill ({why})")])
+            log_merges([(name, into, why)])  # at once: a stop later in the run must not lose it
+            return True
+
         with RunLock("llm", what="skill descriptions", kind="flash-lite", url=args.db):
-            stats = describe(names, build_chain(), path, usage=usage, examples=examples,
-                             log=lambda m: print(m, flush=True))  # fmt: skip
+            stats = describe(
+                conn, names, candidates, build_chain(), fillers=ext.same_skill_fillers, apply_merge=apply_merge,
+                never=load_never_merge(), budget=Budget(shared, own, ext.describe_reserve),
+                log=lambda m: print(m, flush=True),
+            )  # fmt: skip
     except LockHeld as exc:
         print(f"NOT RUN: {exc}")
         return 4
     finally:
         conn.close()
     print(
-        f"asked {stats.asked}, kept {stats.kept}, declined {stats.declined}, rejected {len(stats.rejected)}, "
+        f"asked {stats.asked}: described {stats.described}, merged {len(stats.merged)}, declined {stats.declined}, "
         f"missing {stats.missing}; {stats.requests} request(s); stopped={stats.stopped or 'none'}"
     )
-    for name, why in sorted(stats.rejected.items())[:30]:
-        print(f"  rejected {name}: {'; '.join(why)}")
-    return 2 if stats.stopped else 0
+    for name, into, why in stats.merged:
+        print(f"  merged {name} -> {into} ({why})")
+    for name, why in stats.refused[:30]:
+        print(f"  not merged {name}: {why}")
+    if stats.merged:
+        print("  merges changed some jobs' skills: scoring picks them up (`python -m hiredra.scoring run --force`)")
+    return 0 if stats.stopped in (None, "daily_budget", "daily_quota") else 2
 
 
 if __name__ == "__main__":

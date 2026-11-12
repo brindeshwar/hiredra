@@ -75,6 +75,11 @@ def _cmd_run(conn, args, graph_cfg, weights) -> int:
         f"scoring {weights.score_version}: selected={stats.selected} scored={stats.scored} rescored={stats.rescored} "
         f"embedded_misses={stats.embedded}"
     )
+    waiting = sr.waiting_for_descriptions(conn)
+    if waiting:
+        _log(
+            f"  {waiting} extracted job(s) wait for their skills to be described: run `python -m hiredra.graph.describe`"
+        )
     if stats.embedded:
         _log("  hint: run `python -m hiredra.graph sync` after each extraction day, so scoring needs no embeddings")
     if stats.stopped:
