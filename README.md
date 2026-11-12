@@ -72,6 +72,7 @@ python -m hiredra.sourcing crawl          # the boards that are due
 python -m hiredra.filter                  # location, role type, seniority, liveness
 python -m hiredra.extraction              # skills per job (paced to the free tier)
 python -m hiredra.graph sync              # new skills into the graph
+python -m hiredra.graph.describe          # describe new skills, fold in other names for known ones
 python -m hiredra.scoring run
 python -m hiredra.scoring list            # the ranked list
 ```

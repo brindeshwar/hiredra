@@ -100,7 +100,7 @@ class World:
         self.overlay_path = tmp_path / "overlay.json"
         self.overlay_path.write_text(json.dumps({"skills_hash": self.profile.skills_hash}), encoding="utf-8")
 
-    def job(self, job_id, skills, *, bucket="backend", legitimacy="legitimate", confidence="high"):
+    def job(self, job_id, skills, *, bucket="backend", legitimacy="legitimate", confidence="high", described=True):
         upsert_job(
             self.conn,
             {
@@ -121,6 +121,8 @@ class World:
             extraction_confidence=confidence,
         )
         self.conn.execute("UPDATE jobs SET extraction_version = 'x:1' WHERE job_key = %s", (job_id,))
+        if described:  # the describe step has settled every skill (decision D3)
+            self.conn.execute("UPDATE skill_vocab SET description_source = 'declined' WHERE description_source IS NULL")
         self.conn.commit()
         set_status(self.conn, job_id, "extracted")
         return job_id
@@ -474,3 +476,18 @@ def test_cli_bad_weights_exit_1(tmp_path, capsys, pg_url):
     base[base.index("--weights") + 1] = str(bad)
     assert scoring_main([*base, "status"]) == 1
     assert "config error" in capsys.readouterr().out
+
+
+def test_d3_a_job_waits_until_its_skills_are_described(world):
+    w, _ = _weights(world.tmp, world.cfg)
+    world.job("greenhouse:ready", [("django", "required")])
+    add_market_skill(world.conn, "airflow")
+    save_vectors(world.conn, ["airflow"], np.asarray([_vec(40)]), world.cfg.embed_tag)
+    world.job("greenhouse:waits", [("django", "required"), ("airflow", "required")], described=False)
+    world.job("greenhouse:miss", [("not a node yet", "required")], described=False)  # nothing to wait for
+    assert sr.waiting_for_descriptions(world.conn) == 1
+    stats = world.run(w, lambda: lambda names: np.stack([_vec(50) for _ in names]))
+    assert stats.scored == 2 and get_job(world.conn, "greenhouse:waits")["status"] == "extracted"
+    world.conn.execute("UPDATE skill_vocab SET description_source = 'generated' WHERE name = 'airflow'")
+    assert sr.waiting_for_descriptions(world.conn) == 0
+    assert world.run(w).scored == 1 and get_job(world.conn, "greenhouse:waits")["status"] == "scored"
