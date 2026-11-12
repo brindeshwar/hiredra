@@ -15,8 +15,8 @@ Four kinds of change:
   removed. A comma list keeps only its recognised parts;
 * ``drop``   -- junk (non-Latin letters, too many words or characters): removed from every job, then removed.
 
-Jobs that list a changed name have their skill rows rewritten to the new names (duplicates kept once), so a job
-never counts one skill twice. Scored jobs keep their score until ``python -m hiredra.scoring run --force``.
+Jobs that list a changed name, or a name that is an alias, have their skill rows rewritten to the canonical names
+(duplicates kept once), so a job never counts one skill twice. It all happens in one transaction. Scored jobs keep their score until ``python -m hiredra.scoring run --force``.
 Run it again after applying: a second pass catches what the first one changed (normally nothing).
 """
 
@@ -27,7 +27,16 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from hiredra.extraction import name_resolver
-from hiredra.storage import merge_skill, remove_skill, rename_skill, select_jobs, set_skills
+from hiredra.storage import (
+    add_alias,
+    get_skill_vocab,
+    merge_skill,
+    remove_skill,
+    rename_skill,
+    resolve_alias,
+    select_jobs,
+    set_skills,
+)
 from hiredra.vocab import _BRACKET, _EXAMPLES_LEAD, Resolver, is_acronym
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -59,7 +68,10 @@ def plan_node(r: Resolver, name: str) -> Change | None:
     """What the rules would do with node ``name`` if it arrived today (None: it stays as it is)."""
     if name in r.keep_whole:
         return None
-    saved = r._canon.pop(name)  # look at it as if new: its own entry must not answer for it
+    # Look at it as if new: neither its own entry nor an alias pointing at it may answer for it.
+    own = {k: v for k, v in r._canon.items() if v == name}
+    for k in own:
+        del r._canon[k]
     try:
         m = _BRACKET.fullmatch(name)
         if m:
@@ -81,7 +93,7 @@ def plan_node(r: Resolver, name: str) -> Change | None:
         reason = r.junk_reason(name)
         return Change(name, "drop", (), reason) if reason else None
     finally:
-        r._canon[name] = saved
+        r._canon.update(own)
 
 
 def plan(conn, resolver: Resolver) -> list[Change]:
@@ -117,8 +129,13 @@ def load_plan(plan_dir: Path) -> list[Change]:
 
 
 def apply(conn, resolver: Resolver, changes: list[Change]) -> dict[str, int]:
-    """Apply ``changes``: merges and renames first (so every target exists), then each affected job's skill rows,
-    then the split and dropped nodes."""
+    """Apply ``changes`` in one transaction (all or nothing): merges and renames first (so every target exists),
+    then the skill rows of every job that lists a changed name or an alias, then the split and dropped nodes."""
+    with conn.transaction():
+        return _apply(conn, resolver, changes)
+
+
+def _apply(conn, resolver: Resolver, changes: list[Change]) -> dict[str, int]:
     counts = {"merged": 0, "renamed": 0, "jobs_rewritten": 0, "scored_jobs": 0, "removed": 0}
     by_name = {c.name: c for c in changes}
     for c in changes:
@@ -127,14 +144,23 @@ def apply(conn, resolver: Resolver, changes: list[Change]) -> dict[str, int]:
             counts["merged"] += 1
         elif c.kind == "rename":
             rename_skill(conn, c.name, c.targets[0])
+            inner = _BRACKET.fullmatch(c.name).group(2).strip()  # the acronym: an alias of the renamed skill too
+            if resolve_alias(conn, inner) is None and get_skill_vocab(conn, inner) is None:
+                add_alias(conn, inner, c.targets[0])
             counts["renamed"] += 1
     affected = [c.name for c in changes]
-    jobs = select_jobs(conn, "j.id IN (SELECT job_id FROM job_skills WHERE skill = ANY(%s))", (affected,), "j.id")
+    aliases = {r["alias"]: r["canonical"] for r in conn.execute("SELECT alias, canonical FROM skill_alias")}
+    jobs = select_jobs(
+        conn,
+        "j.id IN (SELECT job_id FROM job_skills WHERE skill = ANY(%s) OR skill IN (SELECT alias FROM skill_alias))",
+        (affected,),
+        "j.id",
+    )
     for job in jobs:
         rows = []
         for item in job["skills"] or []:
             c = by_name.get(item["name"])
-            names = [item["name"]] if c is None else list(c.targets)
+            names = [aliases.get(item["name"], item["name"])] if c is None else list(c.targets)
             for n in names:
                 if c is not None and c.kind == "split":  # a part may be new: resolving creates it and counts it
                     n = next(iter(resolver.resolve(n)), None)
@@ -148,7 +174,13 @@ def apply(conn, resolver: Resolver, changes: list[Change]) -> dict[str, int]:
         if c.kind in ("split", "drop"):
             remove_skill(conn, c.name)
             counts["removed"] += 1
-    conn.commit()
+    left = conn.execute(
+        "SELECT DISTINCT skill FROM job_skills WHERE skill = ANY(%s) "
+        "AND skill NOT IN (SELECT name FROM skill_vocab) AND skill NOT IN (SELECT alias FROM skill_alias)",
+        (affected,),
+    ).fetchall()
+    if left:  # a job would point at a skill that no longer exists: undo everything
+        raise RuntimeError(f"jobs still list removed skills {[r['skill'] for r in left]}; nothing was applied")
     return counts
 
 

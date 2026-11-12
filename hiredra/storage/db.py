@@ -1265,6 +1265,7 @@ def rename_skill(conn: psycopg.Connection, old: str, new: str) -> None:
     with conn.transaction():
         if conn.execute("SELECT 1 FROM skill_vocab WHERE name = %s", (old,)).fetchone() is None:
             raise ValueError(f"skill {old!r} does not exist")
+        conn.execute("DELETE FROM skill_alias WHERE alias = %s AND canonical = %s", (new, old))  # it is old itself
         if conn.execute(
             "SELECT 1 FROM skill_vocab WHERE name = %s UNION SELECT 1 FROM skill_alias WHERE alias = %s", (new, new)
         ).fetchone():

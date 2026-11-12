@@ -218,7 +218,7 @@ def _cmd_clean(conn, cfg, args) -> int:
     if counts["scored_jobs"]:
         _log(f"  {counts['scored_jobs']} scored job(s) changed: re-score with `python -m hiredra.scoring run --force`")
     _log("  run `clean` again: a second pass picks up changes that waited on these")
-    (plan_dir / "plan.json").rename(plan_dir / "plan.applied.json")
+    (plan_dir / "plan.json").replace(plan_dir / "plan.applied.json")
     return 0
 
 
