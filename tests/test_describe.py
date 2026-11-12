@@ -123,6 +123,8 @@ FILLERS = frozenset({"server", "tools", "systems", "framework", "programming"})
         ("mcp", "mcp server", None),  # a short name is never folded into a longer one
         ("ai governance", "governance", None),  # found on the first real run: a spelling slip never adds a word
         ("ai image generation", "image generation", None),
+        ("gui development", "ui development", None),  # owner: a short word is a name of its own
+        ("html canvas", "html5 canvas", "spelling"),
         ("unity3d", "unity", "spelling"),
         ("ibatis", "mybatis", "spelling"),
     ],

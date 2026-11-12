@@ -183,8 +183,10 @@ def same_skill(name: str, known: str, fillers: Collection[str]) -> str | None:
     a, b = normalized_key(name), normalized_key(known)
     words, base = _words(name), _words(known)
     accented = any(ord(ch) > 127 for ch in name)
-    # A spelling slip changes letters inside words; it never adds a word ("ai governance" is not "governance").
-    if len(words) == len(base) and min(len(a), len(b)) >= 5 and _edits(a, b) <= (3 if accented else 2):
+    # A spelling slip changes letters inside words; it never adds a word ("ai governance" is not "governance"),
+    # and a short word is a name of its own ("gui" is not "ui", owner 2026-11-12): those must match exactly.
+    same_short = all(x == y or min(len(x), len(y)) > 3 for x, y in zip(words, base))
+    if len(words) == len(base) and same_short and min(len(a), len(b)) >= 5 and _edits(a, b) <= (3 if accented else 2):
         return "spelling"
     extra = [w for w in words if w not in base]
     if base and all(w in words for w in base) and extra and all(w in fillers for w in extra):
@@ -387,6 +389,13 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--db", default=None, help="database URL (default: HIREDRA_DATABASE_URL)")
     ap.add_argument("--limit", type=int, default=None, help="ask about at most this many skills")
     ap.add_argument("--dry-run", action="store_true", help="show the queue and the first prompt; no API call")
+    ap.add_argument(
+        "--max-requests",
+        type=int,
+        default=None,
+        help="today's cap for this step, instead of describe.max_requests_per_day (only with the owner's OK); "
+        "the requests kept for extraction are never used",
+    )
     args = ap.parse_args(argv)
 
     ext, cfg = load_extraction_config(), load_graph_config()
@@ -401,7 +410,7 @@ def main(argv: list[str] | None = None) -> int:
         vectors = {s.name: s.vector for s in load_skills(conn, cfg) if s.vector is not None}
         candidates = nearest(names, vectors)
         shared = DailyUsage(ext.daily_budget, conn, "gemini", MODEL_NAME)
-        own = DailyUsage(ext.describe_requests_per_day, conn, "gemini-describe", MODEL_NAME)
+        own = DailyUsage(args.max_requests or ext.describe_requests_per_day, conn, "gemini-describe", MODEL_NAME)
         print(
             f"{len(names)} skill(s) to describe; flash-lite today: {shared.summary()}; describe today: "
             f"{own.summary()}; kept for extraction: {ext.describe_reserve}",
