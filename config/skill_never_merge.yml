@@ -23,3 +23,5 @@ never_merge:
   - [ada, adas]          # the Ada language / advanced driver-assistance systems
   - [canva, canvas]      # the design tool / the HTML canvas
   - [ssr, ssrs]          # server-side rendering / SQL Server Reporting Services
+  - [gui, ui]            # graphical user interfaces (often desktop) / user interfaces in general (owner, 2026-11-12)
+  - [gui development, ui development]
