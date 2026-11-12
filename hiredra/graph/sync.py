@@ -28,6 +28,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from hiredra.graph.config import GraphConfig
+from hiredra.graph.descriptions import described, load_descriptions, refresh_descriptions
 from hiredra.graph.embedder import Embedder
 from hiredra.graph.index import blob_to_vector, save_vectors
 from hiredra.quota import classify_failure
@@ -59,17 +60,21 @@ def embed_pending(
     cfg: GraphConfig,
     embed: Embedder,
     *,
+    descriptions: Mapping[str, str] | None = None,
     limit: int | None = None,
     weights: Mapping[str, int] | None = None,
     log: Callable[[str], None] = lambda _msg: None,
     clock: Callable[[], float] = time.monotonic,
 ) -> EmbedReport:
-    """Embed the queue in ``cfg.inputs_per_request`` chunks, committing each chunk.
+    """Embed the queue in ``cfg.inputs_per_request`` chunks, committing each chunk with the exact text embedded.
 
-    ``limit`` caps how many skills this call attempts (staged runs); ``weights``
-    orders ties in the queue (see ``skills_needing_embedding``).
+    ``descriptions`` is the embedder's own lookup (``embedding_descriptions``): a node whose input text changed
+    since its vector was made is queued again. ``limit`` caps how many skills this call attempts (staged runs);
+    ``weights`` orders ties in the queue (see ``skills_needing_embedding``).
     """
-    queue = skills_needing_embedding(conn, cfg.embed_tag, weights=weights)
+    descriptions = descriptions or {}
+    expected = input_texts(descriptions)
+    queue = skills_needing_embedding(conn, cfg.embed_tag, weights=weights, inputs=expected)
     target = queue if limit is None else queue[:limit]
     report = EmbedReport(queue_size=len(queue), attempted=len(target))
     started = clock()
@@ -84,7 +89,7 @@ def embed_pending(
                 raise  # not a known failure kind: most likely a bug, so it must be loud
             report.stopped, report.error = kind, f"{type(exc).__name__}: {str(exc)[:300]}"
             break
-        save_vectors(conn, chunk, vectors, cfg.embed_tag)  # one transaction per chunk
+        save_vectors(conn, chunk, vectors, cfg.embed_tag, [described(n, descriptions) for n in chunk])
         report.embedded += len(chunk)
         report.chunks += 1
         log(f"embedded {report.embedded}/{len(target)}  ({clock() - started:.0f}s)")
@@ -103,15 +108,18 @@ class CanaryResult:
     error: str | None = None  # the canary embed itself failed
 
 
-def check_canary(conn, cfg: GraphConfig, embed: Embedder) -> CanaryResult:
+def check_canary(conn, cfg: GraphConfig, embed: Embedder, expected: Mapping[str, str] | None = None) -> CanaryResult:
     """Re-embed the configured canary nodes that already have a CURRENT vector and
     compare to the stored ones. Nodes that don't exist / aren't embedded yet are
-    skipped; if none qualify there is nothing to compare (a fresh index)."""
+    skipped; if none qualify there is nothing to compare (a fresh index). With ``expected`` (name -> today's
+    input), a canary whose input text changed is skipped too: a new description is not model drift."""
     present: list[str] = []
     stored: list[np.ndarray] = []
     for name in cfg.canary_skills:
         row = get_skill_vocab(conn, name)
         if row and row["vector"] is not None and row["embed_tag"] == cfg.embed_tag:
+            if expected is not None and row["embed_input"] not in (None, expected.get(name, name)):
+                continue
             present.append(name)
             stored.append(blob_to_vector(row["vector"], cfg.dimensions))
     if not present:
@@ -142,11 +150,37 @@ class GateReport:
         return self.after.get("unembedded", 1) == 0 and self.after.get("stale", 1) == 0 and self.canary.error is None
 
 
+def input_texts(descriptions: Mapping[str, str]) -> dict[str, str]:
+    """name -> embedding input for every described name (any other name's input is the name itself)."""
+    return {name: described(name, descriptions) for name in descriptions}
+
+
+def backfill_embed_inputs(conn, cfg: GraphConfig) -> int:
+    """Record the input text of vectors made before inputs were stored (migration 0007). Under the live tag the
+    input was exactly ``described(name, freehire's file)`` -- the tag pins that file -- so no vector is re-embedded
+    just to learn its own input. A no-op once every vector has one."""
+    if cfg.inputs != "described":
+        return 0
+    freehire = load_descriptions()
+    rows = conn.execute(
+        "SELECT name FROM skill_vocab WHERE vector IS NOT NULL AND embed_input IS NULL AND embed_tag = %s",
+        (cfg.embed_tag,),
+    ).fetchall()
+    if rows:
+        with conn.transaction():
+            conn.cursor().executemany(
+                "UPDATE skill_vocab SET embed_input = %s WHERE name = %s",
+                [(described(r["name"], freehire), r["name"]) for r in rows],
+            )
+    return len(rows)
+
+
 def ensure_index_current(
     conn,
     cfg: GraphConfig,
     embed: Embedder,
     *,
+    descriptions: Mapping[str, str] | None = None,
     limit: int | None = None,
     weights: Mapping[str, int] | None = None,
     log: Callable[[str], None] = lambda _msg: None,
@@ -163,8 +197,15 @@ def ensure_index_current(
     A tag change needs no special case: ``skills_needing_embedding`` already
     treats a different ``embed_tag`` as needing re-embedding.
     """
-    before = skill_index_status(conn, cfg.embed_tag)
-    canary = check_canary(conn, cfg, embed)
+    changed = refresh_descriptions(conn)
+    if changed:
+        log(f"descriptions refreshed: {changed}")
+    backfilled = backfill_embed_inputs(conn, cfg)
+    if backfilled:
+        log(f"recorded the input text of {backfilled} existing vector(s)")
+    expected = input_texts(descriptions or {})
+    before = skill_index_status(conn, cfg.embed_tag, expected)
+    canary = check_canary(conn, cfg, embed, expected)
     invalidated = 0
     if canary.drifted:
         invalidated = invalidate_skill_vectors(conn)
@@ -178,11 +219,11 @@ def ensure_index_current(
         log(f"canary could not run: {canary.error}")
     else:
         log(f"canary ok: {len(canary.checked)} nodes, min cosine {canary.min_cosine:.6f}")
-    result = embed_pending(conn, cfg, embed, limit=limit, weights=weights, log=log)
+    result = embed_pending(conn, cfg, embed, descriptions=descriptions, limit=limit, weights=weights, log=log)
     return GateReport(
         before=before,
         canary=canary,
         invalidated=invalidated,
         embed=result,
-        after=skill_index_status(conn, cfg.embed_tag),
+        after=skill_index_status(conn, cfg.embed_tag, expected),
     )

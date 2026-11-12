@@ -30,6 +30,8 @@ from datetime import date
 from pathlib import Path
 
 from hiredra.graph.config import DEFAULT_CONFIG_PATH, load_graph_config
+from hiredra.graph.descriptions import embedding_descriptions, refresh_descriptions
+from hiredra.graph.sync import input_texts
 from hiredra.graph.curation import (
     DEFAULT_ALIAS_PATH,
     DEFAULT_NEVER_MERGE_PATH,
@@ -75,12 +77,13 @@ _DEFAULT_HINT = "Read the error above, fix the cause, then run `sync` again."
 
 
 def _cmd_status(conn, cfg, args) -> int:
-    st = skill_index_status(conn, cfg.embed_tag)
+    expected = input_texts(embedding_descriptions(conn, cfg))
+    st = skill_index_status(conn, cfg.embed_tag, expected)
     _log(f"embed tag : {cfg.embed_tag}")
     _log(f"nodes     : {st['total']}  (market {st['market']}, jd {st['jd']}, profile {st['profile']})")
     _log(f"embedded  : {st['current']} current, {st['stale']} stale, {st['unembedded']} not yet")
     _log(f"aliases   : {st['aliases']}")
-    _log(f"queue     : {len(skills_needing_embedding(conn, cfg.embed_tag))} node(s) need embedding")
+    _log(f"queue     : {len(skills_needing_embedding(conn, cfg.embed_tag, inputs=expected))} node(s) need embedding")
     return 0
 
 
@@ -124,7 +127,9 @@ def _cmd_consistency(conn, cfg, args) -> int:
     from hiredra.graph.embedder import build_embedder
 
     _log(f"consistency check: {args.sample} skills x 3 ways = {3 * args.sample} embeddings")
-    r = check_batch_consistency(conn, cfg, build_embedder(cfg), sample=args.sample)
+    r = check_batch_consistency(
+        conn, cfg, build_embedder(cfg, descriptions=embedding_descriptions(conn, cfg)), sample=args.sample
+    )
     if r.skipped_reason:
         _log(f"SKIPPED: {r.skipped_reason}")
         return 2
@@ -156,9 +161,15 @@ def _cmd_sync(conn, cfg, args) -> int:
     if args.reembed_all:
         cleared = invalidate_skill_vectors(conn)
         _log(f"--reembed-all: cleared {cleared} stored vectors; the whole index will be re-embedded")
-    embed = build_embedder(cfg)
+    changed = refresh_descriptions(conn)  # an override must be in the lookup before it is used
+    if changed:
+        _log(f"descriptions refreshed: {changed}")
+    descriptions = embedding_descriptions(conn, cfg)
+    embed = build_embedder(cfg, descriptions=descriptions)
     _log(f"embed tag {cfg.embed_tag}; local model, {cfg.inputs_per_request} skills per batch")
-    gate = ensure_index_current(conn, cfg, embed, limit=args.limit, weights=weights, log=_log)
+    gate = ensure_index_current(
+        conn, cfg, embed, descriptions=descriptions, limit=args.limit, weights=weights, log=_log
+    )
     e = gate.embed
     _log("")
     _log(
@@ -325,7 +336,7 @@ def _cmd_overlay(conn, cfg, args) -> int:
     def embedder():
         from hiredra.graph.embedder import build_embedder
 
-        return build_embedder(cfg)
+        return build_embedder(cfg, descriptions=embedding_descriptions(conn, cfg))
 
     try:
         plan = ov.plan_overlay(conn, cfg, profile, embedder)
@@ -384,7 +395,7 @@ def _cmd_calibrate(conn, cfg, args) -> int:
     def embedder():
         from hiredra.graph.embedder import build_embedder
 
-        return build_embedder(cfg)
+        return build_embedder(cfg, descriptions=embedding_descriptions(conn, cfg))
 
     try:
         cosines = cal.pair_cosines(conn, cfg, pairs, embedder)
