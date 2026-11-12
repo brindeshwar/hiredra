@@ -5,6 +5,7 @@ from __future__ import annotations
 from hiredra.graph import clean
 from hiredra.graph.__main__ import main as graph_main
 from hiredra.storage import (
+    add_alias,
     connect,
     get_job,
     get_skill_vocab,
@@ -93,4 +94,60 @@ def test_cli_applies_only_the_reviewed_plan(pg_url, tmp_path):
     assert graph_main(["--db", pg_url, "clean", "--plan-dir", plan_dir]) == 0
     assert graph_main(["--db", pg_url, "clean", "--apply", "--plan-dir", plan_dir]) == 0
     assert get_skill_vocab(conn, "java script") is None and (tmp_path / "plan.applied.json").exists()
+    conn.close()
+
+
+def test_an_alias_of_the_node_itself_does_not_hide_a_real_match(pg_url):
+    conn = connect(pg_url)
+    init_db(conn)
+    for name in ("domain driven design", "domain-driven design (ddd)"):
+        touch_skill_vocab(conn, name)
+    add_alias(conn, "domain-driven design", "domain-driven design (ddd)")
+    (change,) = clean.plan(conn, Resolver(conn))
+    assert (change.kind, change.targets) == ("merge", ("domain driven design",))
+    conn.close()
+
+
+def test_a_rename_may_take_a_name_that_is_its_own_alias(pg_url):
+    conn = connect(pg_url)
+    init_db(conn)
+    touch_skill_vocab(conn, "personal protective equipment (ppe)")
+    add_alias(conn, "personal protective equipment", "personal protective equipment (ppe)")
+    r = Resolver(conn)
+    clean.apply(conn, r, clean.plan(conn, r))
+    assert get_skill_vocab(conn, "personal protective equipment") is not None
+    assert resolve_alias(conn, "ppe") == "personal protective equipment"
+    conn.close()
+
+
+def test_apply_is_all_or_nothing_and_canonicalizes_alias_rows(pg_url, monkeypatch):
+    conn, a, _ = _setup(pg_url)
+    touch_skill_vocab(conn, "kubernetes")
+    add_alias(conn, "k8s", "kubernetes")
+    job = _job(conn, 3, [("k8s", "required"), ("kubernetes", "good_to_have")])
+    r = Resolver(conn)
+    changes = clean.plan(conn, r)
+    monkeypatch.setattr(clean, "remove_skill", lambda *_: (_ for _ in ()).throw(RuntimeError("boom")))
+    try:
+        clean.apply(conn, r, changes)
+    except RuntimeError:
+        pass
+    assert get_skill_vocab(conn, "java script") is not None  # the merges before the failure were rolled back
+    monkeypatch.undo()
+    clean.apply(conn, Resolver(conn), clean.plan(conn, Resolver(conn)))
+    assert [(s["name"], s["requirement"]) for s in get_job(conn, job)["skills"]] == [("kubernetes", "required")]
+    conn.close()
+
+
+def test_apply_refuses_to_leave_a_job_on_a_removed_skill(pg_url, monkeypatch):
+    conn, a, _ = _setup(pg_url)
+    r = Resolver(conn)
+    changes = clean.plan(conn, r)
+    monkeypatch.setattr(clean, "set_skills", lambda *_a, **_k: None)  # a rewrite that silently does nothing
+    try:
+        clean.apply(conn, r, changes)
+        raise AssertionError("expected a refusal")
+    except RuntimeError as exc:
+        assert "docker & kubernetes" in str(exc)
+    assert get_skill_vocab(conn, "docker & kubernetes") is not None  # rolled back
     conn.close()
