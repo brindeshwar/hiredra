@@ -1259,6 +1259,41 @@ def merge_skill(conn: psycopg.Connection, dup: str, canonical: str) -> None:
         )
 
 
+def rename_skill(conn: psycopg.Connection, old: str, new: str) -> None:
+    """Rename node ``old`` to the unused name ``new``, keeping its counts and flags; its aliases follow it and
+    ``old`` becomes an alias. The vector is cleared (the name is part of the embedding input)."""
+    with conn.transaction():
+        if conn.execute("SELECT 1 FROM skill_vocab WHERE name = %s", (old,)).fetchone() is None:
+            raise ValueError(f"skill {old!r} does not exist")
+        if conn.execute(
+            "SELECT 1 FROM skill_vocab WHERE name = %s UNION SELECT 1 FROM skill_alias WHERE alias = %s", (new, new)
+        ).fetchone():
+            raise ValueError(f"{new!r} is already a skill or an alias")
+        conn.execute(  # a copy under the new name first: the aliases' foreign key needs it to exist
+            "INSERT INTO skill_vocab (name, description, first_seen_at, seen_count, mine, level, source, edges) "
+            "SELECT %s, description, first_seen_at, seen_count, mine, level, source, edges FROM skill_vocab "
+            "WHERE name = %s",
+            (new, old),
+        )
+        conn.execute("UPDATE skill_alias SET canonical = %s WHERE canonical = %s", (new, old))
+        conn.execute("DELETE FROM skill_vocab WHERE name = %s", (old,))
+        conn.execute("INSERT INTO skill_alias (alias, canonical, created_at) VALUES (%s, %s, %s)", (old, new, _now()))
+
+
+def remove_skill(conn: psycopg.Connection, name: str) -> None:
+    """Delete node ``name`` and every alias pointing at it (the skill-name cleanup: a compound split into its
+    parts, or junk). The caller rewrites the jobs that list it first; ``job_skills`` has no foreign key. A ``mine``
+    node is never removed (``ValueError``)."""
+    with conn.transaction():
+        row = conn.execute("SELECT mine FROM skill_vocab WHERE name = %s FOR UPDATE", (name,)).fetchone()
+        if row is None:
+            raise ValueError(f"skill {name!r} does not exist")
+        if row["mine"]:
+            raise ValueError(f"{name!r} is a 'mine' skill and is never removed")
+        conn.execute("DELETE FROM skill_alias WHERE canonical = %s", (name,))
+        conn.execute("DELETE FROM skill_vocab WHERE name = %s", (name,))
+
+
 def iter_skill_vocab(conn: psycopg.Connection) -> list[dict]:
     """Every node as a plain dict (all columns incl. ``vector`` bytes), by name."""
     return [_vocab_row(r) for r in conn.execute(_VOCAB_SELECT + " ORDER BY name")]

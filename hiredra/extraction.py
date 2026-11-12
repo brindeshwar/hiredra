@@ -57,6 +57,7 @@ from pydantic import BaseModel, ValidationError
 from tenacity import Retrying, retry_if_exception, stop_never
 
 from hiredra import skilltag, vocab
+from hiredra.graph.curation import load_never_merge
 from hiredra.lock import LockHeld, RunLock
 from hiredra.nvidia import NvidiaChain
 from hiredra.quota import DailyQuotaExceeded, DailyUsage, classify_failure, jittered_wait, reset_text
@@ -100,6 +101,9 @@ class ExtractionConfig:
     skill_synonyms: dict = field(default_factory=dict)
     # The dictionary producer's own stoplist (on top of generic_skills): umbrella words and office tools.
     dictionary_skip: frozenset = frozenset()
+    # Skill-name cleaning (hiredra.vocab.Resolver): names never split or version-stripped. Not part of the stamp:
+    # it decides how a name is stored, not what the model was asked.
+    keep_whole: frozenset = frozenset()
     # Fallback provider (docs/model-selection-extraction.md): used when Gemini's daily budget is spent.
     fallback_provider: str | None = None  # "nvidia" or None
     fallback_model: str = ""
@@ -135,6 +139,7 @@ def load_extraction_config(
         generic_skills=frozenset(_norm(x) for x in data.get("generic_skills") or []),
         skill_synonyms={_norm(k): tuple(_norm(v) for v in vs) for k, vs in (data.get("skill_synonyms") or {}).items()},
         dictionary_skip=frozenset(_norm(x) for x in data.get("dictionary_skip") or []),
+        keep_whole=frozenset(vocab.normalize(str(x)) for x in data.get("keep_whole") or []),
         **_fallback_fields(data.get("fallback") or {}),
     )
 
@@ -402,6 +407,25 @@ def apply_guards(skills: list, jd_text: str, config: ExtractionConfig) -> tuple[
     return kept, dropped
 
 
+def name_resolver(conn, config: ExtractionConfig) -> vocab.Resolver:
+    """The skill-name cleaner for one run (hiredra.vocab): the owner's keep-whole and never-merge lists, the
+    generic list dropped wherever it appears, and the same word cap as the guards."""
+    return vocab.Resolver(
+        conn,
+        keep_whole=config.keep_whole,
+        never=load_never_merge(),
+        skip=config.generic_skills,
+        max_words=config.max_skill_words,
+    )
+
+
+def _note_dropped_names(conn, job_id: str, resolver: vocab.Resolver) -> None:
+    """Note on the job the names the cleaner refused as junk, then clear the list."""
+    if resolver.dropped:
+        add_note(conn, job_id, "extraction: names dropped " + "; ".join(f"{n} ({why})" for n, why in resolver.dropped))
+        resolver.dropped.clear()
+
+
 def dictionary_extras(
     llm_names: list[str],
     clean_text: str,
@@ -593,6 +617,7 @@ def run_extraction(
     stamp = extraction_version(config, model)
     dict_stamp = dictionary_version(config)
     slug_names = skilltag.vocab_names(conn)
+    resolver = name_resolver(conn, config)
     streak = 0
 
     jobs = list(iter_jobs(conn, status="filtered"))
@@ -654,7 +679,7 @@ def run_extraction(
         confidence = result.extraction_confidence
         if not kept and confidence == "high":
             confidence = "low"  # no specific, grounded skill survived: not a reliable extraction
-        skills = [{"name": vocab.resolve_skill(conn, item.name), "requirement": item.requirement} for item in kept]
+        skills = [{"name": n, "requirement": item.requirement} for item in kept for n in resolver.resolve(item.name)]
         set_extraction(
             conn,
             job_id,
@@ -667,7 +692,8 @@ def run_extraction(
         extras, _ = dictionary_extras(
             [s["name"] for s in skills], clean_text, job["company"], result.domain_bucket, slug_names, config
         )
-        set_dictionary_skills(conn, job_id, [vocab.resolve_skill(conn, n) for n in extras], dict_stamp)
+        set_dictionary_skills(conn, job_id, [n for e in extras for n in resolver.resolve(e)], dict_stamp)
+        _note_dropped_names(conn, job_id, resolver)
         set_status(conn, job_id, "extracted")
         stats.extracted += 1
 
@@ -747,6 +773,7 @@ def add_dictionary_skills(conn, config: ExtractionConfig) -> dict[str, int]:
     until the next ``python -m hiredra.scoring run --force``."""
     stamp = dictionary_version(config)
     slug_names = skilltag.vocab_names(conn)
+    resolver = name_resolver(conn, config)
     counts = {"jobs": 0, "scored": 0, "skills_added": 0}
     rows = select_jobs(
         conn,
@@ -760,7 +787,8 @@ def add_dictionary_skills(conn, config: ExtractionConfig) -> dict[str, int]:
         llm = [s["name"] for s in row["skills"] or [] if s.get("source", "llm") == "llm"]
         before = {s["name"] for s in row["skills"] or [] if s.get("source") == "dictionary"}
         extras, _ = dictionary_extras(llm, clean_text, row["company"], row["domain_bucket"], slug_names, config)
-        names = [n if n in before else vocab.resolve_skill(conn, n) for n in extras]  # a sighting counts once
+        names = [n for e in extras for n in ([e] if e in before else resolver.resolve(e))]  # a sighting counts once
+        _note_dropped_names(conn, row["job_id"], resolver)
         set_dictionary_skills(conn, row["job_id"], names, stamp)
         counts["jobs"] += 1
         counts["scored"] += row["status"] == "scored"
