@@ -1147,7 +1147,7 @@ def touch_skill_vocab(conn: psycopg.Connection, name: str) -> None:
 # the graph code is unchanged by the move; Postgres stores them as pgvector ``vector`` (float4 too: exact).
 _VOCAB_SELECT = (
     "SELECT name, description, first_seen_at, seen_count, vector::real[] AS vector, embed_tag, mine, level, source, "
-    "edges FROM skill_vocab"
+    "edges, description_source, embed_input FROM skill_vocab"
 )
 
 
@@ -1364,35 +1364,48 @@ def list_skill_aliases(conn: psycopg.Connection) -> dict[str, list[str]]:
     return out
 
 
+def _input_stale(row: Mapping[str, Any], inputs: Mapping[str, str] | None) -> bool:
+    """The vector was made from another text than the node's input today (``inputs``: name -> expected input)."""
+    return inputs is not None and row["embed_input"] != inputs.get(row["name"], row["name"])
+
+
 def skills_needing_embedding(
     conn: psycopg.Connection,
     embed_tag: str,
     limit: int | None = None,
     weights: Mapping[str, int] | None = None,
+    inputs: Mapping[str, str] | None = None,
 ) -> list[str]:
-    """Nodes with no vector yet, or one made under a different ``embed_tag``
-    (stale). This IS the resumable work queue for an index build: a chunk's
-    vectors commit before the next chunk starts, so re-running just continues.
+    """Nodes with no vector yet, one made under a different ``embed_tag``, or (with ``inputs``, name -> today's
+    embedding input) one made from a different text -- a changed description. This IS the resumable work queue
+    for an index build: a chunk's vectors commit before the next chunk starts, so re-running just continues.
     Highest-value first -- ``mine`` nodes, then the most-sighted in OUR jobs,
     then (if ``weights`` is given, e.g. market document frequency) the most
     common, then by name -- so an interrupted build has embedded what scoring
     is most likely to need.
     """
-    rows = conn.execute(
-        "SELECT name, mine, seen_count FROM skill_vocab WHERE vector IS NULL OR embed_tag IS DISTINCT FROM %s",
-        (embed_tag,),
-    ).fetchall()
+    rows = [
+        r
+        for r in conn.execute(
+            "SELECT name, mine, seen_count, embed_input, (vector IS NULL OR embed_tag IS DISTINCT FROM %s) AS old "
+            "FROM skill_vocab",
+            (embed_tag,),
+        ).fetchall()
+        if r["old"] or _input_stale(r, inputs)
+    ]
     w = weights or {}
     rows.sort(key=lambda r: (-r["mine"], -r["seen_count"], -w.get(r["name"], 0), r["name"]))
     names = [r["name"] for r in rows]
     return names if limit is None else names[:limit]
 
 
-def skill_index_status(conn: psycopg.Connection, embed_tag: str) -> dict[str, int]:
+def skill_index_status(
+    conn: psycopg.Connection, embed_tag: str, inputs: Mapping[str, str] | None = None
+) -> dict[str, int]:
     """Counts describing the embedded index against the live ``embed_tag``:
     ``total`` nodes, ``current`` (vector under this tag), ``stale`` (a vector
-    under another tag), ``unembedded`` (no vector), plus ``market``/``jd``/
-    ``profile`` node counts and ``aliases``."""
+    under another tag, or with ``inputs`` made from another text), ``unembedded`` (no vector), plus
+    ``market``/``jd``/``profile`` node counts and ``aliases``."""
     row = conn.execute(
         "SELECT COUNT(*) AS total, "
         "COUNT(*) FILTER (WHERE vector IS NOT NULL AND embed_tag IS NOT DISTINCT FROM %s) AS current, "
@@ -1403,6 +1416,16 @@ def skill_index_status(conn: psycopg.Connection, embed_tag: str) -> dict[str, in
         (embed_tag, embed_tag),
     ).fetchone()
     out = {k: int(row[k] or 0) for k in row.keys()}
+    if inputs is not None:
+        moved = sum(
+            _input_stale(r, inputs)
+            for r in conn.execute(
+                "SELECT name, embed_input FROM skill_vocab WHERE vector IS NOT NULL AND embed_tag IS NOT DISTINCT FROM %s",
+                (embed_tag,),
+            )
+        )
+        out["current"] -= moved
+        out["stale"] += moved
     out["aliases"] = conn.execute("SELECT COUNT(*) FROM skill_alias").fetchone()[0]
     return out
 
@@ -1412,20 +1435,22 @@ def invalidate_skill_vectors(conn: psycopg.Connection) -> int:
     embedding queue. Used when the canary shows the provider changed weights
     under an unchanged model id: those vectors are no longer comparable to
     anything embedded from now on. Returns the number of rows cleared."""
-    cur = conn.execute("UPDATE skill_vocab SET vector = NULL, embed_tag = NULL WHERE vector IS NOT NULL")
+    cur = conn.execute(
+        "UPDATE skill_vocab SET vector = NULL, embed_tag = NULL, embed_input = NULL WHERE vector IS NOT NULL"
+    )
     return cur.rowcount
 
 
-def set_skill_vectors(conn: psycopg.Connection, items: list[tuple[str, bytes]], embed_tag: str) -> None:
-    """Write ``(name, vector_blob)`` pairs and stamp them with ``embed_tag``, all
-    in ONE transaction: a chunk lands whole or not at all. An unknown ``name``
-    raises ``KeyError`` and rolls the whole batch back -- vectors are never
-    silently dropped."""
+def set_skill_vectors(conn: psycopg.Connection, items: Sequence[tuple], embed_tag: str) -> None:
+    """Write ``(name, vector_blob)`` or ``(name, vector_blob, input_text)`` items and stamp them with ``embed_tag``
+    (and the exact text embedded, ``embed_input``; the bare name when not given), all in ONE transaction: a chunk
+    lands whole or not at all. An unknown ``name`` raises ``KeyError`` and rolls the whole batch back -- vectors
+    are never silently dropped."""
     with conn.transaction():
-        for name, blob in items:
+        for name, blob, *rest in items:
             cur = conn.execute(
-                "UPDATE skill_vocab SET vector = %s::vector, embed_tag = %s WHERE name = %s",
-                (_vector_text(blob), embed_tag, name),
+                "UPDATE skill_vocab SET vector = %s::vector, embed_tag = %s, embed_input = %s WHERE name = %s",
+                (_vector_text(blob), embed_tag, rest[0] if rest else name, name),
             )
             if cur.rowcount != 1:
                 raise KeyError(f"no skill_vocab row named {name!r}")

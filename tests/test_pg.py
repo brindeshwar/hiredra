@@ -21,6 +21,7 @@ def test_migrate_applies_each_migration_once(db_url):
             "0004_search_on_demand",
             "0005_skill_source",
             "0006_company_fold",
+            "0007_skill_description_source",
         ]
         assert pg.migrate(conn) == []  # idempotent: nothing pending the second time
         tables = {r[0] for r in conn.execute("SELECT tablename FROM pg_tables WHERE schemaname = 'public'")}

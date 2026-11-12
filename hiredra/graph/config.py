@@ -19,11 +19,12 @@ DEFAULT_CONFIG_PATH = _REPO_ROOT / "config" / "graph.yml"
 
 #: Keys a section may leave out. ``fit.calibration_id`` is written by ``calibrate --write``
 #: (S5.1); until the first calibration there is none.
-_OPTIONAL: dict[str, set[str]] = {"fit": {"calibration_id"}, "embedding": {"inputs"}}
+_OPTIONAL: dict[str, set[str]] = {"fit": {"calibration_id"}, "embedding": {"inputs", "description_sources"}}
+DESCRIPTION_SOURCES = ("override", "freehire", "generated")
 INPUTS = ("bare", "described")
 
 _SECTIONS: dict[str, set[str]] = {
-    "embedding": {"model", "dimensions", "prefix", "inputs", "inputs_per_request"},
+    "embedding": {"model", "dimensions", "prefix", "inputs", "description_sources", "inputs_per_request"},
     "dedup": {"threshold", "review_cosine", "auto_cosine"},
     "fit": {"have", "adj", "calibration_id"},
     "harvest": {
@@ -70,13 +71,17 @@ class GraphConfig:
     auto_cosine: float = 0.96
     calibration_id: str | None = None  # "step5-<date>" once Step 5 has set have/adj
     inputs: str = "bare"  # bare names | described: "name: description" where a description exists (D1.15)
+    #: which descriptions feed a vector (hiredra.graph.descriptions); each vector records its own input text, so
+    #: changing this re-embeds only the skills whose input changes.
+    description_sources: tuple[str, ...] = ("override", "freehire")
 
     @property
     def embed_tag(self) -> str:
         """Version tag stored beside every vector. Covers everything in this
         config that changes what a vector *is*: model, dimensionality, prefix,
-        and for described inputs the descriptions file itself, so editing it
-        re-embeds the index. (Drift under the same model id -- new weights, or a
+        and for described inputs freehire's descriptions file (fixed, third-party). A single changed description
+        (an override, a generated one) does not move the tag: each vector records its own input text instead,
+        so only that skill is re-embedded. (Drift under the same model id -- new weights, or a
         library change that alters the numbers -- is what the canary check catches;
         a config tag can't see that.)"""
         prefix = hashlib.sha256(self.prefix.encode("utf-8")).hexdigest()[:8] if self.prefix else "none"
@@ -124,6 +129,7 @@ def load_graph_config(path: Path | str = DEFAULT_CONFIG_PATH) -> GraphConfig:
     )
     cfg = GraphConfig(
         inputs=str(emb.get("inputs", "bare")),
+        description_sources=tuple(emb.get("description_sources") or ("override", "freehire")),
         model=str(emb["model"]),
         dimensions=int(emb["dimensions"]),
         prefix=str(emb["prefix"] or ""),
@@ -143,6 +149,11 @@ def load_graph_config(path: Path | str = DEFAULT_CONFIG_PATH) -> GraphConfig:
         raise ValueError("graph config: embedding.model must be non-empty")
     if cfg.inputs not in INPUTS:
         raise ValueError(f"graph config: embedding.inputs must be one of {INPUTS}, got {cfg.inputs!r}")
+    if set(cfg.description_sources) - set(DESCRIPTION_SOURCES) or "override" not in cfg.description_sources:
+        raise ValueError(
+            f"graph config: embedding.description_sources must include 'override' and come from "
+            f"{DESCRIPTION_SOURCES}, got {list(cfg.description_sources)}"
+        )
     if not 128 <= cfg.dimensions <= 3072:
         raise ValueError(f"graph config: embedding.dimensions must be 128-3072, got {cfg.dimensions}")
     if not 1 <= cfg.inputs_per_request <= 100:

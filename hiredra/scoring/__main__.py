@@ -59,9 +59,10 @@ def _cmd_run(conn, args, graph_cfg, weights) -> int:
             sr.check_preconditions(conn, graph_cfg, profile, args.overlay_path)
 
             def embedder():
+                from hiredra.graph.descriptions import embedding_descriptions
                 from hiredra.graph.embedder import build_embedder
 
-                return build_embedder(graph_cfg)
+                return build_embedder(graph_cfg, descriptions=embedding_descriptions(conn, graph_cfg))
 
             stats = sr.run_scoring(conn, graph_cfg, weights, profile, embedder, force=args.force)
     except LockHeld as exc:

@@ -54,10 +54,15 @@ def test_empty_input_makes_no_call_and_a_wrong_shape_is_an_error():
         emb.build_embedder(CFG, model=FakeModel(dims=8), descriptions={})(["x"])
 
 
+def test_described_inputs_must_be_given_their_descriptions():
+    with pytest.raises(ValueError, match="embedding_descriptions"):
+        emb.build_embedder(CFG, model=FakeModel())
+
+
 def test_without_a_model_the_real_one_is_loaded_once(monkeypatch):
     built = []
     monkeypatch.setattr(emb, "load_local_model", lambda cfg: built.append(cfg) or FakeModel())
-    embed = emb.build_embedder(CFG)
+    embed = emb.build_embedder(CFG, descriptions={})
     assert embed(["python"]).shape == (1, CFG.dimensions) and built == [CFG]
     embed(["java"])
     assert built == [CFG]
@@ -102,7 +107,7 @@ _HAVE_MODEL = importlib.util.find_spec("sentence_transformers") is not None and 
 
 @pytest.mark.skipif(not _HAVE_MODEL, reason="needs `uv sync --group embed` and the cached Qwen3 weights")
 def test_the_real_model_is_deterministic_batch_independent_and_sensible():
-    embed = emb.build_embedder(CFG)
+    embed = emb.build_embedder(CFG, descriptions=load_descriptions())
     names = ["python", "java", "kubernetes", "k8s", "docker", "excel", "react", "reactjs"]
     batch = embed(names)
     alone = np.stack([embed([n])[0] for n in names])

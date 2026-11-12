@@ -1,0 +1,13 @@
+# config/skill_descriptions.yml -- the owner's corrections to skill descriptions.
+#
+# A skill's description is half of its embedding input ("name: description"). Where a description comes from, in
+# order: this file, then freehire's file (hiredra/graph/skill_descriptions.tsv, used as is), then one written by
+# the describe step. An entry here always wins. `null` means "no description: embed the bare name".
+# `python -m hiredra.graph sync` applies a change here and re-embeds only the skills it touches.
+
+overrides:
+  # freehire describes "mcp" as the Microsoft Certified Professional certification; in job postings it is the
+  # Model Context Protocol (graph audit, 2026-11-12).
+  mcp: >-
+    MCP (Model Context Protocol) is an open protocol that standardizes how applications give large language
+    models access to tools, data sources and context, used to connect AI assistants and agents to external systems.

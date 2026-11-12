@@ -20,7 +20,7 @@ from pathlib import Path
 import numpy as np
 
 from hiredra.graph.config import GraphConfig
-from hiredra.graph.descriptions import described, load_descriptions
+from hiredra.graph.descriptions import described
 from hiredra.quota import ProviderError
 
 #: text list in, (n, dimensions) float32 L2-normalized matrix out.
@@ -75,14 +75,17 @@ def build_embedder(cfg: GraphConfig, *, model=None, descriptions: dict[str, str]
     """``embed(texts)`` on the local model.
 
     ``cfg.prefix`` is the model's instruction (the ``prompt``); with ``inputs: described`` each name becomes
-    "name: description" where hiredra.graph.descriptions has one. ``model`` is anything with
+    "name: description" where ``descriptions`` has one -- pass ``embedding_descriptions(conn, cfg)``, the same
+    lookup the stored vectors were made with (required for described inputs). ``model`` is anything with
     ``encode(texts, prompt=..., batch_size=..., convert_to_numpy=True, show_progress_bar=False)``; the default
     loads the real one on first use.
     """
     if model is None:
         model = load_local_model(cfg)
     if descriptions is None:
-        descriptions = load_descriptions() if cfg.inputs == "described" else {}
+        if cfg.inputs == "described":
+            raise ValueError("described inputs need descriptions=embedding_descriptions(conn, cfg)")
+        descriptions = {}
 
     def embed(texts: Sequence[str]) -> np.ndarray:
         if not texts:

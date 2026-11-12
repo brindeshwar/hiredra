@@ -56,12 +56,17 @@ def blob_to_vector(blob: bytes, dim: int) -> np.ndarray:
     return np.frombuffer(blob, dtype="<f4").astype(np.float32)
 
 
-def save_vectors(conn, names: Sequence[str], matrix: np.ndarray, embed_tag: str) -> None:
-    """Persist `matrix[i]` as the vector of `names[i]`, stamped with `embed_tag`,
-    in one transaction (a chunk lands whole or not at all)."""
+def save_vectors(
+    conn, names: Sequence[str], matrix: np.ndarray, embed_tag: str, inputs: Sequence[str] | None = None
+) -> None:
+    """Persist `matrix[i]` as the vector of `names[i]`, stamped with `embed_tag` and `inputs[i]` (the exact text
+    embedded; the bare name when not given), in one transaction (a chunk lands whole or not at all)."""
     if len(names) != len(matrix):
         raise ValueError(f"{len(names)} names but {len(matrix)} vectors")
-    set_skill_vectors(conn, [(n, vector_to_blob(v)) for n, v in zip(names, matrix)], embed_tag)
+    inputs = list(names) if inputs is None else list(inputs)
+    set_skill_vectors(
+        conn, [(n, vector_to_blob(v), t) for n, v, t in zip(names, matrix, inputs, strict=True)], embed_tag
+    )
 
 
 def load_skills(conn, cfg: GraphConfig) -> list[Skill]:
