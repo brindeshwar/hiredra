@@ -74,6 +74,7 @@ python -m hiredra.extraction              # skills per job (paced to the free ti
 python -m hiredra.graph sync              # new skills into the graph
 python -m hiredra.graph.describe          # describe new skills, fold in other names for known ones
 python -m hiredra.scoring run
+python -m hiredra.graph audit             # health checks: a WARNING names the step to run
 python -m hiredra.scoring list            # the ranked list
 ```
 

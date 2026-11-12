@@ -8,9 +8,9 @@ SORTS pairs into bands, and a few cheap name rules decide which band is safe:
 
   AUTO    (pre-approved in the file)
           names that are the same after normalising (case, hyphen/space, plural,
-          "2.0", keeping + and # so c# / c++ / c never collide) -- or cosine >=
-          ``auto_cosine`` when neither name contains the other and they are not a
-          version variant (oauth / oauth2).
+          "2.0", keeping + and # so c# / c++ / c never collide). Never cosine alone
+          (owner decision D4, 2026-11-12: aws ~ gcp is close and still two skills);
+          a pair at or above ``auto_cosine`` is only marked "very close" in REVIEW.
   ALIAS   (pre-approved) the owner's own ``config/skill_aliases.yml`` entries.
   REVIEW  (``approve: false`` -- the owner ticks it) cosine >= ``review_cosine``
           that is not AUTO: one name contains the other (sql / sql server), or a
@@ -133,7 +133,7 @@ def classify_pair(a: str, b: str, cosine: float, cfg: GraphConfig) -> tuple[str,
     elif is_specialization(a, b):
         reason = "one name contains the other"
     elif cosine >= cfg.auto_cosine - _EPS:
-        return ("auto", f"cosine >= {cfg.auto_cosine}")
+        reason = f"very close (cosine >= {cfg.auto_cosine})"  # D4: closeness alone never merges by itself
     else:
         reason = "similar"
     if cosine >= cfg.review_cosine - _EPS:

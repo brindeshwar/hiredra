@@ -5,6 +5,8 @@
     python -m hiredra.graph consistency [--sample N]  # batch vs one-at-a-time vs reversed, against stored vectors
     python -m hiredra.graph sync [--limit N]          # version gate (canary) + embed pending nodes
     python -m hiredra.graph sync --reembed-all        # FALLBACK: clear every vector, re-embed under one method
+    python -m hiredra.graph clean [--apply]           # the skill-name rules over the stored names (dry run first)
+    python -m hiredra.graph audit [--strict]          # health checks; the last step of a pipeline run
     python -m hiredra.graph merges [--show-low]       # DRY RUN: propose merges in three bands, write the review file
     python -m hiredra.graph merges --apply            # apply exactly the entries marked "approve": true
     python -m hiredra.graph overlay                   # DRY RUN: match the master profile's skills, write the links file
@@ -204,6 +206,24 @@ def _print_band(title: str, proposals, note: str = "") -> None:
             _log(f"    <- {m.dup:<34} cos {cos}   [seen {m.dup_seen}, df {m.dup_df}]   ({m.reason})")
 
 
+def _cmd_audit(conn, cfg, args) -> int:
+    from hiredra.graph import audit, clean
+
+    a = audit.run_audit(conn, cfg, clean_plan=clean.plan(conn, clean.build_resolver(conn)))
+    for c in a.checks:
+        _log(f"{'ok     ' if c.ok else 'WARNING'}  {c.name}: {c.value}" + ("" if c.ok else f"  -> {c.fix}"))
+    total = sum(a.credit.values()) or 1
+    _log(
+        "matching: " + ", ".join(f"{k} {100 * v / total:.1f}%" for k, v in a.credit.items()) + f" of {total} job skills"
+    )
+    if a.siblings:
+        _log("  full credit between different names: " + "; ".join(f"{s} <- {n} ({c})" for s, n, c in a.siblings[:5]))
+    if a.lonely:
+        _log(f"  owner's skills with no close neighbour: {', '.join(n for n, _ in a.lonely)}")
+    _log(f"report: {audit.write_report(a, Path(args.report_dir))}")
+    return 1 if args.strict and a.failed else 0
+
+
 def _cmd_clean(conn, cfg, args) -> int:
     from hiredra.graph import clean
 
@@ -267,7 +287,7 @@ def _cmd_merges(conn, cfg, args) -> int:
     _print_band(
         "AUTO -- pre-approved (approve: true)",
         auto,
-        f"same spelling, or cosine >= {cfg.auto_cosine} and not a specialization / version variant",
+        "same spelling after normalising (closeness alone never merges: owner decision D4)",
     )
     _print_band("ALIAS FILE -- your entries, pre-approved (approve: true)", alias, "config/skill_aliases.yml")
     _print_band(
@@ -472,6 +492,9 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="FALLBACK: clear every stored vector first, then re-embed everything under one method",
     )
+    au = sub.add_parser("audit", help="the graph's health checks (read-only); the last step of a pipeline run")
+    au.add_argument("--strict", action="store_true", help="exit 1 when a check fails")
+    au.add_argument("--report-dir", default=None)
     cl = sub.add_parser("clean", help="the skill-name rules over the stored vocabulary (dry run unless --apply)")
     cl.add_argument("--apply", action="store_true", help="apply the dry run's plan (refused if the database moved)")
     cl.add_argument("--plan-dir", default=None)
@@ -517,6 +540,10 @@ def main(argv: list[str] | None = None) -> int:
         args.sidecar_path = args.sidecar_path or str(cal.DEFAULT_SIDECAR_PATH)
         args.reports_dir = args.reports_dir or str(cal.DEFAULT_REPORTS_DIR)
 
+    if args.command == "audit":
+        from hiredra.graph.audit import DEFAULT_REPORT_DIR
+
+        args.report_dir = args.report_dir or str(DEFAULT_REPORT_DIR)
     if args.command == "clean":
         from hiredra.graph.clean import DEFAULT_PLAN_DIR
 
@@ -530,6 +557,7 @@ def main(argv: list[str] | None = None) -> int:
         "sync": _cmd_sync,
         "merges": _cmd_merges,
         "clean": _cmd_clean,
+        "audit": _cmd_audit,
         "calibrate": _cmd_calibrate,
         "overlay": _cmd_overlay,
     }
