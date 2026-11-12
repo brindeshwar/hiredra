@@ -153,8 +153,8 @@ def test_is_version_variant(a, b, expected):
         ("github-actions", "github actions", 0.94, ("auto", "same spelling after normalising")),
         ("rest api", "rest apis", 0.96, ("auto", "same spelling after normalising")),
         ("oauth 2.0", "oauth2", 0.963, ("auto", "same spelling after normalising")),
-        ("postgres", "postgresql", 0.974, ("auto", "cosine >= 0.96")),
-        ("aws bedrock", "amazon bedrock", 0.979, ("auto", "cosine >= 0.96")),
+        ("postgres", "postgresql", 0.974, ("review", "very close (cosine >= 0.96)")),  # D4: never by cosine alone
+        ("aws bedrock", "amazon bedrock", 0.979, ("review", "very close (cosine >= 0.96)")),
         # the owner's change: a version variant is REVIEW even at very high cosine
         ("oauth", "oauth2", 0.961, ("review", "version variant (differs only by a number)")),
         ("css", "css3", 0.99, ("review", "version variant (differs only by a number)")),
@@ -167,7 +167,7 @@ def test_is_version_variant(a, b, expected):
         # plain similar pairs
         ("cloud architecture", "cloud infrastructure", 0.94, ("review", "similar")),
         ("cloud computing", "cloud infrastructure", 0.907, ("low", "similar; below the 0.93 review cutoff")),
-        ("x y z", "q r s", 0.965, ("auto", "cosine >= 0.96")),
+        ("x y z", "q r s", 0.965, ("review", "very close (cosine >= 0.96)")),
         # left alone
         ("machine learning", "deep learning", 0.894, None),
         ("devops", "azure devops", 0.897, None),
