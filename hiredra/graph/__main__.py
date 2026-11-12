@@ -193,6 +193,35 @@ def _print_band(title: str, proposals, note: str = "") -> None:
             _log(f"    <- {m.dup:<34} cos {cos}   [seen {m.dup_seen}, df {m.dup_df}]   ({m.reason})")
 
 
+def _cmd_clean(conn, cfg, args) -> int:
+    from hiredra.graph import clean
+
+    plan_dir = Path(args.plan_dir)
+    resolver = clean.build_resolver(conn)
+    changes = clean.plan(conn, resolver)
+    if not args.apply:
+        js, md = clean.write_plan(changes, plan_dir)
+        kinds = {k: sum(c.kind == k for c in changes) for k in ("merge", "rename", "split", "drop")}
+        _log(f"SKILL-NAME CLEANUP -- DRY RUN, nothing was changed: {len(changes)} change(s) {kinds}")
+        _log(f"  review {md}; apply with `python -m hiredra.graph clean --apply`")
+        return 0
+    try:
+        saved = clean.load_plan(plan_dir)
+    except FileNotFoundError:
+        _log(f"NOT APPLIED: no plan in {plan_dir} -- run `clean` (the dry run) first")
+        return 1
+    if saved != changes:
+        _log("NOT APPLIED: the database changed since the dry run -- run `clean` again and review the new plan")
+        return 1
+    counts = clean.apply(conn, resolver, changes)
+    _log(f"applied: {counts}")
+    if counts["scored_jobs"]:
+        _log(f"  {counts['scored_jobs']} scored job(s) changed: re-score with `python -m hiredra.scoring run --force`")
+    _log("  run `clean` again: a second pass picks up changes that waited on these")
+    (plan_dir / "plan.json").rename(plan_dir / "plan.applied.json")
+    return 0
+
+
 def _cmd_merges(conn, cfg, args) -> int:
     review = Path(args.review_path)
     try:
@@ -397,6 +426,8 @@ def _lock_label(args) -> str | None:
         return args.command
     if args.command == "harvest" and not args.dry_run:
         return "harvest"
+    if args.command == "clean" and args.apply:
+        return "clean --apply"
     if args.command == "merges" and args.apply:
         return "merges --apply"
     if args.command == "calibrate" and not args.suggest:
@@ -430,6 +461,9 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="FALLBACK: clear every stored vector first, then re-embed everything under one method",
     )
+    cl = sub.add_parser("clean", help="the skill-name rules over the stored vocabulary (dry run unless --apply)")
+    cl.add_argument("--apply", action="store_true", help="apply the dry run's plan (refused if the database moved)")
+    cl.add_argument("--plan-dir", default=None)
     m = sub.add_parser("merges")
     m.add_argument(
         "--apply", action="store_true", help='apply the entries marked "approve": true (never without a dry-run file)'
@@ -472,6 +506,10 @@ def main(argv: list[str] | None = None) -> int:
         args.sidecar_path = args.sidecar_path or str(cal.DEFAULT_SIDECAR_PATH)
         args.reports_dir = args.reports_dir or str(cal.DEFAULT_REPORTS_DIR)
 
+    if args.command == "clean":
+        from hiredra.graph.clean import DEFAULT_PLAN_DIR
+
+        args.plan_dir = args.plan_dir or str(DEFAULT_PLAN_DIR)
     args.never_merge_file = getattr(args, "never_merge_file", str(DEFAULT_NEVER_MERGE_PATH))
     cfg = load_graph_config(args.config)
     handlers = {
@@ -480,6 +518,7 @@ def main(argv: list[str] | None = None) -> int:
         "consistency": _cmd_consistency,
         "sync": _cmd_sync,
         "merges": _cmd_merges,
+        "clean": _cmd_clean,
         "calibrate": _cmd_calibrate,
         "overlay": _cmd_overlay,
     }

@@ -18,3 +18,8 @@ never_merge:
   - [c, c++]
   - [c, c#]
   - [c++, c#]
+  # Same spelling once a plural "s" is folded, but different skills (graph audit, 2026-11-12). Name cleaning at
+  # extraction (hiredra.vocab) reads this list too.
+  - [ada, adas]          # the Ada language / advanced driver-assistance systems
+  - [canva, canvas]      # the design tool / the HTML canvas
+  - [ssr, ssrs]          # server-side rendering / SQL Server Reporting Services

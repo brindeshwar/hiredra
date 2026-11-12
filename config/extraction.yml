@@ -50,6 +50,16 @@ dictionary_skip: [
   # industries and business functions, not skills (owner, 2026-10-31)
   fintech, cryptocurrency, crm, business development
 ]
+# --- Skill-name cleaning (hiredra.vocab.Resolver; owner decisions 2026-11-12) ---------------------
+# Every skill name is cleaned before it is stored: lists are split ("docker & kubernetes"), versions and
+# same-spelling variants become aliases of a known skill ("angular 7" -> angular, "java script" ->
+# javascript). Names here are never split or version-stripped: they are one skill as written. The
+# never-merge pairs in config/skill_never_merge.yml are respected too. Not part of the extraction stamp.
+keep_whole: [
+  ci/cd, pl/sql, tcp/ip, ui/ux, a/b testing, pub/sub, i/o, http/https, r&d, research and development,
+  trust and safety, trust & safety, weights & biases, weights and biases, stm32, web3, web 3.0,
+  do-178b/c, rtca do-178b/c
+]
 # canonical name -> other names that count as "the JD names it"
 skill_synonyms:
   gcp: [google cloud, google cloud platform]
