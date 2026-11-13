@@ -1295,6 +1295,53 @@ def remove_skill(conn: psycopg.Connection, name: str) -> None:
         conn.execute("DELETE FROM skill_vocab WHERE name = %s", (name,))
 
 
+def add_artifact(
+    conn: psycopg.Connection,
+    job_id: str,
+    kind: str,
+    path: str,
+    sha256: str,
+    *,
+    model: str | None = None,
+    prompt_version: str | None = None,
+) -> None:
+    """Record a file written for ``job_id`` (a packet's resume, cover letter, payload, claim report...)."""
+    conn.execute(
+        "INSERT INTO artifacts (job_id, kind, path, sha256, model, prompt_version) VALUES (%s, %s, %s, %s, %s, %s)",
+        (_id(conn, job_id), kind, path, sha256, model, prompt_version),
+    )
+
+
+def artifacts_for(conn: psycopg.Connection, job_id: str) -> list[dict]:
+    """The job's artifacts, newest first per kind."""
+    rows = conn.execute(
+        "SELECT kind, path, sha256, model, prompt_version, created_at, used_at FROM artifacts "
+        "WHERE job_id = (SELECT id FROM jobs WHERE job_key = %s) ORDER BY kind, created_at DESC, id DESC",
+        (job_id,),
+    )
+    return [dict(r) for r in rows]
+
+
+def record_llm_call(
+    conn: psycopg.Connection,
+    *,
+    model: str,
+    stage: str,
+    job_id: str | None,
+    ok: bool,
+    error_class: str | None = None,
+    in_chars: int | None = None,
+    out_chars: int | None = None,
+    latency_ms: int | None = None,
+) -> None:
+    """One model call's outcome and sizes (never its text)."""
+    conn.execute(
+        "INSERT INTO llm_calls (model, stage, job_id, ok, error_class, in_chars, out_chars, latency_ms) "
+        "VALUES (%s, %s, (SELECT id FROM jobs WHERE job_key = %s), %s, %s, %s, %s, %s)",
+        (model, stage, job_id, ok, error_class, in_chars, out_chars, latency_ms),
+    )
+
+
 def iter_skill_vocab(conn: psycopg.Connection) -> list[dict]:
     """Every node as a plain dict (all columns incl. ``vector`` bytes), by name."""
     return [_vocab_row(r) for r in conn.execute(_VOCAB_SELECT + " ORDER BY name")]
