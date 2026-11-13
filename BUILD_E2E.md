@@ -227,8 +227,12 @@ Files to create:
     appear in the referenced entry's text (for the summary and the cover letter: anywhere in the
     profile) -> otherwise fail.
   - `unsupported_skill`: every skill-vocabulary name found in the text (match `skill_vocab` names and
-    aliases on word boundaries, case-insensitive, names of 3+ characters) must be a Strong/Working
-    token, or appear in the referenced entry's text -> otherwise fail. Familiar skills -> fail.
+    aliases on word boundaries, case-insensitive, names of 3+ characters; singular and plural forms and
+    alias spellings count as the same) must appear in the referenced entry's text, or be a Strong/Working
+    token, or be a broad phrase whose non-filler words all come from those ("agent systems") -> otherwise
+    fail. A Familiar skill fails in a summary or letter even if the profile names it elsewhere.
+  - `banned_phrase`: a phrase from `config/resume.yml` `banned_phrases` (the standing rules: "full-stack").
+  - A summary or letter may echo the job's title and company without that counting as a claim.
   - `style`: an em dash or en dash -> fix it in code (`word.clean` already does), not a failure.
   - Result shape: `{"hits": [...], "pass": bool}` with one entry per finding (`rule`, `where`, `detail`).
 - Flow per job: call the model -> claim gate -> if it fails, call the model once more with the
@@ -492,7 +496,7 @@ on local fixture forms, stopping before Submit.
 | Piece | Branch / PR | Merged into build/e2e | Notes |
 |---|---|---|---|
 | 1 Résumé core | build/p1-resume-core / #177 | yes (210bd65) | Word + PDF, owner's example layout, page fit, no model |
-| 2 Tailoring + claim gate + cover + packets | | | |
+| 2 Tailoring + claim gate + cover + packets | build/p2-tailoring | see PR | 5 real packets (NVIDIA), all one page; 3 of 5 needed no repair. Rough: bullets close to the profile's wording, few bold terms, "100 plus" style in letters |
 | 3 Sidecar API | | | |
 | 4 Desktop app | | | |
 | 5 Application filler | | | |

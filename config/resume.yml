@@ -1,0 +1,23 @@
+# config/resume.yml -- the tailoring step (python -m hiredra.resume packets).
+#
+# The model only writes text (a summary, bullets, a project tagline, the cover letter); code builds the skills
+# section, takes company, role and dates from the master profile, and the claim gate (hiredra/resume/claims.py)
+# refuses anything the profile does not say. Owner decision (2026-11-13): NVIDIA writes while the system is being
+# built, so Gemini's daily quota stays for extraction; switching provider later is a change here.
+
+provider: nvidia
+model: nvidia/nemotron-3.5-super-vl-120b-a12b
+base_url: https://integrate.api.nvidia.com/v1
+requests_per_minute: 35          # NVIDIA allows 40
+requests_per_day: 10000          # the owner's guard, shared with the extraction fallback's meter
+timeout_seconds: 180
+max_tokens: 4096
+
+max_jd_chars: 6000               # the job description is cut to this before it goes into the prompt
+max_projects: 4
+max_bullets_per_experience: 5
+max_bullets_per_project: 3
+max_skills_per_category: 12
+
+# The master profile's standing rules: phrases generated text must never contain (the claim gate fails them).
+banned_phrases: [full-stack, full stack, fullstack]

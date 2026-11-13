@@ -1,0 +1,292 @@
+# config/skill_display.yml -- how a skill token is shown on a resume, and under which heading.
+#
+# Read by hiredra/resume/skills.py, which builds the resume's skills section in code (never by a model). Only the
+# owner's Strong and Working skills are ever printed; this table only says how to group and spell them. A token not
+# listed here goes under the category its keyword rules pick (see `fallback`), spelled as the token with hyphens as
+# spaces. The category order here is the order on the page.
+
+categories:
+  - Languages
+  - AI / LLM
+  - ML / NLP
+  - Backend
+  - Infra & Tools
+
+# token -> category. Tokens are the master profile's spellings (lower case, hyphens).
+category:
+  python: Languages
+  java: Languages
+  typescript: Languages
+  javascript: Languages
+  go: Languages
+  golang: Languages
+  rust: Languages
+  c: Languages
+  c++: Languages
+  c#: Languages
+  kotlin: Languages
+  scala: Languages
+  ruby: Languages
+  sql: Languages
+  bash: Languages
+  powershell: Languages
+  html: Languages
+  css: Languages
+
+  llm: AI / LLM
+  llms: AI / LLM
+  llm-integration: AI / LLM
+  llm-agents: AI / LLM
+  ai-agents: AI / LLM
+  agent-orchestration: AI / LLM
+  langchain: AI / LLM
+  langgraph: AI / LLM
+  llamaindex: AI / LLM
+  crewai: AI / LLM
+  autogen: AI / LLM
+  mcp: AI / LLM
+  rag: AI / LLM
+  embeddings: AI / LLM
+  vector-search: AI / LLM
+  vector-databases: AI / LLM
+  hybrid-search: AI / LLM
+  semantic-search: AI / LLM
+  prompt-engineering: AI / LLM
+  structured-output: AI / LLM
+  function-calling: AI / LLM
+  token-optimization: AI / LLM
+  model-evaluation: AI / LLM
+  gemini: AI / LLM
+  groq: AI / LLM
+  openai: AI / LLM
+  anthropic: AI / LLM
+  ollama: AI / LLM
+  generative-ai: AI / LLM
+  multimodal: AI / LLM
+  vision-language-models: AI / LLM
+  ai-safety: AI / LLM
+
+  machine-learning: ML / NLP
+  deep-learning: ML / NLP
+  neural-networks: ML / NLP
+  natural-language-processing: ML / NLP
+  named-entity-recognition: ML / NLP
+  computer-vision: ML / NLP
+  knowledge-distillation: ML / NLP
+  fine-tuning: ML / NLP
+  zero-shot-classification: ML / NLP
+  reinforcement-learning: ML / NLP
+  deep-q-network: ML / NLP
+  pytorch: ML / NLP
+  tensorflow: ML / NLP
+  keras: ML / NLP
+  transformers: ML / NLP
+  hugging-face: ML / NLP
+  scikit-learn: ML / NLP
+  numpy: ML / NLP
+  pandas: ML / NLP
+  statistics: ML / NLP
+  experiment-design: ML / NLP
+  data-visualization: ML / NLP
+  matplotlib: ML / NLP
+  simulation: ML / NLP
+
+  fastapi: Backend
+  flask: Backend
+  django: Backend
+  node.js: Backend
+  express: Backend
+  spring-boot: Backend
+  rest-api: Backend
+  api-design: Backend
+  graphql: Backend
+  grpc: Backend
+  openapi: Backend
+  json-schema: Backend
+  pydantic: Backend
+  asyncio: Backend
+  httpx: Backend
+  sse: Backend
+  oauth2: Backend
+  authentication: Backend
+  caching: Backend
+  rate-limiting: Backend
+  concurrency: Backend
+  system-design: Backend
+  sdk-design: Backend
+  error-handling: Backend
+  relational-databases: Backend
+  postgresql: Backend
+  mysql: Backend
+  sqlite: Backend
+  mongodb: Backend
+  redis: Backend
+  sqlalchemy: Backend
+  data-pipelines: Backend
+  etl: Backend
+  elt: Backend
+  data-ingestion: Backend
+  parquet: Backend
+  kafka: Backend
+
+  docker: Infra & Tools
+  docker-compose: Infra & Tools
+  containerization: Infra & Tools
+  kubernetes: Infra & Tools
+  aws: Infra & Tools
+  ec2: Infra & Tools
+  s3: Infra & Tools
+  gcp: Infra & Tools
+  azure: Infra & Tools
+  nginx: Infra & Tools
+  linux: Infra & Tools
+  git: Infra & Tools
+  github: Infra & Tools
+  github-actions: Infra & Tools
+  ci-cd: Infra & Tools
+  terraform: Infra & Tools
+  pytest: Infra & Tools
+  jest: Infra & Tools
+  testing: Infra & Tools
+  unit-testing: Infra & Tools
+  contract-testing: Infra & Tools
+  postman: Infra & Tools
+  jira: Infra & Tools
+  slack: Infra & Tools
+  n8n: Infra & Tools
+  uv: Infra & Tools
+  ruff: Infra & Tools
+  pnpm: Infra & Tools
+  eslint: Infra & Tools
+  react: Backend
+  pyside6: Infra & Tools
+  latex: Infra & Tools
+  matplotlib: ML / NLP
+
+# How a token is printed when it differs from "token with hyphens as spaces".
+name:
+  python: Python
+  java: Java
+  typescript: TypeScript
+  javascript: JavaScript
+  golang: Go
+  sql: SQL
+  html: HTML
+  css: CSS
+  llm: LLMs
+  llms: LLMs
+  llm-integration: LLM integration
+  llm-agents: LLM agents
+  ai-agents: AI agents
+  agent-orchestration: Agent orchestration
+  langchain: LangChain
+  langgraph: LangGraph
+  llamaindex: LlamaIndex
+  crewai: CrewAI
+  autogen: AutoGen
+  mcp: Model Context Protocol (MCP)
+  rag: RAG
+  embeddings: Embeddings
+  vector-search: Vector search
+  vector-databases: Vector databases
+  hybrid-search: Hybrid search
+  semantic-search: Semantic search
+  prompt-engineering: Prompt engineering
+  structured-output: Structured output
+  function-calling: Function calling
+  token-optimization: Token optimization
+  model-evaluation: LLM evaluation
+  gemini: Gemini
+  groq: Groq
+  openai: OpenAI
+  anthropic: Anthropic
+  ollama: Ollama
+  generative-ai: Generative AI
+  vision-language-models: Vision-language models
+  ai-safety: AI safety
+  machine-learning: Machine learning
+  natural-language-processing: NLP
+  named-entity-recognition: NER
+  computer-vision: Computer vision
+  knowledge-distillation: Knowledge distillation
+  reinforcement-learning: Reinforcement learning
+  deep-q-network: DQN
+  pytorch: PyTorch
+  tensorflow: TensorFlow
+  transformers: Hugging Face Transformers
+  hugging-face: Hugging Face
+  scikit-learn: scikit-learn
+  numpy: NumPy
+  pandas: pandas
+  fastapi: FastAPI
+  node.js: Node.js
+  rest-api: REST APIs
+  api-design: API design
+  graphql: GraphQL
+  openapi: OpenAPI
+  json-schema: JSON Schema
+  pydantic: Pydantic
+  asyncio: asyncio
+  httpx: HTTPX
+  sse: SSE
+  oauth2: OAuth 2.0
+  system-design: System design
+  sdk-design: SDK design
+  relational-databases: Relational databases
+  postgresql: PostgreSQL
+  mysql: MySQL
+  sqlite: SQLite
+  mongodb: MongoDB
+  redis: Redis
+  sqlalchemy: SQLAlchemy
+  etl: ETL
+  elt: ELT
+  docker: Docker
+  docker-compose: Docker Compose
+  kubernetes: Kubernetes
+  aws: AWS
+  ec2: AWS EC2
+  s3: AWS S3
+  gcp: GCP
+  azure: Azure
+  nginx: Nginx
+  git: Git
+  github: GitHub
+  github-actions: GitHub Actions
+  ci-cd: CI/CD
+  pytest: pytest
+  jest: Jest
+  postman: Postman
+  jira: Jira
+  slack: Slack
+  n8n: n8n
+  uv: uv
+  ruff: Ruff
+  pnpm: pnpm
+  eslint: ESLint
+  react: React
+  pyside6: PySide6
+  latex: LaTeX
+  matplotlib: Matplotlib
+  data-pipelines: Data pipelines
+  rate-limiting: Rate limiting
+  vector-databases: Vector databases
+  parquet: Parquet
+
+# Tokens never printed in the skills section: broad practices that read as filler in a skills list (they still count
+# for matching and may appear in bullets).
+hide: [
+  data-structures, algorithms, testing, unit-testing, technical-writing, documentation, debugging, error-handling,
+  code-review, concurrency, security, reproducibility, experiment-design, architecture-decision-records,
+  contract-testing, fault-injection-testing, queueing-theory, lyapunov-optimization, mobile-edge-computing,
+  simulation, desktop-development, data-cleaning, statistics, zero-shot-classification, multimodal, generative-ai,
+  ai-safety, application-security, supply-chain-security, object-oriented-programming, data-ingestion,
+  neural-networks, fine-tuning, data-visualization
+]
+
+# Keyword rules for a token not listed under `category`: the first rule whose word appears in the token wins.
+fallback:
+  - {category: AI / LLM, words: [llm, agent, prompt, rag, embedding, vector, gpt, genai]}
+  - {category: ML / NLP, words: [learning, neural, nlp, vision, model, data, classification]}
+  - {category: Backend, words: [api, database, server, backend, auth, sql, queue]}
+  - {category: Infra & Tools, words: []}
