@@ -5,6 +5,8 @@ the master profile (Strong and Working only); everything else is written by the 
 the claim gate before it is rendered. Unknown keys are refused, so a model can never smuggle a field in.
 
 Text may mark an important term as ``**bold**``; renderers turn that into bold type and print nothing else of it.
+The fields follow the owner's example résumé (2026-11-13): an experience entry has a one-line ``about`` for the
+company, a project a ``tagline`` and a ``tech`` list beside its name.
 """
 
 from __future__ import annotations
@@ -31,11 +33,13 @@ class Experience(_Strict):
     role: str
     location: str = ""
     dates: str = ""
+    about: str = ""  # one line on what the company does, printed in italics under the heading
     bullets: list[str] = Field(default_factory=list)
 
 
 class Project(_Strict):
     name: str
+    tagline: str = ""  # printed as "Name: Tagline"
     description: str = ""
     bullets: list[str] = Field(default_factory=list)
     tech: str = ""
@@ -46,7 +50,7 @@ class Education(_Strict):
     title: str
     org: str = ""
     location: str = ""
-    year: str = ""
+    year: str = ""  # the right-hand text: a year or a date range
     description: str = ""
 
 
@@ -57,7 +61,7 @@ class SkillGroup(_Strict):
 
 class CvPayload(_Strict):
     lang: str = "en"
-    page_format: str = "a4"
+    page_format: str = "letter"  # the owner's example is US Letter
     candidate: Candidate
     summary: str = ""
     experience: list[Experience] = Field(default_factory=list)

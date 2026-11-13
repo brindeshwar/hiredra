@@ -11,7 +11,7 @@ from pydantic import ValidationError
 from hiredra.resume import build
 from hiredra.resume.__main__ import main as resume_main
 from hiredra.resume.payload import Candidate, CoverLetter, CvPayload, Experience, Project
-from hiredra.resume.source import baseline_payload, education_items, load_candidate, read_profile
+from hiredra.resume.source import baseline_payload, education_items, format_dates, load_candidate, read_profile
 from hiredra.resume.word import Layout, clean, render_cover, render_cv
 
 PROFILE = Path(__file__).parent / "fixtures" / "profile_resume.md"
@@ -40,6 +40,7 @@ def test_the_profile_reader_finds_entries_bullets_links_and_keeps_guidance_apart
     assert p.links == {"github": "github.com/ada-example", "linkedin": "linkedin.com/in/ada-example"}
     acme, beta = p.section("experience")
     assert (acme.name, acme.role, acme.dates) == ("Acme Labs (Acme Pvt Ltd)", "Backend Intern", "May–Aug 2025")
+    assert [format_dates(e.dates) for e in (acme, beta)] == ["May 2025 - Aug 2025", "Aug 2026 - Present"]
     assert acme.bullets == ["Built a FastAPI service for search", "Cut cost by 20%", "Deployed with Docker"]
     assert acme.stack == "Python, FastAPI, Docker" and acme.intro == "Acme builds meeting tools."
     assert beta.role == "AI Engineer / Software Engineer"
@@ -81,7 +82,12 @@ def test_the_word_file_is_single_column_with_bold_terms_and_no_dashes(tmp_path):
     doc = Document(str(render_cv(payload, tmp_path / "cv.docx")))
     text = "\n".join(p.text for p in doc.paragraphs)
     assert doc.tables == [] and "—" not in text and "**" not in text
-    assert "EXPERIENCE" in text and "Ada Example" in text and "Aug 2026-present" in text
+    assert "EXPERIENCE" in text and "Ada Example" in text and "Aug 2026 - Present" in text
+    headings = [p.text for p in doc.paragraphs if p._p.xpath("./w:pPr/w:pBdr")]  # the ruled lines
+    assert headings == ["SUMMARY", "TECHNICAL SKILLS", "EXPERIENCE", "PROJECTS", "EDUCATION"]  # the example's order
+    assert "Beta Corp | AI Engineer" in text and "Pipeline: Job matching system" in text
+    links = [r.target_ref for r in doc.part.rels.values() if "hyperlink" in r.reltype]
+    assert "https://github.com/ada-example/pipeline" in links and "https://linkedin.com/in/ada-example" in links
     summary = next(p for p in doc.paragraphs if p.text.startswith("Backend engineer"))
     assert [r.text for r in summary.runs if r.bold] == ["FastAPI"]
     assert {r.font.name for p in doc.paragraphs for r in p.runs if r.text.strip()} == {"Arial"}
@@ -96,7 +102,8 @@ def test_clean_and_the_layout_steps():
     steps = [Layout()]
     while (nxt := steps[-1].tighter()) is not None:
         steps.append(nxt)
-    assert steps[-1].body_pt == 8.5 and len(steps) == 4
+    assert [x.section_gap for x in steps[:3]] == [11.0, 5.5, 0.0]  # the blank lines go before any type shrinks
+    assert steps[2].body_pt == 9.5 and steps[-1].body_pt == 8.5 and len(steps) == 5
 
 
 def test_the_cover_letter_renders(tmp_path):
@@ -123,7 +130,7 @@ def _fake_pdf(monkeypatch, pages_for):
 def test_page_fit_tightens_the_layout_before_it_drops_a_bullet(tmp_path, monkeypatch):
     _fake_pdf(monkeypatch, lambda layout, bullets: 1 if layout.body_pt <= 9.0 else 2)
     result = build.write_cv(_payload(), tmp_path)
-    assert (result.pages, result.layout.body_pt, result.dropped) == (1, 9.0, 0)
+    assert (result.pages, result.layout.body_pt, result.layout.section_gap, result.dropped) == (1, 9.0, 0.0, 0)
 
 
 def test_page_fit_drops_whole_bullets_only_when_the_layout_is_at_its_smallest(tmp_path, monkeypatch):

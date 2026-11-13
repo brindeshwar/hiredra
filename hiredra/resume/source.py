@@ -146,6 +146,23 @@ def education_items(profile: ProfileText) -> list[Education]:
     ]
 
 
+_RANGE = re.compile(r"^([A-Za-z]{3,9})[-–]([A-Za-z]{3,9}) (\d{4})$")
+
+
+def format_dates(text: str) -> str:
+    """The profile's dates in the example's form: "May-Aug 2025" -> "May 2025 - Aug 2025", "Aug 2026-present" ->
+    "Aug 2026 - Present"."""
+    text = text.strip()
+    if m := _RANGE.match(text):
+        return f"{m.group(1)} {m.group(3)} - {m.group(2)} {m.group(3)}"
+    start, sep, end = text.replace("–", "-").partition("-")
+    return f"{start.strip()} - {end.strip().capitalize() if end.strip().islower() else end.strip()}" if sep else text
+
+
+def first_sentence(text: str) -> str:
+    return re.split(r"(?<=[.!?])\s", text.strip(), maxsplit=1)[0]
+
+
 def display(token: str) -> str:
     """A skill token as a reader sees it: "llm-integration" -> "LLM integration" comes with the display table in
     the tailoring step; here hyphens become spaces."""
@@ -156,14 +173,28 @@ def baseline_payload(profile: ProfileText, candidate: Candidate, *, bullets: int
     """A résumé straight from the profile, no model involved: every entry's first bullets, as written. It is the
     renderer's test input and the fallback when tailoring is unavailable; every word is the owner's own."""
     experience = [
-        Experience(company=e.name, role=e.role.split(" / ")[0], dates=e.dates, bullets=e.bullets[:bullets])
+        Experience(
+            company=e.name,
+            role=e.role.split(" / ")[0],
+            dates=format_dates(e.dates),
+            about=first_sentence(e.intro),
+            bullets=e.bullets[:bullets],
+        )
         for e in reversed(profile.section("experience"))
     ]
     chosen = (profile.section("flagship") + profile.section("projects"))[:projects]
     return CvPayload(
         candidate=candidate,
         experience=experience,
-        projects=[Project(name=e.name, bullets=e.bullets[: max(1, bullets - 1)], url=e.url) for e in chosen],
+        projects=[
+            Project(
+                name=e.name,
+                tagline=e.role[:1].upper() + e.role[1:],
+                bullets=e.bullets[: max(1, bullets - 1)],
+                url=e.url,
+            )
+            for e in chosen
+        ],
         education=education_items(profile),
         skills=[
             SkillGroup(category="Core", items=[display(t) for t in profile.skills.tiers["strong"][:22]]),
