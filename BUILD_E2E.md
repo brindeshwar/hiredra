@@ -496,8 +496,8 @@ on local fixture forms, stopping before Submit.
 | Piece | Branch / PR | Merged into build/e2e | Notes |
 |---|---|---|---|
 | 1 Résumé core | build/p1-resume-core / #177 | yes (210bd65) | Word + PDF, owner's example layout, page fit, no model |
-| 2 Tailoring + claim gate + cover + packets | build/p2-tailoring | see PR | 5 real packets (NVIDIA), all one page; 3 of 5 needed no repair. Rough: bullets close to the profile's wording, few bold terms, "100 plus" style in letters |
-| 3 Sidecar API | | | |
+| 2 Tailoring + claim gate + cover + packets | build/p2-tailoring / #178 | yes (ba3b39e) | 5 real packets (NVIDIA), all one page; 3 of 5 needed no repair. Rough: bullets close to the profile's wording, few bold terms, "100 plus" style in letters |
+| 3 Sidecar API | build/p3-sidecar | see PR | `python -m hiredra.api`; jobs, triage, runs, packets live on the real DB. Batches and apply endpoints come with piece 5 |
 | 4 Desktop app | | | |
 | 5 Application filler | | | |
 | 6 End-to-end run + report | | | |
