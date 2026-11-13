@@ -1,0 +1,13 @@
+# config/autofill_facts.example.yml -- the SHAPE of data/autofill_facts.yml (which is private and git-ignored).
+# Copy this to data/autofill_facts.yml and fill it in. Only verified facts go here: the resume header and the
+# form filler read them as they are. No password, no work-authorisation, salary or demographic answers (those are
+# always left for you to answer in the form).
+
+contact:
+  full_name: "Your Name"
+  email: "you@example.com"
+  phone: "+00 00000 00000"
+  location: "City, Country"
+  linkedin: "linkedin.com/in/your-handle"
+  github: "github.com/your-handle"
+  portfolio: ""
