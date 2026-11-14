@@ -78,6 +78,18 @@ python -m hiredra.graph audit             # health checks: a WARNING names the s
 python -m hiredra.scoring list            # the ranked list
 ```
 
+## Desktop app
+
+`app/` is an Electron + React desktop app over the same pipeline. It starts the Python service itself
+(`python -m hiredra.api`, local only, with a fresh token each launch) and shows the pipeline, the jobs, the tailored
+packets, the batches and the Apply screen. It prepares; you submit.
+
+```bash
+cd app
+npm install
+npm run dev        # or: npm run build && npm start
+```
+
 Run the tests with `uv run pytest -q`. Set `HIREDRA_TEST_DATABASE_URL` to run the database tests too.
 
 ## Credits

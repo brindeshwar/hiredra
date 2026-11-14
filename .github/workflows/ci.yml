@@ -68,6 +68,31 @@ jobs:
       - name: Tests (with the database)
         run: uv run pytest -q -rs
 
+  app:
+    name: Desktop app (type check, tests)
+    # The Electron app's pure parts: types, the API client, the screen registry and the security rules. The Electron
+    # binary itself is not downloaded (no window is opened in CI).
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: app
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: app/package-lock.json
+      - name: Install from package-lock.json
+        run: npm ci --no-fund --no-audit
+      - name: Type check
+        run: npm run typecheck
+      - name: Tests
+        run: npm test
+
   secrets:
     name: Secret scan (gitleaks, full history)
     runs-on: ubuntu-latest
