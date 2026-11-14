@@ -30,19 +30,26 @@ export function windowOptions(preloadPath: string) {
   } as const
 }
 
-/** The content policy for the app's own pages: its own scripts only; it never talks to the network directly. */
+/** The content policy for the built app: its own scripts only; it never talks to the network directly. */
 export const CONTENT_SECURITY_POLICY = [
   "default-src 'self'",
   "script-src 'self'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data:",
   "font-src 'self'",
-  "connect-src 'self' ws://localhost:*",
+  "connect-src 'self'",
   "object-src 'none'",
   "base-uri 'none'",
   "form-action 'none'",
   "frame-ancestors 'none'"
 ].join('; ')
+
+/** The policy while developing (`npm run dev` only): React's live reload needs one inline script and a websocket to
+ * the local dev server. The built app never uses this. */
+export const DEV_CONTENT_SECURITY_POLICY = CONTENT_SECURITY_POLICY.replace(
+  "script-src 'self'",
+  "script-src 'self' 'unsafe-inline'"
+).replace("connect-src 'self'", "connect-src 'self' ws://localhost:*")
 
 /** The only permission a page may have: writing to the clipboard, for the Copy buttons. */
 export function isAllowedPermission(permission: string): boolean {

@@ -5,6 +5,7 @@ import { join, resolve } from 'node:path'
 import { Sidecar } from './sidecar'
 import {
   CONTENT_SECURITY_POLICY,
+  DEV_CONTENT_SECURITY_POLICY,
   isAllowedCall,
   isAllowedPermission,
   isSafeExternal,
@@ -43,8 +44,11 @@ app.whenReady().then(() => {
   // Deny every permission except writing to the clipboard (the Copy buttons on the Apply screen).
   session.defaultSession.setPermissionRequestHandler((_wc, permission, done) => done(isAllowedPermission(permission)))
   session.defaultSession.setPermissionCheckHandler((_wc, permission) => isAllowedPermission(permission))
+  // The built app's page carries the strict policy in its own HTML (added at build time); a page served by the dev
+  // server gets the development policy here, because React's live reload needs one inline script.
+  const policy = process.env.ELECTRON_RENDERER_URL ? DEV_CONTENT_SECURITY_POLICY : CONTENT_SECURITY_POLICY
   session.defaultSession.webRequest.onHeadersReceived((details, done) => {
-    done({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [CONTENT_SECURITY_POLICY] } })
+    done({ responseHeaders: { ...details.responseHeaders, 'Content-Security-Policy': [policy] } })
   })
 
   ipcMain.handle('hiredra:call', async (event, method: string, path: string, body?: unknown) => {

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { join, resolve } from 'node:path'
 import {
   CONTENT_SECURITY_POLICY,
+  DEV_CONTENT_SECURITY_POLICY,
   isAllowedCall,
   isAllowedPermission,
   isSafeExternal,
@@ -24,10 +25,14 @@ describe('window options', () => {
     expect(w.preload).toBe('/x/preload.cjs')
   })
 
-  it('has a strict content policy', () => {
-    expect(CONTENT_SECURITY_POLICY).toContain("script-src 'self'")
+  it('has a strict content policy, loosened only for the dev server', () => {
+    expect(CONTENT_SECURITY_POLICY).toContain("script-src 'self';")
     expect(CONTENT_SECURITY_POLICY).toContain("object-src 'none'")
     expect(CONTENT_SECURITY_POLICY).not.toContain('unsafe-eval')
+    expect(CONTENT_SECURITY_POLICY).not.toContain("script-src 'self' 'unsafe-inline'")
+    expect(CONTENT_SECURITY_POLICY).not.toContain('ws://')
+    expect(DEV_CONTENT_SECURITY_POLICY).toContain("script-src 'self' 'unsafe-inline'")
+    expect(DEV_CONTENT_SECURITY_POLICY).toContain('ws://localhost:*')
   })
 })
 
