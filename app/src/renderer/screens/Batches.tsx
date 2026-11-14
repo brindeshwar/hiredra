@@ -14,7 +14,7 @@ export function BatchesScreen({ api, go }: ScreenProps) {
       <header className="screen-head">
         <h1>Batches</h1>
         {!missing && (
-          <Busy kind="primary" onClick={async () => { await api.raw.post('/batches'); batches.reload() }}>
+          <Busy kind="primary" onClick={async () => { await api.raw.post('/batches', { min: 1 }); batches.reload() }}>
             Make batch
           </Busy>
         )}

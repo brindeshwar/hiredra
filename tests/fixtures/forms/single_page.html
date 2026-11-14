@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><title>Test application form (one page)</title></head>
+<body>
+<h1>Test application form</h1>
+<form id="app" action="/never" method="post">
+  <label for="name">Full name</label><input type="text" id="name" name="name">
+  <label for="email">Email</label><input type="email" id="email" name="email">
+  <label for="org">Current company</label><input type="text" id="org" name="org">
+  <label for="resume">Resume</label><input type="file" id="resume" name="resume">
+  <button type="submit">Send</button>
+</form>
+<p>submits: <span id="submits">0</span></p>
+<script>
+  window.__submits = 0; window.__finals = 0;
+  document.getElementById('app').addEventListener('submit', (e) => { e.preventDefault(); window.__submits++; document.getElementById('submits').textContent = window.__submits; });
+</script>
+</body>
+</html>

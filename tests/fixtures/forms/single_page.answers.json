@@ -1,0 +1,10 @@
+{
+ "job_id": "fixture:single_page",
+ "via": "fixture",
+ "fields": [
+  {"label": "Full name", "key": "name", "type": "text", "class": "FACT", "value": "Ada Example"},
+  {"label": "Email", "key": "email", "type": "email", "class": "FACT", "value": "ada@example.com"},
+  {"label": "Current company", "key": "org", "type": "text", "class": "FACT", "value": "Example Corp"},
+  {"label": "Resume", "key": "resume", "type": "file", "class": "FILE", "value": "tests/fixtures/forms/sample_cv.pdf"}
+ ]
+}

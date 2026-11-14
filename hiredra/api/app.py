@@ -8,6 +8,7 @@ returns a secret or the database address.
 
 from __future__ import annotations
 
+import json
 import secrets
 from collections.abc import Iterator
 from contextlib import asynccontextmanager
@@ -19,6 +20,7 @@ from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from hiredra.api.runs import Runs
+from hiredra.autofill import batch
 from hiredra.resume.packet import PACKETS_DIR, folder_name
 from hiredra.storage import artifacts_for, connect, get_job, release_job, set_status, status_counts
 
@@ -40,6 +42,15 @@ class StartRun(BaseModel):
 
 class Reject(BaseModel):
     reason: str = "rejected"
+
+
+class MakeBatch(BaseModel):
+    min: int = 1
+
+
+class Decision(BaseModel):
+    decision: str
+    confirmation: str = ""
 
 
 def create_app(*, token: str, db_url: str | None = None, runs: Runs | None = None,
@@ -139,8 +150,9 @@ def create_app(*, token: str, db_url: str | None = None, runs: Runs | None = Non
 
     @app.post("/runs/{stage}", dependencies=[Depends(auth)])
     def start_run(stage: str, body: StartRun | None = None):
-        if stage not in app.state.runs.stages:
-            raise HTTPException(status_code=404, detail=f"stage must be one of {sorted(app.state.runs.stages)}")
+        stages = sorted(s for s in app.state.runs.stages if s != "scan")  # scan is per job: /apply/{key}/scan
+        if stage not in stages:
+            raise HTTPException(status_code=404, detail=f"stage must be one of {stages}")
         try:
             run = app.state.runs.start(stage, top=(body or StartRun()).top)
         except RuntimeError as exc:
@@ -157,6 +169,52 @@ def create_app(*, token: str, db_url: str | None = None, runs: Runs | None = Non
         if run is None:
             raise HTTPException(status_code=404, detail="no such run")
         return run.view()
+
+    @app.get("/batches", dependencies=[Depends(auth)])
+    def batches(conn=Depends(db)):
+        return jsonable_encoder(batch.list_batches(conn))
+
+    @app.post("/batches", dependencies=[Depends(auth)])
+    def new_batch(body: MakeBatch | None = None, conn=Depends(db)):
+        made = batch.make_batch(conn, min_size=(body or MakeBatch()).min)
+        if made is None:
+            raise HTTPException(status_code=409, detail="no tailored job with a read form is waiting for a batch")
+        return jsonable_encoder(made)
+
+    @app.get("/batches/{batch_id}", dependencies=[Depends(auth)])
+    def one_batch(batch_id: str, conn=Depends(db)):
+        found = batch.get_batch(conn, batch_id)
+        if found is None:
+            raise HTTPException(status_code=404, detail="no such batch")
+        return jsonable_encoder(found)
+
+    @app.post("/apply/{job_key:path}/scan", dependencies=[Depends(auth)])
+    def scan(job_key: str):
+        """Read this job's form (no draft answers: those need the model, run from the Pipeline)."""
+        run = app.state.runs.start("scan", job=job_key) if "scan" in app.state.runs.stages else None
+        if run is None:
+            raise HTTPException(status_code=404, detail="scan is not available")
+        return run.view()
+
+    @app.post("/apply/{job_key:path}/decision", dependencies=[Depends(auth)])
+    def decision(job_key: str, body: Decision, conn=Depends(db)):
+        job_or_404(conn, job_key)
+        try:
+            return batch.decide(conn, job_key, body.decision, body.confirmation)
+        except ValueError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+    @app.get("/apply/{job_key:path}", dependencies=[Depends(auth)])
+    def apply_view(job_key: str, conn=Depends(db)):
+        job_or_404(conn, job_key)
+        path = packets_dir / folder_name(job_key) / "answers.json"
+        if not path.exists():
+            raise HTTPException(status_code=404, detail="Not Found: this job's form has not been read yet")
+        answers = json.loads(path.read_text(encoding="utf-8"))
+        for f in answers.get("fields") or []:
+            if f.get("class") == "FILE":
+                f["value"] = f.get("file")  # a file name, never a path on this machine
+        return answers
 
     @app.get("/packets/{job_key:path}/files/{name}", dependencies=[Depends(auth)])
     def packet_file(job_key: str, name: str, conn=Depends(db)):

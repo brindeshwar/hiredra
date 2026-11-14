@@ -1,0 +1,17 @@
+{
+ "job_id": "fixture:three_page",
+ "via": "fixture",
+ "fields": [
+  {"label": "First name", "key": "first_name", "type": "text", "class": "FACT", "value": "Ada"},
+  {"label": "Last name", "key": "last_name", "type": "text", "class": "FACT", "value": "Example"},
+  {"label": "Email", "key": "email", "type": "email", "class": "FACT", "value": "ada@example.com"},
+  {"label": "Phone", "key": "phone", "type": "text", "class": "FACT", "value": "+00 0000 0000"},
+  {"label": "Resume/CV", "key": "resume", "type": "file", "class": "FILE", "value": "tests/fixtures/forms/sample_cv.pdf"},
+  {"label": "LinkedIn profile", "key": "linkedin", "type": "text", "class": "FACT", "value": "linkedin.com/in/ada-example"},
+  {"label": "Country", "key": "country", "type": "select", "class": "FACT", "value": "India"},
+  {"label": "Do you have a GitHub profile?", "key": "has_github", "type": "radio", "class": "FACT", "value": "Yes"},
+  {"label": "Why do you want to work here?", "key": "why", "type": "textarea", "class": "DRAFT", "value": "I build backend and AI systems, and this role is about exactly that."},
+  {"label": "Expected salary", "key": "salary", "type": "text", "class": "PAUSE", "value": null, "category": "salary"},
+  {"label": "I agree to the privacy policy", "key": "consent", "type": "checkbox", "class": "PAUSE", "value": null, "category": "legal"}
+ ]
+}

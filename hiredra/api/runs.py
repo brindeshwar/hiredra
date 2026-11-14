@@ -28,6 +28,8 @@ STAGES: dict[str, list[str]] = {
     "scoring": ["-m", "hiredra.scoring", "run"],
     "audit": ["-m", "hiredra.graph", "audit"],
     "packets": ["-m", "hiredra.resume", "packets", "--top", "{top}"],
+    "forms": ["-m", "hiredra.autofill", "scan", "--tailored"],
+    "scan": ["-m", "hiredra.autofill", "scan", "--job", "{job}", "--no-drafts"],
 }
 
 
