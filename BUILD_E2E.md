@@ -499,5 +499,5 @@ on local fixture forms, stopping before Submit.
 | 2 Tailoring + claim gate + cover + packets | build/p2-tailoring / #178 | yes (ba3b39e) | 5 real packets (NVIDIA), all one page; 3 of 5 needed no repair. Rough: bullets close to the profile's wording, few bold terms, "100 plus" style in letters |
 | 3 Sidecar API | build/p3-sidecar / #179 | yes (9df562a) | `python -m hiredra.api`; jobs, triage, runs, packets live on the real DB. Batches and apply endpoints come with piece 5 |
 | 4 Desktop app | build/p4-app / #180 | yes (2eeaf20) | Electron 45 + React 19; 5 screens on the real DB; security flags tested; Batches/Apply wait for piece 5's endpoints |
-| 5 Application filler | build/p5-applier | see PR | Greenhouse + Lever forms read on the real DB; batch B0001 (10 jobs) queued; fixture fill: 0 submits |
-| 6 End-to-end run + report | | | |
+| 5 Application filler | build/p5-applier / #181 | yes (d09b17c) | Greenhouse + Lever forms read on the real DB; batch B0001 (10 jobs) queued; fixture fill: 0 submits |
+| 6 End-to-end run + report | build/p6-e2e-report | see PR | `python -m hiredra.e2e` ran every stage on the real DB (exit 0), batch B0002; BUILD_REPORT.md |
