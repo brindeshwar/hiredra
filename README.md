@@ -78,6 +78,22 @@ python -m hiredra.graph audit             # health checks: a WARNING names the s
 python -m hiredra.scoring list            # the ranked list
 ```
 
+## End to end
+
+One command runs every stage in order and stops at the first one that fails:
+
+```bash
+python -m hiredra.e2e --top 10
+```
+
+filter -> extraction -> graph sync -> graph describe -> scoring -> graph audit -> tailored packets (resume and cover
+letter, Word + PDF) -> read the application forms and prepare the answers -> queue a batch of up to 10. `--skip STAGE`
+leaves a stage out. The last step leaves a batch for you in the desktop app's Batches and Apply screens.
+
+Nothing is ever submitted or sent. The form filler (`python -m hiredra.autofill fill --fixture three_page`) clicks only
+Next / Continue, refuses every submit-like control and stops on the last page; in this build it runs on local test
+forms only.
+
 ## Desktop app
 
 `app/` is an Electron + React desktop app over the same pipeline. It starts the Python service itself
