@@ -53,7 +53,7 @@ export type Bridge = {
   openExternal: (url: string) => Promise<void>
 }
 
-export const STAGES = ['filter', 'extraction', 'sync', 'describe', 'scoring', 'audit', 'packets'] as const
+export const STAGES = ['filter', 'extraction', 'sync', 'describe', 'scoring', 'audit', 'packets', 'forms'] as const
 export type Stage = (typeof STAGES)[number]
 export const VIEWS = ['ranked', 'review', 'tailored', 'queued', 'applied', 'all'] as const
 export type View = (typeof VIEWS)[number]

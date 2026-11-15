@@ -1,7 +1,10 @@
 # config/autofill_facts.example.yml -- the SHAPE of data/autofill_facts.yml (which is private and git-ignored).
 # Copy this to data/autofill_facts.yml and fill it in. Only verified facts go here: the resume header and the
-# form filler read them as they are. No password, no work-authorisation, salary or demographic answers (those are
-# always left for you to answer in the form).
+# form filler read them as they are.
+#
+# Never put here (the loader refuses the whole file if you do; these are always yours to answer in the form):
+# work authorization, visa or sponsorship, salary / CTC / compensation, gender, race, ethnicity, caste, religion,
+# disability, veteran status, date of birth or age, passport or any government ID, and any password.
 
 contact:
   full_name: "Your Name"
@@ -11,3 +14,14 @@ contact:
   linkedin: "linkedin.com/in/your-handle"
   github: "github.com/your-handle"
   portfolio: ""
+
+facts:
+  preferred_name: ""
+  country: "Country"
+  city: "City"
+  degree: "B.Tech Computer Science"
+  institution: "Your University"
+  graduation_year: "2026"
+  current_company: ""
+  current_title: ""
+  current_status: ""

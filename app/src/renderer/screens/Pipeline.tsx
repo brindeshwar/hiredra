@@ -12,7 +12,8 @@ const ABOUT: Record<Stage, string> = {
   describe: 'Describe new skills and fold in other names for known ones',
   scoring: 'Score every extracted job against your profile (code)',
   audit: 'Graph health checks',
-  packets: 'Tailored resume and cover letter for the best scored jobs'
+  packets: 'Tailored resume and cover letter for the best scored jobs',
+  forms: 'Read the application forms of tailored jobs and prepare the answers (never submits)'
 }
 
 const STATUS_ORDER = ['fetched', 'filtered', 'extracted', 'scored', 'tailored', 'queued', 'applied', 'outcome', 'dropped']
