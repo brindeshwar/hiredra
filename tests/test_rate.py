@@ -84,6 +84,22 @@ def test_the_sheet_is_blind(conn):
         )
     assert sheet.count("- [ ] apply\n- [ ] maybe\n- [ ] skip\n") == 30  # task-list lines: tickable in a preview
     assert "aws, python" in sheet  # skills alphabetical
+    descriptions = rate.render_descriptions(conn, picks)
+    for key in FEATURE_KEYS:  # the companion file is blind too
+        assert key not in descriptions
+
+
+def test_descriptions_live_in_a_linked_companion_file(conn, tmp_path):
+    sheet, key = tmp_path / "s.md", tmp_path / "k.json"
+    rate.write_sample(conn, sheet=sheet, key=key)
+    text = sheet.read_text("utf-8")
+    descriptions = (tmp_path / rate.DESCRIPTIONS_PATH.name).read_text("utf-8")
+    assert "<details>" not in text and "Build things." not in text  # nothing folded: editor and preview stay in step
+    for n in range(1, 31):  # each job links to its own section, which holds that job's description
+        assert f"](job_ratings_descriptions.md#j{n:02d})" in text
+        section = descriptions.split(f"## J{n:02d}\n", 1)[1].split("\n## J", 1)[0]
+        title = text.split(f"### J{n:02d}. ", 1)[1].split("\n", 1)[0]
+        assert f"**{title}** at Acme" in section and "Build things." in section and "](s.md)" in section
 
 
 def _tick(sheet: str, n: int, rating: str, reason: str) -> str:
