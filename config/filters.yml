@@ -131,6 +131,13 @@ off_bucket_exempt:
 location:
   eligible_for: India
 
+# Language (2026-11-25, owner's sitting-2 ratings): a job whose description is mainly in another language is
+# dropped. The owner rated a German posting (J18) and an Italian one (old J16) unfit: the language itself is a
+# requirement he cannot meet. Measured on 2,690 live jobs: 126 (116 European languages, 10 Chinese/Japanese).
+# A description with no text, or a bilingual one where English common words are at least as many, is kept.
+language:
+  english_only: true
+
 # Seniority anti-signal in the TITLE (docs/repos.md sec 6). "staff" is
 # deliberately narrow: hiredra/filter.py's has_senior_title_term() neutralizes
 # "Member of Technical Staff" / "MTS" before testing, so that title's
@@ -139,6 +146,8 @@ location:
 # would never survive to be tested.
 # F4 (2026-10-29, owner): "ii" removed -- "Engineer II" is usually the second level (often 1-3 years), so the
 # years parser decides; "iii" / "iv" stay. F7: Portuguese "sênior" and "vice president" added.
+# 2026-11-25 (owner's sitting-2 ratings): French "sénior", "confirmé(e)" and "expérimenté(e)" (3 live titles), and
+# a PhD in the title (12 live titles: "ML Engineer (MSc. or PhD)", "PhD Intern, ..."): the owner holds neither.
 senior_title_terms:
   - senior
   - sr.
@@ -156,6 +165,13 @@ senior_title_terms:
   - sênior
   - iii
   - iv
+  - sénior
+  - confirmé
+  - confirmée
+  - expérimenté
+  - expérimentée
+  - phd
+  - ph.d
 
 # Seniority anti-signal PHRASES in the JD body — complements the years regex
 # for postings that describe a senior role without stating a year count.
@@ -171,3 +187,14 @@ anti_signal_phrases:
 # Fresher/junior cutoff: keep years_required <= max_years or unknown (None);
 # drop above. Re-tuned at 2b weight calibration, not hardcoded.
 max_years: 2
+
+# A job description often opens with the role's full title, which can be more senior than the board's title
+# field: "Senior ML Engineer (MSc. or PhD)" under the title "ML Engineer (MSc. or PhD)" (J17). When the first
+# line is a short heading (90 characters at most) holding one of these words, the job is dropped as senior. A
+# heading offering two levels ("Engineer/ Sr. Engineer") is not. Only these words: "lead" there also named
+# other roles ("Program Lead" atop an intern posting). Measured on 2,690 live jobs: 7.
+heading_senior_terms:
+  - senior
+  - sr.
+  - sr
+  - sénior

@@ -468,6 +468,22 @@ def test_eu_is_europe(location):
     assert eligibility("India", "Remote (EU or India)", "", "Engineer")[0] is True
 
 
+@pytest.mark.parametrize(
+    "location,ok,country",
+    [
+        ("San Jose-San Jose-Costa Rica", False, "CR"),  # J28: was one unknown city, kept
+        ("Dublin-Dublin-Ireland", False, "IE"),
+        ("Bengaluru-Karnataka-India", True, "IN"),
+        ("Milwaukee-Wisconsin-United States of America", False, "US"),
+        ("Guinea-Bissau", False, "GW"),  # a country named with a dash is never split
+        ("Winston-Salem, NC", False, "US"),
+    ],
+)
+def test_workday_city_region_country_lines(location, ok, country):
+    assert parse(location)["countries"] == [country]
+    assert eligibility("India", location, "", "Engineer")[0] is ok
+
+
 def test_the_title_never_overrides_a_stated_location():
     assert eligibility("India", "Bengaluru, India", "", "Backend Engineer [Remote-US]")[0] is True
 

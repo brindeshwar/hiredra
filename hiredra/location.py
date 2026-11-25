@@ -1403,6 +1403,24 @@ TZ_CODES = {
 }
 
 
+_UNSPACED_DASH_RE = re.compile(r"(?<=[^\W\d_])-(?=[^\W\d_])")
+
+
+def _workday_line(loc: str) -> str:
+    """Workday writes a place as "City-Region-Country" with unspaced dashes ("Dublin-Dublin-Ireland",
+    "San Jose-San Jose-Costa Rica", "Bengaluru-Karnataka-India"). The pairwise split in ``_split`` sees only
+    "Dublin-Dublin" (no country in it), so the whole line was read as one unknown city and kept: 423 of the
+    669 jobs kept on an unknown location (2026-11-25), J28 among them. A line of three or more dash-joined
+    parts whose last part is a country is read as separate parts. Two-part lines stay with the pairwise rule,
+    and a country named with a dash is never split ("Guinea-Bissau")."""
+    if "," in loc or ";" in loc or loc.strip().lower() in COUNTRIES:
+        return loc
+    parts = _UNSPACED_DASH_RE.split(loc.strip())
+    if len(parts) >= 3 and parts[-1].strip().lower() in COUNTRIES:
+        return ", ".join(p.strip() for p in parts)
+    return loc
+
+
 def _split(loc: str) -> list[str]:
     """Hyphenated forms: "Mexico-Remote", "US - Remote (...)", "IND-Pune-Smartworks" -> split on
     hyphens too when a side is a known country/code (keeps "Winston-Salem" intact). The word "only" goes first:
@@ -1410,6 +1428,7 @@ def _split(loc: str) -> list[str]:
     "US Only" matched nothing, so the line read as unknown and was kept (46 stored jobs, 2026-11-02; Hiredra's
     addition, not freehire's)."""
     loc = re.sub(r"[-–]?\bonly\b", " ", loc, flags=re.I)
+    loc = _workday_line(loc)
 
     def hy(m: re.Match) -> str:
         a, b = m.group(1), m.group(2)

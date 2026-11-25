@@ -9,6 +9,9 @@ the Step 5 skill pairs), so the same design is delivered as a sheet:
 - 10 score deciles, 3 jobs each with a fixed seed, 2 tune + 1 holdout per decile -> 20/10 (D3);
 - the sheet NEVER shows a score or any score feature, and lists jobs in a seeded random order, not score
   order (D3 "blind"); the split and the score at sampling live in a key file the owner never opens;
+- each job's description goes in a companion file (job_ratings_descriptions.md, one ``## Jnn`` section per job,
+  linked from the sheet). A long description folded inside the sheet put the editor and the Markdown preview
+  out of step, since the preview maps one folded line to hundreds of source lines;
 - ingest validates every ticked job (exactly one rating, a non-empty reason) and APPENDS rows; a re-rating
   is a new row and the latest wins (contracts 3.8). Untouched jobs are skipped, so a sitting can be
   ingested half done.
@@ -27,6 +30,7 @@ from hiredra.storage import DATA_DIR, get_job
 
 CALIBRATION_DIR = DATA_DIR / "calibration"
 SHEET_PATH = CALIBRATION_DIR / "job_ratings_sheet.md"
+DESCRIPTIONS_PATH = CALIBRATION_DIR / "job_ratings_descriptions.md"
 KEY_PATH = CALIBRATION_DIR / "job_ratings_key.json"
 RATINGS_PATH = CALIBRATION_DIR / "job_ratings.csv"
 
@@ -79,8 +83,46 @@ def _skills(job: dict) -> str:
     return ", ".join(names) or "(none extracted)"
 
 
-def render_sheet(conn, picks: list[dict]) -> str:
-    """The blind sheet: job facts, the extracted skills and the description, with a tick line per job."""
+def description_link(n: int, descriptions_name: str = DESCRIPTIONS_PATH.name) -> str:
+    """The sheet's line pointing at job J<n>'s section in the descriptions file."""
+    return f"**Description:** [read it]({descriptions_name}#j{n:02d})"
+
+
+def description_section(
+    n: int, title: str, company: str, description: str, sheet_name: str = SHEET_PATH.name
+) -> list[str]:
+    """Job J<n>'s section of the descriptions file. The bare ``## Jnn`` heading gives the link target ``#jnn``."""
+    return [
+        f"## J{n:02d}",
+        "",
+        f"**{title}** at {company}  ·  [back to the sheet]({sheet_name})",
+        "",
+        *[line.rstrip() for line in description.strip().splitlines()],
+        "",
+        "---",
+        "",
+    ]
+
+
+DESCRIPTIONS_HEADER = [
+    "# Step 7: job descriptions",
+    "",
+    "The full description of every job on the rating sheet, one section per job. Rate on the sheet, not here.",
+    "",
+]
+
+
+def render_descriptions(conn, picks: list[dict], sheet_name: str = SHEET_PATH.name) -> str:
+    """The companion file: each job's description under its own ``## Jnn`` heading. Blind like the sheet."""
+    out = list(DESCRIPTIONS_HEADER)
+    for n, p in enumerate(picks, 1):
+        job = get_job(conn, p["job_id"])
+        out += description_section(n, job["title"], job["company"], job["description"] or "", sheet_name)
+    return "\n".join(out)
+
+
+def render_sheet(conn, picks: list[dict], descriptions_name: str = DESCRIPTIONS_PATH.name) -> str:
+    """The blind sheet: job facts and the extracted skills, a link to the description, a tick line per job."""
     out = [
         "# Step 7: rate these 30 jobs",
         "",
@@ -94,13 +136,13 @@ def render_sheet(conn, picks: list[dict]) -> str:
         "Two sittings of 15 (about 75 minutes each). You can stop part way: run",
         "`python -m hiredra.scoring rate --ingest` and only the jobs you have ticked are saved.",
         "Rate the job as described, even if the posting may since have closed.",
+        f"Each job's full description is in `{descriptions_name}`: follow the link under the job.",
         "",
     ]
     for n, p in enumerate(picks, 1):
         if n in (1, SITTING_SIZE + 1):
             out += [f"## Sitting {p['sitting']}", ""]
         job = get_job(conn, p["job_id"])
-        desc = (job["description"] or "").strip()
         out += [
             f"### J{n:02d}. {job['title']}",
             "",
@@ -111,11 +153,7 @@ def render_sheet(conn, picks: list[dict]) -> str:
             "",
             f"**Skills it asks for:** {_skills(job)}",
             "",
-            "<details><summary>Job description</summary>",
-            "",
-            *[line.rstrip() for line in desc.splitlines()],
-            "",
-            "</details>",
+            description_link(n, descriptions_name),
             "",
             "- [ ] apply",
             "- [ ] maybe",
@@ -132,13 +170,16 @@ def render_sheet(conn, picks: list[dict]) -> str:
 
 
 def write_sample(conn, *, sheet: Path = SHEET_PATH, key: Path = KEY_PATH, seed: int = SEED, force: bool = False) -> int:
-    """Draw the sample and write the sheet and its key. Refuses to overwrite a sheet unless ``force``."""
+    """Draw the sample; write the sheet, its descriptions file (next to the sheet) and its key. Refuses to
+    overwrite a sheet unless ``force``."""
     if sheet.exists() and not force:
         raise SheetError(f"{sheet} already exists; ingest it first, or pass --force to draw a new sample")
     picks = sample(conn, seed=seed)
     sampled_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    descriptions = sheet.with_name(DESCRIPTIONS_PATH.name)
     sheet.parent.mkdir(parents=True, exist_ok=True)
-    sheet.write_text(render_sheet(conn, picks), encoding="utf-8")
+    sheet.write_text(render_sheet(conn, picks, descriptions.name), encoding="utf-8")
+    descriptions.write_text(render_descriptions(conn, picks, sheet.name), encoding="utf-8")
     key.write_text(
         json.dumps(
             {
