@@ -168,9 +168,10 @@ def test_the_shipped_config_loads_against_the_shipped_graph_config():
 
     g = load_graph_config()
     w = sc.load_weights(g)
-    assert w.cover_bar == pytest.approx((g.adj + g.have) / 2)
-    assert w.apply_line is None and w.calibration_id == "placeholder" and w.min_skills == 3
-    assert w.score_version.startswith("placeholder:") and len(w.score_version.split(":")[1]) == 8
+    # Step 7 froze the weights (calibration step7-2026-11-26): the bar is one of the grid's five, inside (adj, have)
+    assert g.adj < w.cover_bar < g.have
+    assert w.apply_line is not None and w.calibration_id.startswith("step7-") and w.min_skills == 3
+    assert w.score_version.startswith(w.calibration_id + ":") and len(w.score_version.split(":")[1]) == 8
 
 
 def test_null_cover_bar_is_the_midpoint(tmp_path):

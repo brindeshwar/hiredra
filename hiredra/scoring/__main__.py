@@ -10,6 +10,8 @@
     python -m hiredra.scoring status               # stamps in use, stale counts, the profile export
     python -m hiredra.scoring rate --sample        # Step 7: write the blind rating sheet (30 jobs)
     python -m hiredra.scoring rate --ingest        # Step 7: read the ticked sheet into job_ratings.csv
+    python -m hiredra.scoring rate --add           # Step 7: append a further sitting of 15 unrated jobs
+    python -m hiredra.scoring calibrate [--write]  # Step 7: fit the weights to the ratings (dry run unless --write)
 
 Exit codes: 0 ok, 1 config or input error, 2 stopped (a precondition, or the model failed), 4 lock held.
 """
@@ -24,6 +26,7 @@ from hiredra.graph.lock import RunLock
 from hiredra.graph.overlay import DEFAULT_OVERLAY_PATH
 from hiredra.lock import LockHeld
 from hiredra.profile import DEFAULT_PROFILE_PATH, ProfileError, parse_skills
+from hiredra.scoring import calibrate as scal
 from hiredra.scoring import rate as srate
 from hiredra.scoring import run as sr
 from hiredra.scoring.score import DEFAULT_WEIGHTS_PATH, load_weights
@@ -195,12 +198,39 @@ def _cmd_rate(conn, args, graph_cfg, weights) -> int:
         if args.sample:
             n = srate.write_sample(conn, force=args.force)
             _log(f"wrote {srate.SHEET_PATH} ({n} jobs, two sittings); tick one box and write a reason per job")
+        elif args.add:
+            sitting = srate.write_addition(conn)
+            _log(f"appended sitting {sitting} ({srate.ADD_STRATA * srate.PER_STRATUM} jobs) to {srate.SHEET_PATH}")
         else:
             new, same = srate.ingest()
             _log(f"saved {new} rating(s) to {srate.RATINGS_PATH} ({same} unchanged)")
     except (srate.SheetError, OSError) as exc:
         _log(f"rate: {exc}")
         return 1
+    return 0
+
+
+def _cmd_calibrate(conn, args, graph_cfg, weights) -> int:
+    have = graph_cfg.have if args.have is None else args.have
+    adj = graph_cfg.adj if args.adj is None else args.adj
+    if args.write and (have, adj) != (graph_cfg.have, graph_cfg.adj):
+        _log("calibrate: --write uses config/graph.yml's thresholds; change them there first, then calibrate")
+        return 1
+    try:
+        jobs, left_out = scal.load_rated(conn)
+        cal = scal.calibrate(jobs, weights, have, adj, left_out)
+    except (OSError, scal.CalibrationError) as exc:
+        _log(f"calibrate: {exc}")
+        return 1
+    _log(scal.summary(cal))
+    if args.write:
+        cid = scal.write_weights(cal, args.weights)
+        scal.write_reports(cal, cid)
+        _log(f"froze {args.weights} as {cid}; reports: {scal.REPORT_PATH}, {scal.SUMMARY_PATH}")
+        _log("next: python -m hiredra.scoring run   (every job re-scores under the new score_version, 0 API)")
+    else:
+        scal.REPORT_PATH.write_text(scal.private_report(cal), encoding="utf-8")
+        _log(f"dry run: nothing frozen. Per-job detail: {scal.REPORT_PATH}")
     return 0
 
 
@@ -225,7 +255,12 @@ def main(argv: list[str] | None = None) -> int:
     mode = rate_p.add_mutually_exclusive_group(required=True)
     mode.add_argument("--sample", action="store_true", help="draw 30 jobs and write the sheet")
     mode.add_argument("--ingest", action="store_true", help="save the ticked ratings")
+    mode.add_argument("--add", action="store_true", help="append a further sitting of 15 unrated jobs")
     rate_p.add_argument("--force", action="store_true", help="with --sample: replace an existing sheet")
+    cal_p = sub.add_parser("calibrate", help="Step 7: fit the weights to the owner's ratings")
+    cal_p.add_argument("--write", action="store_true", help="freeze config/weights.yml and write the reports")
+    cal_p.add_argument("--have", type=float, default=None, help="what-if: full-credit threshold (dry run only)")
+    cal_p.add_argument("--adj", type=float, default=None, help="what-if: partial-credit threshold (dry run only)")
     args = ap.parse_args(argv)
 
     try:
@@ -243,6 +278,7 @@ def main(argv: list[str] | None = None) -> int:
         "reject": _cmd_reject,
         "status": _cmd_status,
         "rate": _cmd_rate,
+        "calibrate": _cmd_calibrate,
     }
     conn = connect(args.db)
     try:
