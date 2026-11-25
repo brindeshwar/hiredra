@@ -10,6 +10,7 @@
     python -m hiredra.scoring status               # stamps in use, stale counts, the profile export
     python -m hiredra.scoring rate --sample        # Step 7: write the blind rating sheet (30 jobs)
     python -m hiredra.scoring rate --ingest        # Step 7: read the ticked sheet into job_ratings.csv
+    python -m hiredra.scoring rate --add           # Step 7: append a further sitting of 15 unrated jobs
     python -m hiredra.scoring calibrate [--write]  # Step 7: fit the weights to the ratings (dry run unless --write)
 
 Exit codes: 0 ok, 1 config or input error, 2 stopped (a precondition, or the model failed), 4 lock held.
@@ -197,6 +198,9 @@ def _cmd_rate(conn, args, graph_cfg, weights) -> int:
         if args.sample:
             n = srate.write_sample(conn, force=args.force)
             _log(f"wrote {srate.SHEET_PATH} ({n} jobs, two sittings); tick one box and write a reason per job")
+        elif args.add:
+            sitting = srate.write_addition(conn)
+            _log(f"appended sitting {sitting} ({srate.ADD_STRATA * srate.PER_STRATUM} jobs) to {srate.SHEET_PATH}")
         else:
             new, same = srate.ingest()
             _log(f"saved {new} rating(s) to {srate.RATINGS_PATH} ({same} unchanged)")
@@ -251,6 +255,7 @@ def main(argv: list[str] | None = None) -> int:
     mode = rate_p.add_mutually_exclusive_group(required=True)
     mode.add_argument("--sample", action="store_true", help="draw 30 jobs and write the sheet")
     mode.add_argument("--ingest", action="store_true", help="save the ticked ratings")
+    mode.add_argument("--add", action="store_true", help="append a further sitting of 15 unrated jobs")
     rate_p.add_argument("--force", action="store_true", help="with --sample: replace an existing sheet")
     cal_p = sub.add_parser("calibrate", help="Step 7: fit the weights to the owner's ratings")
     cal_p.add_argument("--write", action="store_true", help="freeze config/weights.yml and write the reports")

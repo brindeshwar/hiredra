@@ -2,6 +2,7 @@
 
     python -m hiredra.scoring rate --sample    # write the blind checklist sheet (30 jobs, two sittings of 15)
     python -m hiredra.scoring rate --ingest    # read the ticked sheet into data/calibration/job_ratings.csv
+    python -m hiredra.scoring rate --add       # append a further sitting of 15 jobs not yet on the sheet
 
 The plan specified an interactive rating CLI; the owner rates by ticking a checklist file instead (as for
 the Step 5 skill pairs), so the same design is delivered as a sheet:
@@ -39,6 +40,10 @@ SEED = 20261028
 STRATA = 10
 PER_STRATUM = 3  # 2 tune + 1 holdout
 SITTING_SIZE = 15
+#: ``rate --add``: a further sitting drawn like sitting 2's redraw, 5 score strata x 3 (2 tune + 1 holdout).
+ADD_STRATA = 5
+ADD_SEED = 20261126
+ADD_SAMPLER_VERSION = "s7.4-add"
 RATINGS = ("apply", "maybe", "skip")
 CSV_FIELDS = (
     "job_id",
@@ -112,36 +117,29 @@ DESCRIPTIONS_HEADER = [
 ]
 
 
-def render_descriptions(conn, picks: list[dict], sheet_name: str = SHEET_PATH.name) -> str:
-    """The companion file: each job's description under its own ``## Jnn`` heading. Blind like the sheet."""
-    out = list(DESCRIPTIONS_HEADER)
-    for n, p in enumerate(picks, 1):
+def description_sections(conn, picks: list[dict], sheet_name: str = SHEET_PATH.name, start: int = 1) -> list[str]:
+    out: list[str] = []
+    for n, p in enumerate(picks, start):
         job = get_job(conn, p["job_id"])
         out += description_section(n, job["title"], job["company"], job["description"] or "", sheet_name)
-    return "\n".join(out)
+    return out
 
 
-def render_sheet(conn, picks: list[dict], descriptions_name: str = DESCRIPTIONS_PATH.name) -> str:
-    """The blind sheet: job facts and the extracted skills, a link to the description, a tick line per job."""
-    out = [
-        "# Step 7: rate these 30 jobs",
-        "",
-        "For each job tick ONE box (click it, or type x inside the brackets) and write one line saying why. Your answers teach the scorer your",
-        "judgment, so rate them yourself: no AI help, and don't look anything up about how Hiredra ranked them.",
-        "",
-        "- **apply**: I would apply to this today.",
-        "- **maybe**: borderline; I would apply if the batch were thin.",
-        "- **skip**: I would not apply.",
-        "",
-        "Two sittings of 15 (about 75 minutes each). You can stop part way: run",
-        "`python -m hiredra.scoring rate --ingest` and only the jobs you have ticked are saved.",
-        "Rate the job as described, even if the posting may since have closed.",
-        f"Each job's full description is in `{descriptions_name}`: follow the link under the job.",
-        "",
-    ]
-    for n, p in enumerate(picks, 1):
-        if n in (1, SITTING_SIZE + 1):
-            out += [f"## Sitting {p['sitting']}", ""]
+def render_descriptions(conn, picks: list[dict], sheet_name: str = SHEET_PATH.name) -> str:
+    """The companion file: each job's description under its own ``## Jnn`` heading. Blind like the sheet."""
+    return "\n".join(DESCRIPTIONS_HEADER + description_sections(conn, picks, sheet_name))
+
+
+def job_blocks(
+    conn, picks: list[dict], descriptions_name: str = DESCRIPTIONS_PATH.name, *, start: int = 1, sitting: int = 0
+) -> list[str]:
+    """The sheet blocks for ``picks``, numbered from J<start>, with a ``## Sitting n`` heading wherever the sitting
+    changes from ``sitting`` (the one before the first pick)."""
+    out: list[str] = []
+    for n, p in enumerate(picks, start):
+        if p["sitting"] != sitting:
+            sitting = p["sitting"]
+            out += [f"## Sitting {sitting}", ""]
         job = get_job(conn, p["job_id"])
         out += [
             f"### J{n:02d}. {job['title']}",
@@ -166,6 +164,28 @@ def render_sheet(conn, picks: list[dict], descriptions_name: str = DESCRIPTIONS_
             "---",
             "",
         ]
+    return out
+
+
+def render_sheet(conn, picks: list[dict], descriptions_name: str = DESCRIPTIONS_PATH.name) -> str:
+    """The blind sheet: job facts and the extracted skills, a link to the description, a tick line per job."""
+    out = [
+        "# Step 7: rate these 30 jobs",
+        "",
+        "For each job tick ONE box (click it, or type x inside the brackets) and write one line saying why. Your answers teach the scorer your",
+        "judgment, so rate them yourself: no AI help, and don't look anything up about how Hiredra ranked them.",
+        "",
+        "- **apply**: I would apply to this today.",
+        "- **maybe**: borderline; I would apply if the batch were thin.",
+        "- **skip**: I would not apply.",
+        "",
+        "Two sittings of 15 (about 75 minutes each). You can stop part way: run",
+        "`python -m hiredra.scoring rate --ingest` and only the jobs you have ticked are saved.",
+        "Rate the job as described, even if the posting may since have closed.",
+        f"Each job's full description is in `{descriptions_name}`: follow the link under the job.",
+        "",
+    ]
+    out += job_blocks(conn, picks, descriptions_name)
     return "\n".join(out)
 
 
@@ -193,6 +213,54 @@ def write_sample(conn, *, sheet: Path = SHEET_PATH, key: Path = KEY_PATH, seed: 
         encoding="utf-8",
     )
     return len(picks)
+
+
+def add_sample(conn, exclude: set[str], *, seed: int = ADD_SEED) -> list[dict]:
+    """A further sitting of ``ADD_STRATA`` x ``PER_STRATUM`` jobs from today's rating pool, none already keyed.
+    Stratified by today's score and split 2 tune + 1 holdout per stratum, like the first draw; random order."""
+    pool = [
+        r
+        for r in conn.execute(
+            "SELECT job_key, score FROM jobs WHERE status = 'scored' AND review_reason IS NULL ORDER BY score, job_key"
+        ).fetchall()
+        if r["job_key"] not in exclude
+    ]
+    if len(pool) < ADD_STRATA * PER_STRATUM:
+        raise SheetError(f"only {len(pool)} unrated jobs in the rating pool; need {ADD_STRATA * PER_STRATUM}")
+    rng = random.Random(seed)
+    picks = []
+    for i in range(ADD_STRATA):
+        stratum = pool[i * len(pool) // ADD_STRATA : (i + 1) * len(pool) // ADD_STRATA]
+        for k, row in enumerate(rng.sample(stratum, PER_STRATUM)):
+            split = "holdout" if k == PER_STRATUM - 1 else "tune"
+            picks.append({"job_id": row["job_key"], "split": split, "score_at_sampling": row["score"]})
+    rng.shuffle(picks)
+    return picks
+
+
+def write_addition(conn, *, sheet: Path = SHEET_PATH, key: Path = KEY_PATH, seed: int = ADD_SEED) -> int:
+    """Append a further sitting to the sheet, its descriptions file and its key. Returns the sitting number."""
+    meta = json.loads(key.read_text(encoding="utf-8"))
+    sitting = max(j["sitting"] for j in meta["jobs"].values()) + 1
+    start = len(meta["jobs"]) + 1
+    picks = add_sample(conn, set(meta["jobs"]), seed=seed)
+    for p in picks:
+        p["sitting"] = sitting
+    descriptions = sheet.with_name(DESCRIPTIONS_PATH.name)
+    blocks = job_blocks(conn, picks, descriptions.name, start=start)
+    sheet.write_text(sheet.read_text(encoding="utf-8").rstrip("\n") + "\n\n" + "\n".join(blocks), encoding="utf-8")
+    sections = description_sections(conn, picks, sheet.name, start=start)
+    descriptions.write_text(
+        descriptions.read_text(encoding="utf-8").rstrip("\n") + "\n\n" + "\n".join(sections), encoding="utf-8"
+    )
+    meta["jobs"].update({p["job_id"]: {k: p[k] for k in ("split", "sitting", "score_at_sampling")} for p in picks})
+    meta[f"sitting{sitting}"] = {
+        "sampled_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "seed": seed,
+        "sampler_version": ADD_SAMPLER_VERSION,
+    }
+    key.write_text(json.dumps(meta, indent=1), encoding="utf-8")
+    return sitting
 
 
 _BLOCK_RE = re.compile(r"^### (J\d+)\.", re.M)
@@ -248,6 +316,7 @@ def ingest(*, sheet: Path = SHEET_PATH, key: Path = KEY_PATH, ratings: Path = RA
             w.writerow(CSV_FIELDS)
         for jid, rating, why in fresh:
             j = meta["jobs"][jid]
-            w.writerow([jid, j["split"], rating, why, j["sitting"], meta["sampled_at"], meta["seed"],
-                        meta["sampler_version"], j["score_at_sampling"]])  # fmt: skip
+            m = meta.get(f"sitting{j['sitting']}", meta)  # a later sitting carries its own draw record
+            w.writerow([jid, j["split"], rating, why, j["sitting"], m["sampled_at"], m["seed"],
+                        m["sampler_version"], j["score_at_sampling"]])  # fmt: skip
     return len(fresh), len(rows) - len(fresh)

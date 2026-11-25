@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import json
 
 import pytest
 
@@ -169,3 +170,22 @@ def test_sample_refuses_to_overwrite_an_existing_sheet(conn, tmp_path):
 def test_an_uppercase_x_counts_as_a_tick(conn):
     sheet = _tick(rate.render_sheet(conn, rate.sample(conn)), 1, "maybe", "fine")
     assert [r[1] for r in rate.parse_sheet(sheet.replace("- [x] maybe", "- [X] maybe"))] == ["maybe"]
+
+
+def test_add_appends_a_new_sitting_of_unrated_jobs(conn, tmp_path):
+    sheet, key, out = tmp_path / "s.md", tmp_path / "k.json", tmp_path / "r.csv"
+    rate.write_sample(conn, sheet=sheet, key=key)
+    first = set(json.loads(key.read_text("utf-8"))["jobs"])
+    assert rate.write_addition(conn, sheet=sheet, key=key) == 3
+    meta = json.loads(key.read_text("utf-8"))
+    added = {j: v for j, v in meta["jobs"].items() if j not in first}
+    assert len(added) == 15 and all(v["sitting"] == 3 for v in added.values())
+    assert sorted(v["split"] for v in added.values()).count("holdout") == 5  # 2 tune + 1 holdout per stratum
+    assert meta["sitting3"]["sampler_version"] == rate.ADD_SAMPLER_VERSION
+    text = sheet.read_text("utf-8")
+    assert "## Sitting 3" in text and "### J31." in text and "### J45." in text and "### J46." not in text
+    assert "## J31\n" in (tmp_path / rate.DESCRIPTIONS_PATH.name).read_text("utf-8")
+    sheet.write_text(_tick(text, 31, "apply", "good fit"), "utf-8")
+    assert rate.ingest(sheet=sheet, key=key, ratings=out) == (1, 0)
+    row = next(csv.DictReader(out.open(encoding="utf-8")))
+    assert row["sitting"] == "3" and row["sampler_version"] == rate.ADD_SAMPLER_VERSION
