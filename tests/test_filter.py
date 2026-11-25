@@ -353,6 +353,82 @@ def test_senior_title_terms_after_the_freehire_comparison(title, keep):
     assert (funnel.has_senior_title_term(title, CONFIG.senior_title_terms) is None) is keep
 
 
+# --- owner's sitting-2 ratings (2026-11-25) ----------------------------------
+@pytest.mark.parametrize(
+    "title,keep",
+    [
+        ("ML Engineer (MSc. or PhD)", False),  # J17
+        ("PhD Intern, Machine Learning", False),
+        ("R&D Ph.D Summer Intern", False),
+        ("Développeur.euse Full Stack Sénior", False),
+        ("Data Engineer confirmé (H/F)", False),
+        ("Graphic Engineer", True),  # "phd" never matches inside a word
+    ],
+)
+def test_phd_and_french_seniority_words_in_the_title(title, keep):
+    assert (funnel.has_senior_title_term(title, CONFIG.senior_title_terms) is None) is keep
+
+
+@pytest.mark.parametrize(
+    "description,term",
+    [
+        ("Senior ML Engineer (MSc. or PhD)\nPay: $60-$120/hour", "senior"),  # J17's opening line
+        ("**Role: Senior Data Engineer**\n\nWe build pipelines.", "senior"),
+        ("Engineer/ Sr. Engineer - Solutions & Innovation\nAbout us", None),  # offers two levels
+        ("Compliance Operations & Process Excellence Program Lead\nIntern role", None),  # "lead" is not read here
+        (
+            "We are hiring a senior-friendly team of engineers who love building great products for our customers "
+            "everywhere in the world.",
+            None,
+        ),  # a sentence, not a heading
+        ("", None),
+    ],
+)
+def test_a_senior_opening_heading(description, term):
+    assert funnel.senior_heading(description, CONFIG.heading_senior_terms) == term
+
+
+def test_the_seniority_gate_reads_the_opening_heading():
+    result = funnel.passes_seniority_gate("ML Engineer", "Senior ML Engineer\nRemote, contract.", CONFIG)
+    assert not result.keep and result.reason == "description heading term 'senior'"
+
+
+@pytest.mark.parametrize(
+    "text,english",
+    [
+        ("We are looking for a backend engineer to join our team. You will work with Python and the cloud.", True),
+        (
+            "Zur Verstärkung der Abteilung suchen wir einen Study Engineer. Wir entwickeln Simulationen und "
+            "die Software für unsere Kunden mit Python und Kubernetes.",
+            False,
+        ),  # J18
+        (
+            "Chi siamo: Elty è una HealthTech in missione per rendere la salute più accessibile, con il team "
+            "di sviluppo che lavora su Java e React.",
+            False,
+        ),  # old J16
+        (
+            "Le contexte : nous recherchons un Data Engineer pour notre équipe. Vous travaillerez avec Spark et "
+            "des pipelines de données.",
+            False,
+        ),
+        ("ウーブン・バイ・トヨタについて。モビリティの未来を作るリサーチエンジニアを募集しています。", False),
+        ("Python\nDjango\nREST APIs\nPostgreSQL\nDocker", True),  # bare English bullets: kept
+        (
+            "We are hiring for our Munich office. Wir suchen dich! The role is in English and the team works "
+            "with Python in the cloud.",
+            True,
+        ),  # bilingual with as much English: kept
+    ],
+)
+def test_is_english(text, english):
+    assert funnel.is_english(text) is english
+
+
+def test_is_english_has_no_verdict_without_text():
+    assert funnel.is_english(None) is None and funnel.is_english("   ") is None
+
+
 # --- wiring ----------------------------------------------------------------
 def test_run_funnel_advances_and_drops_with_reasons(pg_url):
     conn = connect(pg_url)
@@ -368,13 +444,21 @@ def test_run_funnel_advances_and_drops_with_reasons(pg_url):
     upsert_job(
         conn, _job(job_id="greenhouse:drop-role", url="u3", title="Content Writer", description="Write great content.")
     )
+    upsert_job(
+        conn,
+        _job(job_id="greenhouse:drop-lang", url="u4", title="Backend Engineer",
+             description="Wir suchen einen Backend Engineer für unser Team. Du arbeitest mit Python und die "
+             "Kollegen sind sehr nett."),
+    )  # fmt: skip
 
     stats = funnel.run_funnel(conn, CONFIG)
 
-    assert stats.seen == 3
+    assert stats.seen == 4
     assert stats.kept == 1
     assert stats.dropped_seniority == 1
     assert stats.dropped_role_type == 1
+    assert stats.dropped_language == 1
+    assert get_job(conn, "greenhouse:drop-lang")["status_detail"] == "language: description not in English"
 
     keep = get_job(conn, "greenhouse:keep1")
     assert keep["status"] == "filtered"
