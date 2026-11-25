@@ -1,7 +1,7 @@
 """Sub-slice 2b: filter funnel (build step 2b, docs/scoring.md sec 1).
 
-Location eligibility, then the seniority gate, then role-type filter, then
-liveness. Location runs first -- on a global intake it removes the largest
+Location eligibility, then language, then the seniority gate, then role-type
+filter, then liveness. Location runs first -- on a global intake it removes the largest
 share, and CLAUDE.md sec 3.5 says filter hard and early. ``run_funnel`` reads
 jobs at status='fetched'; survivors of the three text stages advance to
 'filtered', failures move to 'dropped' with the killing stage recorded in
@@ -52,11 +52,14 @@ class FilterConfig:
     anti_signal_phrases: tuple[str, ...]
     max_years: int
     location_eligible_for: str
+    english_only: bool = True
+    heading_senior_terms: tuple[str, ...] = ()
 
 
 def load_filter_config(path: Path | str = DEFAULT_CONFIG_PATH) -> FilterConfig:
     data = yaml.safe_load(Path(path).read_text(encoding="utf-8")) or {}
     location = data.get("location") or {}
+    language = data.get("language") or {}
     return FilterConfig(
         allow=tuple(data.get("allow") or ()),
         block=tuple(data.get("block") or ()),
@@ -66,6 +69,8 @@ def load_filter_config(path: Path | str = DEFAULT_CONFIG_PATH) -> FilterConfig:
         anti_signal_phrases=tuple(data.get("anti_signal_phrases") or ()),
         max_years=int(data.get("max_years", 2)),
         location_eligible_for=str(location.get("eligible_for", "India")),
+        english_only=bool(language.get("english_only", True)),
+        heading_senior_terms=tuple(data.get("heading_senior_terms") or ()),
     )
 
 
@@ -155,6 +160,50 @@ def passes_location(
     if ok is False:
         return LocationResult(False, reason)
     return LocationResult(True, None)
+
+
+# Language: common words of English against those of the European languages seen in the pool (French, German,
+# Italian, Spanish, Portuguese). Words that are also English ("a", "as", "per", "die" ...) are left out of the
+# foreign list. Chinese, Japanese and Korean are read from the script instead.
+_ENGLISH_WORDS = frozenset(
+    "the and to of in for with you we our is are on be will your this that or an by at from have it experience "
+    "team work skills ability years role about who what can including more not all their they".split()
+)
+_FOREIGN_WORDS = frozenset(
+    "le la les des du et est une un pour dans nous vous avec sur au aux par qui que votre notre ses sont être "
+    "der die und das mit für sie wir ist ein eine zu den von auf im ihre unsere bei auch oder nicht werden dich du "
+    "il di che con una della del nel gli siamo sei sono alla delle "
+    "el los las para por es su nuestro somos tu sus como "
+    "os da do das dos com uma você são seu sua".split()
+)
+_WORD_RE = re.compile(r"[^\W\d_]+")
+_CJK_RE = re.compile(r"[\u3040-\u30ff\u3400-\u9fff\uac00-\ud7af]")
+
+
+def is_english(text: str | None) -> bool | None:
+    """Is this description mainly English? None when there is no text to judge (kept, never guessed).
+
+    Mainly Chinese/Japanese/Korean script (over 30% of its letters) is not English. Otherwise it is English
+    unless the foreign common words outnumber the English ones: a bilingual posting with as much English is kept,
+    and an English posting written as bare bullet lists (few common words of any language) is kept too.
+    """
+    if not text or not text.strip():
+        return None
+    letters = sum(ch.isalpha() for ch in text)
+    if letters and len(_CJK_RE.findall(text)) / letters > 0.3:
+        return False
+    words = [w.lower() for w in _WORD_RE.findall(text)]
+    english = sum(w in _ENGLISH_WORDS for w in words)
+    foreign = sum(w in _FOREIGN_WORDS for w in words)
+    return foreign <= english
+
+
+def senior_heading(description: str | None, terms: tuple[str, ...]) -> str | None:
+    """The senior word in the description's opening heading, if that line is a short title naming one level."""
+    first = next((ln.strip(" *#_\t") for ln in (description or "").splitlines() if ln.strip(" *#_\t")), "")
+    if not first or len(first) > 90 or "/" in first:
+        return None
+    return title_hits(first, terms)
 
 
 @dataclass(frozen=True)
@@ -319,6 +368,10 @@ def passes_seniority_gate(title: str | None, description: str | None, config: Fi
     if term:
         return SeniorityResult(False, years, f"title term '{term}'")
 
+    heading = senior_heading(description, config.heading_senior_terms)
+    if heading:
+        return SeniorityResult(False, years, f"description heading term '{heading}'")
+
     phrase = has_anti_signal_phrase(description, config.anti_signal_phrases)
     if phrase:
         return SeniorityResult(False, years, f"anti-signal phrase '{phrase}'")
@@ -355,6 +408,7 @@ class FunnelStats:
     seen: int = 0
     dropped_duplicate: int = 0  # another copy of a role already stored (D6.3): never judged twice
     dropped_location: int = 0
+    dropped_language: int = 0
     dropped_seniority: int = 0
     dropped_role_type: int = 0
     kept: int = 0
@@ -363,7 +417,7 @@ class FunnelStats:
 
 
 def run_funnel(conn, config: FilterConfig) -> FunnelStats:
-    """Read status='fetched', run the three text stages, advance/drop.
+    """Read status='fetched', run the text stages, advance/drop.
 
     A survivor here lands at 'filtered'. Liveness runs separately afterward
     (``check_liveness``) -- it needs to see the whole survivor set to group
@@ -386,7 +440,7 @@ COMMIT_EVERY = 500
 
 
 def _judge(conn, job, config: FilterConfig, stats: FunnelStats) -> None:
-    """The three text stages for one job: advance it to 'filtered' or drop it, counting into ``stats``."""
+    """The text stages for one job: advance it to 'filtered' or drop it, counting into ``stats``."""
     stats.seen += 1
     job_id = job["job_id"]
 
@@ -405,6 +459,11 @@ def _judge(conn, job, config: FilterConfig, stats: FunnelStats) -> None:
     if not location.keep:
         set_status(conn, job_id, "dropped", detail=f"location: {location.reason}")
         stats.dropped_location += 1
+        return
+
+    if config.english_only and is_english(job["description"]) is False:
+        set_status(conn, job_id, "dropped", detail="language: description not in English")
+        stats.dropped_language += 1
         return
 
     seniority = passes_seniority_gate(job["title"], job["description"], config)
@@ -442,6 +501,7 @@ def main(argv: list[str] | None = None) -> int:
     print(
         f"seen={stats.seen} kept={stats.kept} dropped_duplicate={stats.dropped_duplicate} "
         f"dropped_location={stats.dropped_location} "
+        f"dropped_language={stats.dropped_language} "
         f"dropped_seniority={stats.dropped_seniority} "
         f"dropped_role_type={stats.dropped_role_type} "
         f"unknown_location={stats.unknown_location} "
