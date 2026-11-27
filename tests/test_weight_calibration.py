@@ -109,6 +109,14 @@ def test_calibrate_scores_with_the_real_formula_and_reports_the_holdout_once():
     assert "tune A" in K.summary(cal)
 
 
+def test_calibrate_keeps_a_frozen_bar_that_is_any_grid_bar():
+    bar = K.cover_bars(ADJ, HAVE)[1]  # a frozen bar off the midpoint but on the grid, as written by --write
+    cal = K.calibrate(JOBS, replace(BASE, cover_bar=bar), HAVE, ADJ)
+    assert cal.default.cover_bar == bar
+    off = K.calibrate(JOBS, replace(BASE, cover_bar=0.7), HAVE, ADJ)  # off the grid: the midpoint stands in
+    assert off.default.cover_bar == pytest.approx((ADJ + HAVE) / 2)
+
+
 def test_calibrate_refuses_a_holdout_without_a_differing_pair():
     same = [j for j in JOBS if j.split == "tune"] + [_job("h", "holdout", "maybe", "ml", [0.9]) for _ in range(3)]
     with pytest.raises(K.CalibrationError):
