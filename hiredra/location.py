@@ -1106,6 +1106,7 @@ COUNTRIES.update(
     {
         "democratic republic of the congo": "CD",
         "dr congo": "CD",
+        "democratic republic of congo": "CD",
         "drc": "CD",
         "congo": "CG",
         "republic of the congo": "CG",
@@ -1421,6 +1422,47 @@ def _workday_line(loc: str) -> str:
     return loc
 
 
+#: Never read from a bare line edge: a US state or personal name ("Georgia", "Jordan"), and "America", which
+#: ends "Latin America" and "North America" as often as it names the US.
+_EDGE_NOT_COUNTRY = {"georgia", "jordan", "america"}
+#: What is left after a leading country name when the line is a US town: "Lebanon IN 46052", "Brazil IN".
+_US_STATE_ZIP_RE = re.compile(r"([A-Z]{2})(?:\s+\d{5})?")
+
+
+def _edge_country(word: str) -> bool:
+    low = word.lower()
+    if low in _EDGE_NOT_COUNTRY or low not in COUNTRIES:
+        return False
+    return len(low) >= 4 or (len(low) == 3 and word.isupper())  # "IND", "PHL" as Workday writes them; not "can"
+
+
+def _country_edge_piece(piece: str) -> str:
+    words = piece.split()
+    for n in (3, 2, 1):  # the longest name first: "United Kingdom Offsite", "Pune Maharashtra India"
+        if len(words) <= n:
+            continue
+        head, tail = " ".join(words[:n]), " ".join(words[-n:])
+        rest = " ".join(words[n:])
+        if _edge_country(head) or (n == 1 and head.isupper() and head.lower() in ISO3_ALL and len(head) == 3):
+            us_town = _US_STATE_ZIP_RE.fullmatch(rest)
+            return piece if us_town and us_town.group(1) in US_STATES else f"{rest}, {head}"
+        if _edge_country(tail) and not (n == 1 and words[-2].lower() == "new"):  # "New Mexico" is a US state
+            return f"{' '.join(words[:-n])}, {tail}"
+    return piece
+
+
+def _country_edge_line(loc: str) -> str:
+    """Workday sites also come as a country and a place with no separator: "China Guangzhou EQ Plant",
+    "IND PUNE FL7", "Pune Maharashtra India", "Toronto Canada". With no comma the whole line was one unknown
+    place and kept: 58 of 2,542 live jobs (2026-11-27), J41 (China) among them. A country name (or an
+    upper-case ISO3 code) as the first or last word(s) of a line, or of a spaced-dash piece, is read as the
+    country. Lines that already have a separator are left alone."""
+    if "," in loc or ";" in loc or loc.strip().lower() in COUNTRIES:
+        return loc
+    pieces = re.split(r"(\s+[-–—]\s+)", loc.strip())
+    return "".join(p if i % 2 else _country_edge_piece(p) for i, p in enumerate(pieces))
+
+
 def _split(loc: str) -> list[str]:
     """Hyphenated forms: "Mexico-Remote", "US - Remote (...)", "IND-Pune-Smartworks" -> split on
     hyphens too when a side is a known country/code (keeps "Winston-Salem" intact). The word "only" goes first:
@@ -1428,7 +1470,7 @@ def _split(loc: str) -> list[str]:
     "US Only" matched nothing, so the line read as unknown and was kept (46 stored jobs, 2026-11-02; Hiredra's
     addition, not freehire's)."""
     loc = re.sub(r"[-–]?\bonly\b", " ", loc, flags=re.I)
-    loc = _workday_line(loc)
+    loc = _country_edge_line(_workday_line(loc))
 
     def hy(m: re.Match) -> str:
         a, b = m.group(1), m.group(2)

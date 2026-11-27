@@ -173,6 +173,12 @@ senior_title_terms:
   - phd
   - ph.d
 
+# An Arabic level number after a role word, from this level up: "Software Development Engineer 3", "Software
+# Engineer 4", "Machine Learning Engineer - L3" (the Arabic form of "III" / "IV" above). "2" / "L2" stay, as "II"
+# does (F4). 2026-11-27, from the owner's sitting-3 rating of J31 ("SDE 3 means a lot of seniority"). Measured on
+# 2,542 live jobs: 6.
+senior_title_level: 3
+
 # Seniority anti-signal PHRASES in the JD body — complements the years regex
 # for postings that describe a senior role without stating a year count.
 # Verified present in the real DB (2026-09-11).
