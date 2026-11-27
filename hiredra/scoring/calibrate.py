@@ -239,7 +239,7 @@ def calibrate(jobs: list[RatedJob], base: Weights, have: float, adj: float, left
         raise CalibrationError("tune or holdout has no pair of jobs with different ratings; add ratings first")
 
     default = default_combo(base)
-    if abs(default.cover_bar - (adj + have) / 2) > _EPS:  # the config's bar lies off this grid: use the midpoint
+    if all(abs(default.cover_bar - b) > _EPS for b in cover_bars(adj, have)):  # off this grid: use the midpoint
         default = replace(default, cover_bar=cover_bars(adj, have)[2])
     results = [(c, agreement(score_all(tune, c, base, have, adj), t_ratings)[0]) for c in grid(adj, have)]
     chosen, tune_a = choose(results, default)
