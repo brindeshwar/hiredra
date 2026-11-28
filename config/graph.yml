@@ -35,9 +35,9 @@ dedup:
   # only sorts pairs into bands. Merges are NEVER applied without the dry-run
   # review file and `merges --apply`.
   #   AUTO   (pre-approved in the file): names that are the same after
-  #          normalising (case, hyphen/space, plural, "2.0"), OR cosine >=
-  #          auto_cosine when neither name contains the other and they are not a
-  #          version variant (oauth / oauth2).
+  #          normalising (case, hyphen/space, plural, "2.0"). Cosine alone never
+  #          makes a pair AUTO (owner decision D4, 2026-11-12): a pair at or above
+  #          auto_cosine is only marked "very close" in REVIEW.
   #   REVIEW (approve: false -- you tick it): cosine >= review_cosine that is not
   #          AUTO (one name contains the other: sql / sql server; version
   #          variants: css / css3).
@@ -46,17 +46,17 @@ dedup:
   #          `merges --show-low` lists them.
   # A missed merge is cheap (fit already gives full credit at cosine >= have);
   # a wrong merge loses a real distinction -- so be conservative.
-  # PROVISIONAL until Step 5.
+  # The bands were set on Gemini embeddings; with Qwen they only sort REVIEW pairs.
   threshold: 0.90        # the lowest cosine ever considered
   review_cosine: 0.93    # below this (and >= threshold) a pair is hidden unless --show-low
   auto_cosine: 0.96
 
 fit:
-  # PLACEHOLDER thresholds for the per-skill fit mechanic (docs/scoring.md
-  # sec 4): s >= have -> 1.0 ; adj <= s < have -> s ; s < adj -> 0.0.
-  # NOT calibrated -- Step 5's F1 sweep sets the real values for this model:
-  # `python -m hiredra.graph calibrate --write` rewrites have/adj and adds
-  # a calibration_id key, step5-<date> (the regression test then guards them).
+  # Thresholds for the per-skill fit mechanic: s >= have -> 1.0 ;
+  # adj <= s < have -> s ; s < adj -> 0.0. Calibrated by Step 5's F1 sweep on the
+  # hand-labelled skill pairs (calibration/skill_pairs.csv) for this embedding model
+  # (report: calibration/reports/step5-2026-10-29.md). `python -m hiredra.graph
+  # calibrate --write` rewrites have/adj and calibration_id; a regression test guards them.
   have: 0.81
   adj: 0.55
 

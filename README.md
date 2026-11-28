@@ -15,26 +15,36 @@ fit with deterministic code against a bounded skill graph.
 ```
 Source       CODE      16,400 job boards on 28 platforms (Workday, Greenhouse, Lever, Ashby, Oracle,
                        Eightfold, Phenom, SmartRecruiters, ...) plus JobSpy; dedup across sources   [built]
-Filter       CODE      location -> role type -> seniority (reads the job text, not the title)      [built]
+Filter       CODE      location -> language -> seniority (reads the job text too) -> role type  [built]
 Extract      LLM       skills, required vs nice-to-have, domain, legitimacy: schema-forced JSON    [built]
 Graph        CODE      a skill graph bounded to the owner's skills + skills seen in real jobs      [built]
 Score        CODE      domain fit + skill coverage - gap distance, ranked                          [built]
-Calibrate    CODE      thresholds by an F1 sweep (done); weights from blind ratings          [in progress]
-Tailor       AGENT     CV + cover letter that may only claim what the profile states             [planned]
-Autofill     AGENT     fills forms from verified facts, pauses, never clicks Submit              [planned]
-Human gate             batches of 10, reviewed and submitted by the human                        [planned]
+Calibrate    CODE      thresholds by an F1 sweep; weights from blind ratings of real jobs        [built]
+Tailor       AGENT     CV + cover letter that may only claim what the profile states        [in progress]
+Autofill     AGENT     fills forms from verified facts, pauses, never clicks Submit         [in progress]
+Human gate             batches of 10 in a desktop app, submitted by the human               [in progress]
 Track        CODE      outcomes, per-channel yield, a learning loop the human approves           [planned]
 ```
 
-## Numbers (crawl of 7-8 November 2026)
+## Numbers
+
+From the crawl of 7-8 November 2026:
+
 
 - **1,079,946** postings listed on **13,820** boards in one crawl; **143,459** new.
 - Of the **121,909** new postings that aren't copies of another, **23,354** pass the location filter,
   **838** the role-type filter and **137** the seniority gate. Those reach the LLM, so it reads about
   0.1% of what is fetched.
-- **2,712** skills in the graph, each embedded locally (Qwen3-Embedding-0.6B on the CPU).
+
+As of 28 November 2026:
+
+- **5,156** skills in the graph, each described in one line and embedded locally (Qwen3-Embedding-0.6B
+  on the CPU).
 - Skill-match thresholds calibrated on **174** hand-labelled skill pairs (87 tune, 87 holdout).
-- **2,290** tests; CI runs them twice (without and with Postgres), plus a full-history secret scan.
+- Score weights calibrated on **45** blind ratings of real jobs: rank agreement on the held-out jobs is
+  **0.727**, below the 0.85 target, and the reasons are written down in
+  [the calibration summary](calibration/reports/step7-summary.md).
+- **2,446** tests; CI runs them twice (without and with Postgres), plus a full-history secret scan.
 
 ## The six hard rules
 

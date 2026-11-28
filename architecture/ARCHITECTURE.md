@@ -1,8 +1,10 @@
 # Hiredra architecture
 
-What exists today: sourcing, the filter funnel, LLM skill extraction, the skill graph, and scoring. The
-later stages (tailoring, autofill, the human gate, outreach, tracking) are designed but not built, and
-are marked so. Everything here is pure Python, except the CV renderer, which will be Node.
+What exists today: sourcing, the filter funnel, LLM skill extraction, the skill graph, and scoring with
+calibrated thresholds and weights. The later stages (tailoring, autofill, the human gate, outreach,
+tracking) are designed; first versions of tailoring, the desktop app and form preparation are being
+built on a branch, and are marked so. The pipeline is Python; the desktop app will be TypeScript
+(Electron + React) and talks to the pipeline through a local API.
 
 ## Stages and data flow
 
@@ -60,10 +62,12 @@ skill_vocab (graph) <── Graph sync <─────────────�
 ## Filter (no LLM)
 
 1. **Location:** keep India, or remote with nothing excluding India. Unknown is kept, never guessed.
-2. **Role type:** keyword and alias sets per role bucket (backend, AI agent, LLM, data).
-3. **Seniority:** reads the job text, not just the title: years asked for, plus phrases like "lead a
-   team". Keeps fresher to 2-year roles, interns and trainees.
-4. **Liveness:** the board is listed again to confirm the job is still open, or the job is flagged
+2. **Language:** a description not in English is dropped.
+3. **Seniority:** reads the title and the job text: senior title words and level numbers ("III", "3"),
+   years asked for, a senior opening heading, and phrases like "lead a team". Keeps fresher to 2-year
+   roles, interns and trainees.
+4. **Role type:** keyword and alias sets per role bucket (backend, AI agent, LLM, data).
+5. **Liveness:** the board is listed again to confirm the job is still open, or the job is flagged
    "unchecked".
 
 The funnel runs before any LLM call, so the LLM reads about 0.1% of what is fetched.
@@ -84,8 +88,10 @@ The funnel runs before any LLM call, so the LLM reads about 0.1% of what is fetc
   ontology.
 - **One embedded index:** each node's vector (Qwen3-Embedding-0.6B, run locally) is the vector used for
   similarity. There is no separate vector store.
-- **Merges** (synonyms) are proposed by code and approved by the human. Merely similar skills are never
-  merged automatically.
+- **Skill names are cleaned** as they arrive: versions and same-spelling variants become aliases, lists
+  are split, junk is dropped. Each skill gets a one-line description.
+- **Merges** (synonyms) are proposed by code and approved by the human. Vector similarity alone never
+  merges two skills.
 - **Freeze rule:** scoring holds the graph lock for its whole run, so the graph can't change mid-run.
   Skills new to the graph are scored by a fresh embedding and added between runs.
 
@@ -99,8 +105,9 @@ score = w_domain * domain_fit + w_skills * coverage - w_gap * gap_distance
   above `HAVE` it counts fully; between `ADJ` and `HAVE` it counts as `s`; below `ADJ` it doesn't count.
 - **Thresholds:** `HAVE` and `ADJ` are calibrated by an F1 sweep over hand-labelled skill pairs, scored
   once on a holdout.
-- **Weights:** to be set from the owner's blind ratings (pairwise rank agreement, 20 jobs to tune, 10
-  held out), then frozen.
+- **Weights:** set from the owner's blind ratings of real jobs (pairwise rank agreement on a
+  6,300-combination grid, scored once on held-out jobs), then frozen. Version 1 is in
+  `config/weights.yml`; see `calibration/reports/step7-summary.md`.
 - **The review gate:** a job flagged suspect or ghost by the legitimacy check, or with too few skills,
   goes to a review list, not the ranked list.
 - **The apply line** is a quality floor, not a cap: every job above it is worked through in priority
@@ -110,9 +117,11 @@ score = w_domain * domain_fit + w_skills * coverage - w_gap * gap_distance
 ## Planned stages
 
 - **Tailor:** a CV and cover letter that may only state facts from the owner's profile, checked by a
-  critic, rendered to PDF.
-- **Autofill:** fills only verified facts, with a pause list, and never clicks Submit.
-- **The human gate:** batches of 10, reviewed and submitted by the human.
+  code claim gate and a critic, written as an editable Word file plus a PDF.
+- **Autofill:** reads the form, fills only verified facts, leaves a pause list for the human, and may
+  click Next but never Submit.
+- **The human gate:** batches of 10 in the desktop app's Apply workspace, reviewed and submitted by
+  the human.
 - **Outreach:** drafts only, held at a send gate.
 - **Track and learn:** outcomes, yield per channel, and a learning loop whose changes the human approves.
 
@@ -120,7 +129,8 @@ score = w_domain * domain_fit + w_skills * coverage - w_gap * gap_distance
 
 | Tool | Why |
 |---|---|
-| Python | One language for the orchestrator and every agent. |
+| Python | One language for the pipeline and every agent. |
+| Electron + React (desktop app) | One workspace to run and approve everything, with a controllable embedded browser. |
 | Postgres + pgvector | One store for state and vectors; real locks and transactions. |
 | psycopg 3, hand-written SQL | Small, explicit queries; no ORM to learn or fight. |
 | Gemini free tier, NVIDIA fallback | Free structured output, with a measured fallback for quota days. |
