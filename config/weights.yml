@@ -4,10 +4,12 @@
 #   score = w_domain * domain_fit + w_skills * coverage - w_gap * gap_distance
 #
 # There is no legitimacy term (D2): suspect / likely_ghost postings and low-confidence
-# extractions go to the review list instead. The STARTING values below are provisional;
-# Step 7's weight calibration (30 hand-rated jobs) replaces them and sets calibration_id.
+# extractions go to the review list instead. The values below are weights version 1, frozen by
+# Step 7's calibration on the owner's blind ratings of real jobs (`python -m hiredra.scoring
+# calibrate --write`; summary in calibration/reports/step7-summary.md). Re-calibrate deliberately,
+# with a dry run first; don't hand-edit them.
 
-calibration_id: step7-2026-11-26        # Step 7 sets e.g. step7-2026-12-xx
+calibration_id: step7-2026-11-26        # set by `calibrate --write`
 
 # The LLM's domain bucket -> a step value in [0, 1]. agent_llm = 1.0 and other = 0.0 are
 # fixed (D15); Step 7 searches backend in {0.5, 0.75, 1.0}, data/ml in {0.25, 0.5} and
