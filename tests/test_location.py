@@ -484,6 +484,29 @@ def test_workday_city_region_country_lines(location, ok, country):
     assert eligibility("India", location, "", "Engineer")[0] is ok
 
 
+@pytest.mark.parametrize(
+    "location,ok,country",
+    [
+        ("China Guangzhou EQ Plant", False, "CN"),  # J41: was one unknown place, kept
+        ("IND PUNE FL7", True, "IN"),
+        ("Pune Maharashtra India", True, "IN"),
+        ("United Kingdom Offsite (ZUK99)", False, "GB"),
+        ("Toronto Canada", False, "CA"),
+        ("USA Home Office - WR", False, "US"),  # a spaced-dash piece is read on its own
+        ("Lebanon IN 46052", False, "US"),  # a US town after a country name: not read as Lebanon + India
+        ("Brazil IN", False, "US"),
+    ],
+)
+def test_a_country_at_the_edge_of_a_line_with_no_separator(location, ok, country):
+    assert country in parse(location)["countries"]
+    assert eligibility("India", location, "", "Engineer")[0] is ok
+
+
+@pytest.mark.parametrize("location", ["Albuquerque New Mexico", "Atlanta Georgia", "Remote/Anywhere in Latin America"])
+def test_edge_words_that_do_not_name_a_country_are_not_read_as_one(location):
+    assert eligibility("India", location, "", "Engineer")[0] is not False
+
+
 def test_the_title_never_overrides_a_stated_location():
     assert eligibility("India", "Bengaluru, India", "", "Backend Engineer [Remote-US]")[0] is True
 

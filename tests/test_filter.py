@@ -393,6 +393,38 @@ def test_the_seniority_gate_reads_the_opening_heading():
     assert not result.keep and result.reason == "description heading term 'senior'"
 
 
+# --- owner's sitting-3 ratings (2026-11-27) ----------------------------------
+@pytest.mark.parametrize(
+    "title,level",
+    [
+        ("Software Development Engineer 3", 3),  # J31
+        ("Software Engineer 3 - Enterprise Architecture", 3),
+        ("Machine Learning Engineer - L3", 3),
+        ("Software Developer - L4", 4),
+        ("Software Engineer 2", 2),
+        ("Software Engineer - L3 Support", None),  # a support tier, not a level
+        ("AI Engineer (Exp 3-5)", None),  # a year range, not a level
+        ("Python 3 Developer", None),
+    ],
+)
+def test_an_arabic_level_number_in_the_title(title, level):
+    assert funnel.title_level(title) == level
+
+
+@pytest.mark.parametrize(
+    "title,keep,reason",
+    [
+        ("Software Development Engineer 3", False, "title level 3"),
+        ("Software Engineer 2", True, None),  # level 2 stays, like "II" (F4): the years decide
+        ("Generative AI Engineer (6-10 Years)", False, "requires 6y (max 2)"),  # years stated in the title only
+        ("Data Engineer ( 2 to 5 Years)", True, None),  # a range counts by its lower end
+    ],
+)
+def test_the_seniority_gate_reads_title_levels_and_title_years(title, keep, reason):
+    result = funnel.passes_seniority_gate(title, "Build data pipelines in Python.", CONFIG)
+    assert (result.keep, result.reason) == (keep, reason)
+
+
 @pytest.mark.parametrize(
     "text,english",
     [
