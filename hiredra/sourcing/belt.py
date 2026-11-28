@@ -51,13 +51,17 @@ class BeltConfig:
     """``belt:`` in the run config. ``fill``: the share of each platform's limit used (the owner's 50-60%: 60%).
     ``tries``: how many times a refused task is put back on the belt before its board fails for the run.
     ``watchdog_minutes``: a warning when no task has finished for this long. ``status_minutes``: how often the run
-    logs a status line (tasks in flight per platform, on the belt, put back; boards done; saves waiting)."""
+    logs a status line (tasks in flight per platform, on the belt, put back; boards done; saves waiting).
+    ``max_saves_waiting``: no new task starts while this many boards wait for the writer, so a run whose writer
+    falls behind slows down instead of holding every fetched board in memory (crawl 8, 2026-11-28: 1,308 boards
+    waiting and 6.3 GB, growing, when it was stopped)."""
 
     fill: float = 0.6
     platforms: Mapping[str, Platform] = field(default_factory=dict, hash=False)
     tries: int = 4
     watchdog_minutes: float = 10.0
     status_minutes: float = 10.0
+    max_saves_waiting: int = 100
 
     def per_second(self, platform: str) -> float | None:
         p = self.platforms.get(platform)

@@ -33,6 +33,7 @@ belt:                         # the conveyor belt (owner's plan, 2026-11-07): ea
   tries: 4                    # a refused task goes back on the belt, at most this many times in a run
   watchdog_minutes: 10        # warn when no task has finished for this long
   status_minutes: 10          # a status line in the crawl log: in flight per platform, left, saves waiting
+  max_saves_waiting: 100      # no new task while this many boards wait to be saved (crawl 8 ran out of memory)
   platforms:                  # limit: requests/s where refusals start; at_once: its tasks in flight together
     workday: {limit: 10.0, at_once: 10, per_data_centre: true}  # PER data centre (wd1, wd5...): measured
                                           # 2026-11-08, one refused at ~12/s (clean at 9); four together took
