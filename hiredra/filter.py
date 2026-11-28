@@ -54,6 +54,7 @@ class FilterConfig:
     location_eligible_for: str
     english_only: bool = True
     heading_senior_terms: tuple[str, ...] = ()
+    senior_title_level: int | None = None  # drop "Software Engineer 3" / "SDE - L4" from this level up
 
 
 def load_filter_config(path: Path | str = DEFAULT_CONFIG_PATH) -> FilterConfig:
@@ -71,6 +72,7 @@ def load_filter_config(path: Path | str = DEFAULT_CONFIG_PATH) -> FilterConfig:
         location_eligible_for=str(location.get("eligible_for", "India")),
         english_only=bool(language.get("english_only", True)),
         heading_senior_terms=tuple(data.get("heading_senior_terms") or ()),
+        senior_title_level=data.get("senior_title_level"),
     )
 
 
@@ -99,6 +101,21 @@ def title_hits(title: str | None, terms: tuple[str, ...]) -> str | None:
 # Neutralized before generic senior-term matching so a bare "staff" term
 # catches "Staff Engineer" without also catching this generic AI-lab IC title.
 _MTS_RE = re.compile(r"\bmember of (?:the )?technical staff\b|\bmts\b", re.IGNORECASE)
+
+# A role word followed by an Arabic level number: "Software Development Engineer 3", "Software Engineer 4",
+# "Machine Learning Engineer - L3". Roman "III" / "IV" are senior_title_terms already. Not a year range
+# ("Engineer 3-5"), and not a support tier ("Software Engineer - L3 Support").
+_TITLE_LEVEL_RE = re.compile(
+    r"\b(?:engineer|developer|scientist|analyst|sde|associate|programmer)\s*(?:[-–]\s*)?l?([1-9])(?![\w.+\-–])"
+    r"(?!\s+support)",
+    re.IGNORECASE,
+)
+
+
+def title_level(title: str | None) -> int | None:
+    """The highest Arabic level number a role word carries in ``title``, else None."""
+    levels = [int(m.group(1)) for m in _TITLE_LEVEL_RE.finditer(title or "")]
+    return max(levels) if levels else None
 
 
 def has_senior_title_term(title: str | None, terms: tuple[str, ...]) -> str | None:
@@ -362,11 +379,17 @@ def passes_seniority_gate(title: str | None, description: str | None, config: Fi
     extractable, even when a title term or anti-signal phrase is what
     actually drops the job."""
     description = unescape_markdown(description)
-    years = extract_max_years(description)
+    # A title can state the years itself ("Generative AI Engineer (6-10 Years)") when the description does not.
+    found = [y for y in (extract_max_years(description), extract_max_years(title)) if y is not None]
+    years = max(found) if found else None
 
     term = has_senior_title_term(title, config.senior_title_terms)
     if term:
         return SeniorityResult(False, years, f"title term '{term}'")
+
+    level = title_level(title)
+    if config.senior_title_level is not None and level is not None and level >= config.senior_title_level:
+        return SeniorityResult(False, years, f"title level {level}")
 
     heading = senior_heading(description, config.heading_senior_terms)
     if heading:
