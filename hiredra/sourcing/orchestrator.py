@@ -683,7 +683,8 @@ def _run_belt(
         while True:
             check()
             now = clock()
-            while len(running) < workers:
+            backed_up = pending_writes() >= rules.max_saves_waiting  # the writer is behind: start nothing new
+            while len(running) < workers and not backed_up:
                 task = belt.take(now)
                 if task is None:
                     break
@@ -694,6 +695,14 @@ def _run_belt(
                         finish(task.board)
                     continue
                 running[pool.submit(work, task)] = task
+            if not running and backed_up and len(belt):
+                # Only the writer is busy: wait for it, not for a task. Not a stall, so the watchdog restarts.
+                sleep(0.2)
+                now = last_done = warned = clock()
+                if now >= next_status:
+                    status(now)
+                    next_status = now + status_every
+                continue
             if not running:
                 if not len(belt):
                     break

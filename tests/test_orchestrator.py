@@ -380,6 +380,53 @@ def test_workers_fetch_at_once_and_one_writer_thread_writes(tmp_path, ctx):
     assert len(store.checkpoints) < 7  # saved every 30 s and at the end, not after every board
 
 
+def test_no_new_board_starts_while_the_writer_is_behind(tmp_path, ctx):
+    # crawl 8 (2026-11-28): the writer fell behind and 1,308 fetched boards waited in memory (6.3 GB, growing). With
+    # belt.max_saves_waiting, the belt starts nothing new while that many boards wait to be saved.
+    companies = _companies_yaml(tmp_path, [(f"B{n}", "p") for n in range(10)])
+    release = threading.Event()
+    fetched: list[str] = []
+
+    class Counting(FakeProvider):
+        def fetch(self, entry, ctx):
+            fetched.append(entry.name)
+            return super().fetch(entry, ctx)
+
+    sink = RecordingSink()
+    real_consume = sink.consume
+    sink.consume = lambda jobs, **kw: (release.wait(timeout=5), real_consume(jobs, **kw))  # a writer that is stuck
+    at_release: list[int] = []
+
+    def let_go():
+        at_release.append(len(fetched))
+        release.set()
+
+    timer = threading.Timer(0.5, let_go)
+    timer.start()
+    report = run(
+        _config(pacing=Pacing(workers=2), belt=BeltConfig(max_saves_waiting=1)),
+        companies=load_companies(companies),
+        sink_factory=lambda r: sink,
+        run_store=FakeRunStore(),
+        ctx=ctx,
+        registry=(Counting("p", jobs=[_job(job_id="p:1")]),),
+        jobspy_source=FakeJobSpySource(),
+    )
+    timer.join()
+    assert at_release[0] <= 4  # 2 in flight, then 1 being written and 1 waiting: never all 10 held in memory
+    assert len(fetched) == 10 and all(c.status == "ok" for c in report.companies)  # every board read once let go
+
+
+def test_max_saves_waiting_must_be_a_positive_whole_number(tmp_path):
+    from hiredra.sourcing.config import ConfigError, _belt
+
+    assert _belt({"max_saves_waiting": 50}).max_saves_waiting == 50
+    assert _belt(None).max_saves_waiting == 100
+    for bad in (0, -1, 2.5):
+        with pytest.raises(ConfigError):
+            _belt({"max_saves_waiting": bad})
+
+
 def test_a_platform_keeps_to_its_share_and_never_holds_the_belt(tmp_path, ctx):
     # crawl 2 (2026-11-05): Eightfold's boards, listed together, held all 16 workers waiting on its one pace. On the
     # belt a platform has its share (at_once); the other boards run beside it.
